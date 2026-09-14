@@ -1,7 +1,7 @@
 @per-user
 Feature: Training and mobility logging
 
-  As someone managing tendon load rather than chasing maxima
+  As someone managing training load rather than chasing maxima
   I want strength work and mobility work logged with their intensity
   So that the app can estimate strain as well as progress
 

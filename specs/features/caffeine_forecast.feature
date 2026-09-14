@@ -1,7 +1,7 @@
 @per-user
 Feature: Caffeine at bedtime
 
-  As a user whose sleep quality feeds directly into next-day tendon pain
+  As a user whose sleep quality depends on when the last caffeine was taken
   I want to see how much caffeine will still be circulating when I go to bed
   So that I can move my last coffee earlier instead of guessing
 

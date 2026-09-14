@@ -1,9 +1,9 @@
 @exact @accessibility @core
 Feature: Focus timer
 
-  As a user whose tendon pain is driven by uninterrupted computer time
+  As a user limiting uninterrupted time at a computer
   I want a timer that enforces breaks and records what actually happened
-  So that my recovery is measured rather than assumed
+  So that rest is measured rather than assumed
 
   This feature is specified exactly. The timer's value comes from its accounting
   being trustworthy: every second of the day falls into exactly one of four
@@ -179,13 +179,13 @@ Feature: Focus timer
 
   Rule: A focus interval I walked away from is not focus
 
-    The timer cannot see a tendon, only a keyboard. Time at a desk I am not at
+    The timer sees a keyboard, not a member. Time at a desk nobody is at
     was never focus, and the state it accrues to is the one the absence
     actually was. The interval is not abandoned by it: what was left of it is
     what is left of it when I sit back down, and the break behind it with it.
 
     Thirty seconds of silence is reading something short, and two minutes is
-    reading something longer — both of them a tendon at a keyboard. Five is
+    reading something longer — both of them still time at a keyboard. Five is
     not. That is where the threshold is, and it is evidence rather than a
     setting: once the silence has proved the absence, the silence itself is
     reattributed, having been logged as focus by a timer that could not yet
@@ -537,7 +537,8 @@ Feature: Focus timer
 
   Rule: A held break shows me something I named
 
-    Tendon rest is the point, not screen rest. An enforced break that leaves
+    Rest away from the keyboard is the point, not rest from the screen alone.
+    An enforced break that leaves
     nothing to do is the break most worth circumventing, so it can put
     something hands-free in front of me instead of a black wall — and only
     ever something I wrote down first. It never picks it, never looks for
@@ -583,10 +584,9 @@ Feature: Focus timer
       And the offers are listed the whole time, titled with how long is left
       And what is due and what is coming are on the wall as they always are
       And a chore still takes its tick, because that is what being away is for
-      # Tendon rest is not the whole of it. Dry eyes and a spine are what
-      # sitting in front of a screen costs, and a break I can spend watching a
-      # film answers neither. This is the one part of a break I cannot buy my
-      # way out of except by leaving the break itself.
+      # Rest from the keyboard is not the whole of it: a break spent watching
+      # a film is still a break spent in front of a screen. This is the one
+      # part of a break that cannot be bought out of except by leaving it.
 
     Scenario: A longer break is longer away from the screen
       Given the wait is five minutes of an ordinary break

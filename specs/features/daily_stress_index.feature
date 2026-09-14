@@ -1,7 +1,7 @@
 @exact @per-user
 Feature: Daily Stress Index
 
-  As a user rehabilitating a tendon injury
+  As a user managing how much of the day is spent at a keyboard
   I want one number per day expressing strain against recovery
   So that I can see whether a day was sustainable without reading a timeline
 
@@ -18,7 +18,7 @@ Feature: Daily Stress Index
     Each state carried a multiplier, declared per timer mode, so that time at a
     game could be scored differently from time writing. A mode's name never
     told anyone how much typing was in the hour, and time at a keyboard is time
-    at a keyboard as far as a tendon is concerned.
+    at a keyboard whatever the hour was called.
 
     @exact
     Scenario: The formula
