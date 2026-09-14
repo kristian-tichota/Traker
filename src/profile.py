@@ -150,9 +150,7 @@ sleep_time = "23:00"
 caffeine_half_life = 5.0
 max_sleep_caffeine = 20.0
 
-# One split, all day. There are no timer modes: a name for a block of time
-# never told anyone how much typing was in it, and a tendon does not care what
-# the window was.
+# The one focus/break split, used all day. There are no timer modes.
 [timer]
 focus_mins = {DEFAULT_FOCUS_MINS}
 break_mins = {DEFAULT_BREAK_MINS}
@@ -160,70 +158,55 @@ break_mins = {DEFAULT_BREAK_MINS}
 # available in a day. The rest of the day's breaks are break_mins.
 long_break_mins = {DEFAULT_LONG_BREAK_MINS}
 long_breaks_per_day = {DEFAULT_LONG_BREAKS_PER_DAY}
-# Whether a break takes every screen: the overlays, the ten-second hold, and
-# the keys that open something to do. Off is an ordinary countdown you can
-# pause and skip -- which is what a member who does not need the wall wants.
+# Whether a break takes every screen: the overlays, the release hold and the
+# keys that open an activity. Off is a countdown you can pause and skip.
 strict = false
-# Time at a desk you are not at was never focus. After this many seconds with
-# no key and no mouse the interval pauses itself and the time counts as rest
-# overtime; touching anything carries it on from where it stopped, break and
-# all. 0 leaves the clock running while you are in the kitchen.
+# After this many seconds with neither a key nor the mouse, the interval
+# pauses itself and the time counts as rest overtime. Input carries it on from
+# where it stopped, the break behind it with it. 0 disables the pause.
 idle_pause_secs = {DEFAULT_IDLE_PAUSE_SECS}
-# What stopping a running interval by hand costs, held on the play button or
-# ESC rather than clicked, so that the break at the end of it is not dodged by
-# reflex. The time it buys is focus overtime, the same as any other pause.
+# Seconds the play button or ESC MUST be held to stop a running interval. The
+# time it buys is focus overtime, the same as any other pause.
 stop_hold_secs = {DEFAULT_STOP_HOLD_SECS}
 
-# Recurring household chores. The Chores tab defines them; this says whether a
-# break puts what is due today in front of you, and lets you tick it off there
-# with the letter beside it. A break is when the chores get done, which is the
-# whole reason. Off, as the Chores tab itself is, and the break surface never
-# mentions them.
+# Recurring household chores, defined on the Chores tab. This says whether a
+# break shows what is due today and lets you tick it off with the letter beside
+# it. Off, the break surface does not mention them.
 [chores]
 on_break = false
 
-# Where Traker's own window belongs, so that a virtual desktop and an activity
-# always mean the same application. **Empty forces nothing**, which is the
-# default: nothing of Traker's goes near the compositor's configuration unless
-# you ask here.
+# Which virtual desktop and activity Traker's own window opens on. Empty, the
+# default, writes nothing to the compositor's configuration.
 #
-# Both are named the way the pager and the activity switcher name them --
-# "Desktop 5", "Personal", case-insensitively -- and resolved to the ids a
-# rule carries on every
-# launch, so renaming or rebuilding one does not leave a stale id behind. A
+# Both are named as the pager and the activity switcher name them --
+# "Desktop 5", "Personal", case-insensitively -- and are resolved to ids on
+# every launch, so renaming or rebuilding one leaves no stale id behind. A
 # desktop may also be given as its position: desktop = 5. A name this session
 # does not have costs that one dimension and a line in the log.
 #
-# It is enforced, not merely applied: the window cannot be dragged off, and
-# KWin drops the rule itself when Traker closes. Launching Traker does not
-# switch you to it -- read the log if a launch seems to do nothing.
+# The window cannot be dragged off, and KWin drops the rule when Traker closes.
+# Launching Traker does not switch you to the desktop; the log says where the
+# window went.
 [window]
 desktop = ""
 activity = ""
-# And which monitor, by the name kscreen-doctor -o gives -- e.g. "DP-1".
-# Named rather than numbered on purpose: KDE's own "Screen" window rule is an
-# *index* into a list the compositor rebuilds every boot, which is why that
-# setting seems to mean a different monitor each time and is never quite
-# enforced. This asks the compositor for the output by name instead, which is
-# the one thing it has always answered for here.
+# Which monitor, by the name kscreen-doctor -o gives -- e.g. "DP-1". The
+# output is asked for by name rather than by index, because KDE's own "Screen"
+# window rule indexes a list the compositor rebuilds every boot.
 screen = ""
 
 # Take the colour out of every screen between these hours. KWin's own filter
-# does it -- the whole compositor output rather than a window of Traker's -- so
-# it covers every application on every monitor, and nothing can be in front of
-# it. **Plasma 6.6 or newer**: that is where KWin's colour-blindness effect
-# gained the monochrome mode this asks for, and an older one answers the same
-# request with a red-green filter instead of refusing it.
+# does it, so it covers the whole compositor output: every application on every
+# monitor. Plasma 6.6 or newer is REQUIRED -- an older KWin answers the same
+# request with a red-green filter rather than refusing it.
 #
-# Off by default, like everything else here that touches your compositor -- and
-# off means untouched: nothing is written and nothing is switched off for you,
-# because the filter this uses is somebody's accessibility setting first.
+# Off leaves the filter untouched: nothing is written and nothing is switched
+# off for you.
 #
-# It is a schedule and not a hold: nothing about it is enforced, and it is not
-# undone when Traker closes, because an evening you asked to be grey does not
-# stop being one because a tracker is shut. Setting enabled = false gives the
-# colour back within the minute *while Traker runs*; do it while it is closed
-# and the screens stay as they are until you untick the effect yourself.
+# This is a schedule, not a hold. Nothing is enforced and nothing is undone
+# when Traker closes. Setting enabled = false returns the colour within the
+# minute while Traker runs; set while it is closed, the screens stay as they
+# are until you untick the effect yourself.
 [grayscale]
 enabled = false
 from = "20:00"
@@ -231,19 +214,16 @@ to = "06:00"
 # How far towards grey: 0.05 to 1.0. Not 0 -- KWin reads that as all the way.
 intensity = 1.0
 
-# What a strict break costs to leave. Its enforcement is only worth as much as
-# it is expensive to circumvent, and the exit is deliberately reachable inside
-# fifteen seconds -- a break that lands during a meeting has to be leavable.
+# What a strict break costs to leave.
 [strict_break]
 # Seconds of audible warning before a strict break takes the screens; 0 is off.
 warn_secs = 60
 # Seconds the release key (Escape) must be held to abandon a strict break.
 release_hold_secs = 10
-# Seconds at the start of a break before it will show you anything at all: the
-# part of one that is away from the screen, for eyes and a spine rather than for
-# tendons. The offers are listed throughout and say when they open, and the
-# chores stay tickable. Proportional -- a break twice as long waits twice as
-# long. 0 opens them the moment it lands.
+# Seconds at the start of a break before an activity may be opened. The offers
+# are listed throughout and say when they open, and the chores stay tickable.
+# Proportional: a break twice as long waits twice as long. 0 opens them the
+# moment the break lands.
 away_secs = 300
 # Ask KWin to keep the break on every virtual desktop and activity. Qt cannot
 # say that on Wayland, so without this one shortcut steps around a break.
@@ -254,34 +234,28 @@ sound_file = ""
 # What KWin calls Traker's windows. Empty means ask Qt.
 app_id = ""
 # Which output shows what a break plays or reads -- the name kscreen-doctor -o
-# gives, e.g. "DP-1". Empty follows [window] screen, which is the monitor you
-# put the application on and therefore the one you look at; with neither set it
-# is the primary screen as *Qt* reports it, which on Wayland is the first
-# output the compositor announced and not KDE's own primary. Name it here to
-# watch on a different monitor from the one the window lives on.
+# gives, e.g. "DP-1". Empty follows [window] screen; with neither set it is the
+# primary screen as Qt reports it, which on Wayland is the first output the
+# compositor announced and not KDE's own primary.
 media_screen = ""
-# Put the virtual desktop or activity back if it changes while a break holds,
-# so a mistyped shortcut is not a way out of one. Off, the break only *follows*
-# the member, which is as inescapable as the compositor's answers happen to be.
+# Put the virtual desktop or activity back if it changes while a break holds.
+# Off, the break only follows the member.
 refuse_switch = true
 # Force the break's walls onto every desktop and activity with a KWin window
 # rule, written to kwinrulesrc for the length of the break and discarded by
-# KWin itself when the wall closes. This is the only form of the request KWin
-# applies rather than refusing in silence, which is what it does to every
-# spelling a script can write. Off leaves the walls wherever the compositor
-# put them -- which is one desktop each, on a Plasma that refuses the script.
+# KWin when the wall closes. This is the only form of the request KWin applies
+# rather than refusing in silence. Off leaves the walls where the compositor
+# put them, which is one desktop each where the script is refused.
 pin_with_rule = true
 
-# Something to do while a break holds the screens, with your hands off the
-# keyboard. A break shows it itself, on the screen it took: a PDF is read, and
-# anything else is played. Nothing is scanned for and nothing is guessed at --
-# only what is written down here, and only when you press the key for it. The
-# first entry is on Enter, the rest are on 1-9 in the order they appear.
+# What a break may open on the screen it took: a PDF is read, anything else is
+# played. Only what is listed here is offered, and only on the key for it. The
+# first entry is on Enter, the rest on 1-9 in the order they appear.
 #
-# While it is showing, that screen shows it and nothing else; the other screens
-# go on showing the countdown, the chores and what is coming. SPACE pauses a
-# video or turns a page, the arrows (and PgUp/PgDn) seek 30 s or turn pages,
-# UP/DOWN are volume or scroll, and 0 puts the wall back.
+# While an activity shows, that screen shows it alone; the other screens go on
+# showing the countdown, the chores and what is coming. SPACE pauses a video or
+# turns a page, the arrows (and PgUp/PgDn) seek 30 s or turn pages, UP/DOWN are
+# volume or scroll, and 0 puts the wall back.
 #
 # [[strict_break.activities]]
 # name = "Reading"
@@ -291,11 +265,10 @@ pin_with_rule = true
 # name = "Something to watch"
 # path = "~/Videos/rest/talk.mkv"
 
-# Where the queue is: the paths you add with ":rest <path>", which is the same
-# thing as an activity above except that you name the file at the time rather
-# than now. It is a plain file -- one path per line, m3u-shaped -- so a shell
-# alias or a file-manager action can append to it too. Empty means
-# ~/.config/traker/rest-queue.m3u; where it stopped is remembered beside it.
+# Where the queue of paths added with ":rest <path>" is kept. It is a plain
+# file, one path per line, m3u-shaped, so anything else may append to it.
+# Empty means ~/.config/traker/rest-queue.m3u; the position within an entry is
+# remembered beside it.
 [strict_break.queue]
 path = ""
 
