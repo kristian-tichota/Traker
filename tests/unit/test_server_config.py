@@ -18,7 +18,7 @@ token = "bob-token"
 
 @pytest.fixture
 def at(tmp_path, monkeypatch):
-    """Resolve the settings against a config file of your own, and nothing else."""
+    """Resolve the settings against a given config file and nothing else."""
     path = tmp_path / "server.toml"
 
     def _resolve(text=None, **env):
