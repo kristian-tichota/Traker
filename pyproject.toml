@@ -1,0 +1,40 @@
+[project]
+name = "Traker"
+version = "0.1.0"
+description = "Keyboard-centric health and productivity tracker: a PyQt6 client over a local Flask/SQLite REST service."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE", "assets/icons/LICENSE"]
+keywords = ["health", "nutrition", "pomodoro", "vim", "pyqt6", "self-hosted"]
+authors = [{ name = "Kristian Tichota", email = "kristian.tichota@proton.me" }]
+
+dependencies = [
+    "PyQt6==6.11.0",
+    "requests==2.34.2",
+    "Flask==3.1.3",
+    "waitress==3.0.2",
+]
+
+# Logging food, training and chores needs none of these.
+[project.optional-dependencies]
+# The five graph tabs. Without it they are skipped and the rest of the app runs.
+graphs = ["matplotlib==3.11.1", "numpy==2.5.2"]
+# The film a strict break can play. Needs system libmpv as well; see
+# docs/guides/enforcing-a-break.md.
+video = ["python-mpv==1.0.8"]
+
+[project.urls]
+Homepage = "https://github.com/kristian-tichota/Traker"
+Repository = "https://github.com/kristian-tichota/Traker"
+Issues = "https://github.com/kristian-tichota/Traker/issues"
+
+[dependency-groups]
+dev = [
+    "Traker[graphs,video]",
+    "pytest==9.1.1",
+    "gherkin-official==42.0.1",
+]
+
+[tool.uv]
+package = false

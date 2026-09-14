@@ -1,0 +1,11 @@
+data/
+__pycache__/
+*.pyc
+.venv/
+.envrc
+.projectile
+.claude/
+.pytest_cache/
+.ruff_cache/
+build/
+*.egg-info/
