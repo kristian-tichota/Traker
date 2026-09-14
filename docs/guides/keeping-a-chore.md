@@ -1,42 +1,42 @@
-# Recurring chores, and what an early or late one does
+# Chore scheduling
 
-A chore is a **cadence** — one known occurrence and the days between them — plus a **grace**, how far ahead of its day it may be done and still count. One board for the household. Contract: `specs/features/household_chores.feature`.
+A chore is a cadence, meaning one known occurrence and the number of days between occurrences, plus a grace, meaning how far ahead of its day it may be done and still count. There is one board for the household. Contract: `specs/features/household_chores.feature`.
 
-> **A completion clears every occurrence up to the last one within `grace` days after it. The next due date is the one after that.**
+A completion clears every occurrence up to the last one within `grace` days after it, and the next due date is the one after that.
 
 ```
 due = anchor + (k+1)·period,   k = ⌊(last_done + grace − anchor) / period⌋
 due = anchor                   where nothing has been done, or k < 0
 ```
 
-On a weekly chore anchored to a Friday with two days' grace: never done is that Friday and overdue after it; done Thursday, Saturday or Sunday is the following Friday, not seven days from when it was done; done Monday — four days early — is **that** Friday still; done three weeks late is the Friday after, because what was missed is dropped rather than stacked.
+On a weekly chore anchored to a Friday with two days of grace: never done is that Friday and overdue after it; done on Thursday, Saturday or Sunday is the following Friday rather than seven days from the completion; done on Monday, four days early, is that same Friday; and done three weeks late is the Friday after, because missed occurrences are dropped rather than accumulated.
 
-Two properties come free, which is why it is one expression and not a branch per case: `due > last_done + grace`, so nothing is ever asked for again the next day; and dueness is a *date*, so a fortnight away comes back as one overdue chore rather than four.
+Two properties follow from the single expression, which is why it is not a branch per case: `due > last_done + grace`, so nothing is asked for again the next day; and dueness is a date, so a fortnight of absence returns one overdue chore rather than four.
 
-`grace` defaults to `min(period // 3, 7)`. A declared `0` is a different claim from an unanswered one — it means *only on the day*. The tab shows the effective figure either way.
+`grace` defaults to `min(period // 3, 7)`. A declared `0` is a different claim from an absent one, because it means only on the day. The tab shows the effective figure in both cases.
 
-## Always the same day
+## Weekday stability
 
-**A cadence in whole weeks lands on the same weekday for ever**: every occurrence is `anchor + k·period` and a completion never moves the anchor. Anything else walks through all seven. So **a monthly chore that must stay on a Friday is 28 days, not 30.**
-
-```
-:chorenew 2w Vacuum the flat       every other Friday, if today is a Friday
-:chorenew 4w Descale the kettle    monthly-ish, and always the same day
-:chorenew 3 Water the plants       three days; no weekday to keep, and none claimed
-```
-
-`4w` and `28` define the same chore. The confirmation names the day (`— always a Fri`) or warns that it drifts; the **Lands On** column answers the same question per row. Nothing is enforced.
-
-## Where it stands, and a break
-
-`OVERDUE`, `TODAY`, `OK NOW` (inside the grace window), or nothing; a break offers the first three. `src/domain/chores.py:board` is the one ordering — worst first, longest-waiting first within a group, name last so two equally late chores do not swap under the member's hand.
+A cadence in whole weeks lands on the same weekday indefinitely, because every occurrence is `anchor + k·period` and a completion never moves the anchor. Any other period walks through all seven weekdays. A monthly chore that must stay on a Friday is therefore 28 days rather than 30.
 
 ```
-:chorenew 7 11.09.2026 1 Vacuum    anchored, one day's grace
+:chorenew 2w Vacuum the flat       every second Friday, where today is a Friday
+:chorenew 4w Descale the kettle    four weeks, and always the same day
+:chorenew 3 Water the plants       three days; no weekday is kept, and none is claimed
+```
+
+`4w` and `28` define the same chore. The confirmation names the day (`— always a Fri`) or warns that it drifts, and the **Lands On** column answers the same question per row. Nothing is enforced.
+
+## Status and breaks
+
+A chore reads `OVERDUE`, `TODAY`, `OK NOW` (inside the grace window), or nothing, and a break offers the first three. `src/domain/chores.py:board` is the one ordering: worst first, longest-waiting first within a group, and name last, so that two equally late chores do not exchange places under the pointer.
+
+```
+:chorenew 7 11.09.2026 1 Vacuum    anchored, one day of grace
 :chore Vacuum   (or :done)         ticked off today
-:rm Vacuum                         gone, and its history with it
+:rm Vacuum                         removed, with its history
 ```
 
-`:chorenew` reads numbers-first-name-last like `:log`; the optional date between the two counts is what tells a period from a grace. On a break each due chore carries a **letter**, never a digit — `Enter` and `1`–`9` are the activity offers. A tick strikes through on the keystroke, before the store has answered, and a second press within a day is the one completion it is. `[chores] on_break = false` switches the whole thing off.
+`:chorenew` reads numbers first and name last, as `:log` does, and the optional date between the two counts is what distinguishes a period from a grace. On a break each due chore carries a letter rather than a digit, because `Enter` and `1`-`9` are the activity offers. A tick strikes the entry through on the keystroke, before the store has answered, and a second press within a day is the one completion it is. `[chores] on_break = false` disables the whole feature.
 
-Both tables are shared and both register as catalogs, which is what keeps `user_id` out of their `WHERE` clauses. Completions **cascade** where every log→item reference is `ON DELETE SET NULL`: a completion carries only a date and a reference, so an orphan is a row nothing could ever render again.
+Both tables are shared and both register as catalogs, which keeps `user_id` out of their `WHERE` clauses. Completions cascade, where every other log-to-item reference is `ON DELETE SET NULL`, because a completion carries only a date and a reference, so an orphan would be a row nothing could render.
