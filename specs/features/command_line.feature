@@ -5,10 +5,8 @@ Feature: Command line logging
   I want a command bar that completes item names for me
   So that I type a few characters instead of filling in a form
 
-  The command bar is the primary way data enters the app. It is optimised for the
-  fewest possible keystrokes: the visible tab pre-fills the command you most
-  likely want, hints show the remaining arguments as you type, and item names
-  complete from the shared catalog.
+  The visible tab pre-fills a command, hints name the remaining arguments, and
+  item names complete from the shared catalog.
 
   Background:
     Given the application is open
@@ -69,38 +67,21 @@ Feature: Command line logging
       When I submit ":cols hide Sugars"
       Then the visible tab's table loses that column
       And nothing is written to the household's data
-      # What ":cols" names is a column of *this* table, which only the window
-      # can resolve — so the window carries it out and the view stores the
-      # preference. See column_layout.feature.
 
     Scenario: A command whose subject is this machine
       When I submit ":rest ~/Videos/talk.mkv" or ":break long"
       Then the queue file on this machine is written, or the next break changes
       And nothing is written to the household's data
-      # A path on this machine and a break not yet begun. The other member's
-      # client could use neither, so neither is theirs to hear about.
 
     Scenario: Naming nothing reads the state back
       When I submit ":cols", ":rest" or ":break" with no argument
       Then the status bar reports what it would otherwise have changed
-      # The cheapest thing to type is the commonest thing meant, and with
-      # nothing to change there is nothing left to mean but a readout.
 
     Scenario: It reports through the same line as every other command
       When such a command is refused
       Then the status bar shows the reason and what I typed stays in the bar
 
   Rule: An argument a member would always type the same way may be left out
-
-    The arguments omitted are the ones that would otherwise be retyped every
-    single time: one serving, and the time it is now. This is the keystroke-cost
-    constraint applied to the grammar rather than to the keys.
-
-    Two things keep it unambiguous rather than positional guesswork: each
-    optional argument declares what it means when absent, and what a value for
-    it could look like. A serving count and a clock time cannot be mistaken for
-    each other, so the arguments are read left to right and each steps aside for
-    a token it could not be.
 
     @accessibility
     Scenario Outline: One drink log, four ways of typing it
@@ -125,21 +106,15 @@ Feature: Command line logging
 
     Scenario: A time is defaulted to now rather than to a fixed hour
       Then the clock is read at the moment the command is submitted
-      # The caffeine forecast is built on when a drink was actually drunk, so a
-      # wrong-but-plausible default would be worse than none.
 
     Scenario: A value of the wrong shape is reported rather than shifted along
       When I submit "log x b Rolled Oats"
       Then the amount is reported as unreadable
       And nothing is sent to the service
-      # If the argument after it took whatever was in front of it, a typo would
-      # become the meal type and the meal type would become part of the name.
 
     Scenario: A malformed value of the right shape is still taken and refused
       When I submit "bevlog 25:99 Black Coffee"
       Then it is refused as a bad time
-      # It has the shape of a time, so the time argument takes it rather than
-      # stepping aside and leaving "25:99 Black Coffee" to be looked up.
 
   Rule: The bar tells the user what to type next
 
@@ -156,7 +131,6 @@ Feature: Command line logging
     Scenario: An argument that may be left out is still advertised
       When I have typed a command and nothing else
       Then the hint lists its optional arguments along with the rest
-      # The whole of what they save is knowing that they are there.
 
     Scenario: An argument passed over is no longer advertised
       Given I typed a value that only a later argument could be
@@ -189,13 +163,6 @@ Feature: Command line logging
 
   Rule: The bar lists what could be typed here, before anything is typed
 
-    A hint is a *continuation* of what has been typed, so it can only describe
-    the command already being typed. A member who does not know a command
-    exists has no way to be told that it does — which is how a household kept a
-    supplement stack in its head rather than in the catalog. So the bar is
-    headed by a menu of what is possible, and the visible tab decides what
-    comes first.
-
     @accessibility
     Scenario: Entering COMMAND mode says what can be typed
       When I enter COMMAND mode
@@ -211,8 +178,6 @@ Feature: Command line logging
     Scenario: A tab reading more than it is about is listed by what it is about
       Given the Food tab, which also reads exercise and mobility for the burn
       Then only the food commands head its list
-      # What a tab reads and what it is about are different questions. Offering
-      # ":exlog" as a food command is an answer to the wrong one.
 
     Scenario: A tab with no logging command of its own
       Given a chart tab or the focus timer
@@ -262,7 +227,6 @@ Feature: Command line logging
 
     Scenario: An argument that may be left out says so
       Then it is listed like the rest and marked as omittable
-      # A member who does not know it can be left out types it every time.
 
     Scenario: A definition's separator is shown alongside its fields
       Given a command whose fields are separated by ";"
@@ -274,9 +238,6 @@ Feature: Command line logging
       Then the menu names the set command and its two fields
       And the components field says which unit its amounts are in
       And it shows an example component of that domain
-      # Which is the whole of what a member needs to define one: nothing else
-      # on screen has ever said that a stack's amounts are servings and a
-      # recipe's are grams.
 
     Scenario: A definition with more fields than the menu can show
       Given a command with eleven fields
@@ -286,8 +247,6 @@ Feature: Command line logging
     Scenario: A word that is finished but is not a command
       When I type an unknown word and a space
       Then the menu lists the commands that word could have been
-      # By the time the status bar says "unknown command" the whole line has
-      # been typed.
 
   Rule: The bar checks what it can before the service does
 
@@ -304,11 +263,6 @@ Feature: Command line logging
       Then the command is refused and lists what is allowed
 
   Rule: Completion never reads the catalog on the interface thread
-
-    The bar exists to save keystrokes, and the catalog lives on the service —
-    so re-reading it on every character turned each keystroke into a network
-    round trip the interface waited for. The catalogs are read once, up front
-    and off that thread, and typing costs nothing at all.
 
     Scenario: Typing an item name
       When I type an item name a character at a time

@@ -6,14 +6,12 @@ Feature: Supplement logging
   So that I can tell at a glance which nutrients I am still short of
 
   A supplement catalog entry lists a dose per serving for each tracked
-  micronutrient. Logging is a quantity and a name; the per-nutrient arithmetic
-  and the comparison against targets are derived.
+  micronutrient. A log row is a quantity and a name, and the per-nutrient
+  arithmetic and the comparison against targets are derived.
 
-  The daily routine is several products at once, so the name may be a **stack**
-  — a named bundle of supplements and how many servings of each — and logging
-  one writes an ordinary row per supplement. `:supplog Morning` is the whole
-  of the day's stack, and its rows read as one line in the ledger. See
-  `item_sets.feature`; nothing below changes for those rows.
+  The name may be a stack, meaning a named bundle of supplements and servings.
+  Logging one writes an ordinary row per supplement, and those rows read as one
+  line in the ledger. See `item_sets.feature`.
 
   Background:
     Given the shared catalog contains my supplement products

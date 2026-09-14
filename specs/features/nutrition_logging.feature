@@ -5,13 +5,12 @@ Feature: Food and drink logging
   I want the same catalog to score my day against my own target
   So that a shared food database serves weight loss and weight gain equally
 
-  A log row is deliberately thin: what, when, how much. Everything nutritional
-  is derived from the shared catalog at read time, so correcting a food label
-  once corrects every past day that used it.
+  A log row carries what, when and how much. Everything nutritional is derived
+  from the shared catalog at read time, so correcting a food label corrects
+  every past day that used it.
 
-  A composed meal is logged through a *meal set*, which expands into one of
-  these rows per ingredient rather than becoming a row of its own — see
-  `item_sets.feature`. Nothing below changes for those rows.
+  A composed meal is logged through a meal set, which expands into one row per
+  ingredient. See `item_sets.feature`.
 
   Background:
     Given the shared catalog contains the items I log
@@ -40,12 +39,6 @@ Feature: Food and drink logging
       Then every past log row that used it reports the corrected figures
 
   Rule: An amount is servings or grams, and the ledger shows both
-
-    A serving is whatever the label said it was, and remembering that months
-    later is the one thing a member cannot do. So an amount may be typed in
-    either unit — a trailing `g` means grams — and **the ledger reports both**,
-    side by side, right after the food's name. Checking that a row is what you
-    meant is then a glance rather than an arithmetic problem.
 
     Scenario: A bare number is servings
       When I log "2" of a food
@@ -82,8 +75,6 @@ Feature: Food and drink logging
       When someone corrects that serving size to 25 g
       Then the row still records 2 servings
       And it now reads as 50 g, and its calories fall accordingly
-      # A serving is defined by the label, so a row that named servings means
-      # whatever the label now says. A row that named a mass means the mass.
 
     Scenario: An amount is either servings or grams, never both
       When a write carries both
@@ -121,20 +112,8 @@ Feature: Food and drink logging
       When I log a food under a meal type outside that set
       Then the row is rejected
       And it is refused before it reaches the service, naming the four meals
-      # The amount before it may be left out, so an argument that took anything
-      # at all would let a mistyped amount become the meal type and the meal
-      # type become part of the food's name.
 
   Rule: A meal nobody has a label for is logged as an estimate
-
-    Eating out was a hard stop: either type an eleven-field definition for a
-    dish you will never eat again, or log something else as a proxy. The second
-    is what happened, and afterwards the day looked exactly like a well-logged
-    one.
-
-    An estimate is a calorie figure and nothing else. That is *why* the day
-    reads as poorly logged — the protein bar is short and the row says why —
-    and it is marked at three scales: the row, the day, and the chart.
 
     Scenario: Logging an estimate takes calories, a meal and a description
       When I log an estimate of 550 kcal for dinner
@@ -154,8 +133,6 @@ Feature: Food and drink logging
       When I log an estimate under a name a food already holds
       Then the write is refused
       And the message says to log it the ordinary way instead
-      # A food's energy is what every log of it derives its calories from, so
-      # quietly moving it would rewrite meals already recorded.
 
     Scenario: The row says so itself
       Then the ledger marks an estimated row
@@ -163,8 +140,6 @@ Feature: Food and drink logging
 
     Scenario: The mark records how the row was written and is not editable
       Then it is not a column I can type into
-      # Like the meal set column: both record what wrote the row rather than a
-      # value to retype.
 
     Scenario: The day says how much of it was guessed
       Given a day with an estimate in it
@@ -173,11 +148,9 @@ Feature: Food and drink logging
 
     Scenario: A day with nothing estimated says nothing
       Then no such line is shown
-      # A line reading "0% estimated" every day is how a cue stops being read.
 
     Scenario: An estimate still counts towards the day
       Then its calories are in the day's total and in the calorie bar
-      # It was eaten. What is missing is the macros, not the meal.
 
     Scenario: The estimated rows can be filtered for
       When I filter the ledger on the estimate column

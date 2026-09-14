@@ -24,10 +24,6 @@ Feature: Focus timeline drill-down
         | rest           |
         | rest overtime  |
 
-    # A second, thinner band under the states used to show which timer mode was
-    # active. There are no modes, and a long break already reads as a long
-    # stretch of rest on the band above.
-
     Scenario: Zooming and panning
       When I zoom into part of the day
       Then the visible window narrows around the point of interest
@@ -60,6 +56,4 @@ Feature: Focus timeline drill-down
 
     Scenario: Legend and background
       Then the legend is laid out over two rows rather than one crowded row
-      # The states on one, the markers on the other. The second row was the
-      # modes present in the day, and it outlived them by being rebalanced.
       And the popup paints an opaque background so it never renders as a dark rectangle

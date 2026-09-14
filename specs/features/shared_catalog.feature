@@ -5,10 +5,8 @@ Feature: Shared item catalog
   I want one catalog of foods, drinks, exercises, supplements and routines
   So that neither of us re-enters nutrition labels the other already typed
 
-  The catalog is the household's single source of truth and is deliberately
-  shared: whoever weighs and enters a food's label does it once. Our logs stay
-  private and personal, so the same catalog can serve one person losing weight
-  and another gaining it.
+  The catalog is the household's single source of truth and is entered once.
+  Logs stay private per member, so one catalog serves opposite targets.
 
   Background:
     Given both household members use the same catalog

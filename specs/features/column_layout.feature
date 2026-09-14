@@ -5,15 +5,8 @@ Feature: Arranging the columns of a table
   I want to switch off the columns I do not use and put the rest in my order
   So that the numbers I actually read are the ones in front of me
 
-  A log ledger carries every column the domain has, because both members log
-  through the same tables — and one of them tracks protein while the other
-  tracks salt. What is worth reading is a preference, not a property of the
-  data, so it belongs to the member and it has to survive the session.
-
-  Both routes lead to the same place. The keyboard route is the one that must
-  work: the member this application is built for cannot rely on a mouse. The
-  mouse route is a convenience, and it can do everything the keyboard can —
-  including putting back a column that has been switched off.
+  A layout belongs to one member and one table, and survives the session. The
+  keyboard route and the pointer route reach the same state.
 
   Background:
     Given the application is open
@@ -34,8 +27,6 @@ Feature: Arranging the columns of a table
       Given I have hidden the Sugars column
       When I show it again
       Then it is back in the place it held before
-      # A hidden column keeps its position, so showing it is not a second
-      # decision about where it goes.
 
     Scenario: Reordering a column
       When I move the Calories column to position 2
@@ -49,9 +40,6 @@ Feature: Arranging the columns of a table
     Scenario: The values do not move with the headings
       When I move a column
       Then every cell still holds the value its heading names
-      # The layout is a permutation of the *header*. The mapping from a
-      # heading to a database column, which cells may be typed into, what a
-      # filter term names and what a sort sorts are all untouched by it.
 
   Rule: The last column cannot be switched off
 
@@ -59,8 +47,6 @@ Feature: Arranging the columns of a table
       Given every column but one is hidden
       When I try to hide the last one
       Then it is refused, and the reason says so
-      # The header row is the only route back for a member using a mouse, so
-      # there is always a header row.
 
   Rule: The keyboard route is the one that must work
 
@@ -68,7 +54,6 @@ Feature: Arranging the columns of a table
       When I run ":cols"
       Then the status bar names the table and lists its columns in order
       And it names the hidden ones after them
-      # Which is the only way to see a hidden column without a mouse.
 
     Scenario Outline: Arranging from the command bar
       When I run "<command>"
@@ -85,13 +70,10 @@ Feature: Arranging the columns of a table
     Scenario: A column is named the way a filter names one
       Then "kcal", "cal" and "Calories" all name the calories column
       And a unique prefix is enough
-      # One matcher, shared with the filter bar: two would disagree about what
-      # "cal" means.
 
     Scenario: Naming a column and nothing else toggles it
       When I run ":cols Sugars"
       Then the Sugars column is switched off if it was on, and on if it was off
-      # The commonest thing meant, in the fewest keystrokes.
 
     Scenario: A column that does not exist is refused, not ignored
       When I run ":cols hide Caffeine" on the Food tab
@@ -155,8 +137,6 @@ Feature: Arranging the columns of a table
       Given I have hidden the Sugars column
       When I right-click the header and tick Sugars
       Then it is back
-      # The same gesture that switched it off. The menu lists the columns that
-      # are *not* shown for exactly this reason.
 
     Scenario: The last visible column cannot be unticked
       Given every column but one is hidden
@@ -178,8 +158,6 @@ Feature: Arranging the columns of a table
       Given both members are logged into the same service
       When I arrange the Food ledger
       Then the other member's Food ledger is unchanged
-      # A view preference, like the chart period and the analytics slots: the
-      # catalog is shared, the way it is read is not.
 
     Scenario: It is stored per table
       When I arrange the catalog pane
@@ -204,7 +182,6 @@ Feature: Arranging the columns of a table
       Given the service is unreachable
       When I arrange a table
       Then the columns move anyway and the status bar says it was not saved
-      # The columns are already where they were put; what failed is remembering.
 
   Rule: A stored layout outlives the code that wrote it
 
@@ -212,8 +189,6 @@ Feature: Arranging the columns of a table
       Given a stored layout written before the Fibre column existed
       When I open that tab
       Then Fibre is visible, at the end
-      # A member who arranged one table must not silently lose the next column
-      # the application learns to show.
 
     Scenario: A column this version no longer has is ignored
       Given a stored layout naming a column that has since been removed
@@ -229,4 +204,3 @@ Feature: Arranging the columns of a table
       Given a filter is in force and the matched-set line reports calories
       When I hide the Calories column
       Then the line no longer reports them
-      # The matched-set line describes the table it sits under.

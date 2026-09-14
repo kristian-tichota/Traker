@@ -5,12 +5,10 @@ Feature: Training and mobility logging
   I want strength work and mobility work logged with their intensity
   So that the app can estimate strain as well as progress
 
-  A session's movements repeat, so a named **workout** declares each movement's
-  set scheme, load and effort once and `:wlog` records the lot — the one named
-  set whose components are not an amount, because a workout says *how* a
-  movement is done rather than how much of it there is. A mobility session
-  likewise may be a **routine set** of routines and their minutes. See
-  `item_sets.feature`; nothing below changes for the rows either writes.
+  A named workout declares each movement's set scheme, load and effort once, and
+  `:wlog` records all of them. It is the one named set whose components are not
+  an amount. A mobility session may likewise be a routine set of routines and
+  their minutes. See `item_sets.feature`.
 
   Background:
     Given the shared catalog describes the movements I train

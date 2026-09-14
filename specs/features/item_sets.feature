@@ -19,14 +19,11 @@ Feature: Named sets of catalog items
   | mobility   | routine set             | minutes                  |
   | exercise   | workout                 | a set scheme, load, effort |
 
-  Logging one expands it, on the server, into one ordinary log row per
-  component — each carrying the set it came from. Nothing downstream learns a
-  second kind of row: the derived values, the day's bars, the charts and the
-  filter all read the same log rows they always did.
+  Logging a set expands it on the server into one ordinary log row per
+  component, each carrying the set it came from.
 
-  A set's name is unique **within its domain**, not household-wide: each log
-  command resolves one namespace, its own, so a "Morning" stack and a "Morning"
-  drink set can both exist.
+  A set name is unique within its domain rather than household-wide, so a
+  "Morning" stack and a "Morning" drink set may both exist.
 
   Background:
     Given the shared catalog contains the items I use
@@ -133,9 +130,6 @@ Feature: Named sets of catalog items
       When I log a meal set with an amount in grams
       Then the write is refused
       And the message says to log it as a multiple
-      # Its ingredients are already in grams and it declares no total mass, so a
-      # mass here could only be read as a proportion of one. Guessing which
-      # reading was meant is worse than refusing.
 
     Scenario: A workout is logged by its own command
       Given a workout, whose components carry their own sets, load and effort
@@ -147,9 +141,6 @@ Feature: Named sets of catalog items
       When I log a workout's name as though it were an exercise
       Then the write is refused
       And the message names the command that logs a workout
-      # A workout carries its own loads, so there is nothing for the sets,
-      # weight and effort typed with it to apply to. Ignoring them silently is
-      # what refusing avoids.
 
     Scenario: A set with no components cannot be logged
       Given a set whose components have all been deleted
@@ -179,9 +170,6 @@ Feature: Named sets of catalog items
       And a stack's heading totals the doses
       And a routine set's heading totals the minutes and not the intensity
       And a workout's heading totals the volume and not the loads
-      # Servings across different foods, or reps across a squat and a plank,
-      # are not quantities. The set's own multiplier is not stored, so the only
-      # honest figures are the ones that add up.
 
     Scenario: Two logs of one set at one meal read as one meal
       When I log the same set twice at the same meal on the same day
@@ -229,8 +217,6 @@ Feature: Named sets of catalog items
       Given a supplement that a stack uses
       When I remove that supplement
       Then the removal is rejected naming the stack
-      # A stack missing a supplement under-reports a dose exactly the way a
-      # recipe missing an ingredient under-reports a meal.
 
     Scenario: Removing the set first
       When I remove a set
@@ -251,7 +237,6 @@ Feature: Named sets of catalog items
 
     Scenario: A set whose last component was deleted is still shown
       Then it appears with its item and amount empty
-      # A set the member cannot see is one they cannot repair or remove.
 
     Scenario: A component's amount can be corrected in place
       When I type a new amount into a component's row

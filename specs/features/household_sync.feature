@@ -5,9 +5,9 @@ Feature: Two members, one server
   I want a small always-on service holding our shared catalog and separate logs
   So that we both track against the same data without seeing each other's diary
 
-  The desktop app keeps no local database. It talks to a service on the home
-  network that owns the data, identifies each member by their own access token,
-  and pushes catalog changes to whoever is watching.
+  The desktop application keeps no local database. It talks to a service on the
+  home network that owns the data, identifies each member by an access token,
+  and pushes catalog changes to every watcher.
 
   Background:
     Given the household service is running

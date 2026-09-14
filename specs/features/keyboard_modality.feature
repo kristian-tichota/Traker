@@ -5,25 +5,16 @@ Feature: Modal keyboard navigation
   I want every routine action to be a couple of keystrokes away
   So that logging a day costs me almost no finger movement
 
-  This application is used by members who cannot type comfortably. Assistive
-  input (voice control, head tracking) reaches the app as ordinary key and
-  pointer events, so
-  anything reachable from the keyboard is reachable by those too. The cost of a
-  mistake must stay low: no interaction may trap the user in a mode they cannot
-  leave, and Escape always means "back to NORMAL".
+  Assistive input such as voice control and head tracking reaches the
+  application as ordinary key and pointer events, so anything reachable from the
+  keyboard is reachable by those as well. No interaction may trap a member in a
+  mode they cannot leave, and Escape always returns to NORMAL.
 
   Background:
     Given the application is open
     And NORMAL mode is active
 
   Rule: Exactly one of NORMAL, COMMAND, SHEET or FILTER is active, and the status bar names it
-
-    A mode named on screen that the keyboard is not in is worse than no name at
-    all: every key it advertises does nothing. So the mode has a readout of its
-    own, separate from the line that carries messages. Sharing one line meant
-    the first sort, filter count, refused write or tab switch replaced the mode
-    with a message, and nothing ever put it back — for as long as the member
-    stayed in that mode.
 
     Scenario: The status bar teaches the current mode
       Then the status bar names the active mode
@@ -82,11 +73,6 @@ Feature: Modal keyboard navigation
         | FILTER  |
 
   Rule: A mode belongs to the surface it was entered from
-
-    SHEET names a table, COMMAND and FILTER name a bar. Leaving the tab leaves
-    all three behind — the table is off screen, and the bar has lost the
-    keyboard to whatever was clicked. The tab keys are read in NORMAL only, so a
-    mode that outlives its surface is a keyboard that stops answering.
 
     Scenario Outline: Switching tabs returns to NORMAL
       Given <mode> mode is active
@@ -162,12 +148,6 @@ Feature: Modal keyboard navigation
       Then nothing happens
 
   Rule: Data arriving does not take the surface away from me
-
-    A refresh is not an arrival. Arriving at a tab whose rows are about to be
-    replaced may fade the page in — the content is new to the eye anyway. Data
-    changing under a tab I am already reading may not: it is one row out of
-    thousands, and blanking the page to say so also hides the row I just wrote,
-    loses the cell my cursor was on, and reads as the application restarting.
 
     Scenario: A tab I switch to fades its rows in
       Given the tab I am switching to holds data that is out of date

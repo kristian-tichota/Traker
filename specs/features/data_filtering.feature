@@ -5,13 +5,8 @@ Feature: Filtering and sorting what a table shows
   I want to ask "show me every time I ate X" without leaving the keyboard
   So that my own history is something I can question, not only scroll
 
-  The tables show the whole ledger, which is what makes them useful and what
-  makes them unreadable. Filtering is how a member asks a question of that
-  ledger; sorting is how they order the answer.
-
-  Everything here is keyboard-first, and keystrokes are the cost that matters,
-  so the most common question must cost the fewest: a bare word, and nothing
-  else.
+  A filter narrows the ledger and a sort orders the result. The shortest filter
+  is a bare word.
 
   Background:
     Given the application is open
@@ -58,9 +53,6 @@ Feature: Filtering and sorting what a table shows
     Scenario: One shorthand names the set column on every tab
       Then "set" names the meal set on the Food tab and the stack on Supplements
       And it resolves to whichever set column the table in front of me has
-      # Every domain has named sets and each calls them something else. A member
-      # who types "set" means "the set this row came from", whatever this tab
-      # calls one.
 
     Scenario: The estimate mark is a flag, so it compares as one
       When I filter on "est:1"
@@ -143,10 +135,6 @@ Feature: Filtering and sorting what a table shows
 
   Rule: One prompt is on screen at a time
 
-    The command bar and the filter bar are siblings stacked under the table.
-    Only one of them can be typed into, and two of them showing at once is two
-    rows of text where the member is reading one.
-
     Scenario: The command bar makes way for the filter bar
       When I press the filter key
       Then the command bar is hidden
@@ -176,7 +164,6 @@ Feature: Filtering and sorting what a table shows
       Given a matched set containing estimates
       Then the summary says how many of its rows are estimates
       And a matched set with none says nothing about them
-      # A "0 estimated" on every filter is how a qualifier stops being read.
 
     Scenario: The summary agrees with the day's own totals
       Then the matched set's totals and the daily totals are computed by one function, and a test asserts they agree

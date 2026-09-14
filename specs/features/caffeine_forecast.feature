@@ -5,8 +5,7 @@ Feature: Caffeine at bedtime
   I want to see how much caffeine will still be circulating when I go to bed
   So that I can move my last coffee earlier instead of guessing
 
-  This view answers exactly one question and is deliberately single-metric: not
-  how much caffeine I drank, but how much of it is left at my bedtime.
+  The view reports one metric: the caffeine still circulating at bedtime.
 
   Background:
     Given my profile declares my sleep time, my caffeine half-life and my sleep-safe threshold

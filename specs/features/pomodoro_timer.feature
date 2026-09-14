@@ -5,10 +5,9 @@ Feature: Focus timer
   I want a timer that enforces breaks and records what actually happened
   So that rest is measured rather than assumed
 
-  This feature is specified exactly. The timer's value comes from its accounting
-  being trustworthy: every second of the day falls into exactly one of four
-  states, and the stored history must agree with the live display. The state
-  routing and the two-tier timing below MUST NOT be collapsed.
+  Every second of the day falls into exactly one of four states, and the stored
+  history MUST agree with the live display. The state routing and the two-tier
+  timing below MUST NOT be collapsed.
 
   Background:
     Given one split declared in my profile: a focus length and a break length
@@ -18,10 +17,6 @@ Feature: Focus timer
     And how long stopping a running focus interval must be held for, and how long away from my desk stops it for me
 
   Rule: There is one split, not a menu of them
-
-    A name for a block of time never told anyone how much typing was in it, and
-    the timer offering three of them made the schedule a thing I re-chose every
-    hour instead of followed. So the durations are my profile's, read once.
 
     Scenario: The shipped split
       Then focus is 30 minutes and a break is 30
@@ -40,8 +35,6 @@ Feature: Focus timer
       And the wall stays off until I ask for it, because a mode I had to select was never one
 
   Rule: The break after focus is the ordinary one unless I queued the long one
-
-    Two a day, and the only choice the timer offers.
 
     Scenario: Queuing it
       When I queue the long break, from the command bar or the button
@@ -65,8 +58,6 @@ Feature: Focus timer
 
     Scenario: Tomorrow
       Then the day's long breaks are back
-      # Kept against a date, so a client left running for a week does not spend
-      # one week's worth on the first day.
 
     Scenario: Reading it back
       When I ask about the next break rather than telling it
@@ -115,10 +106,6 @@ Feature: Focus timer
       And everything I can actually read then is in whole seconds anyway
       And the ring filling as I hold the exit is unaffected, having its own timer
       And the full cadence resumes when the screens are given back
-      # The thread this loop runs on is the thread that paints the walls and
-      # keeps the player fed on the screen beside them. Waking it a hundred
-      # and eighty times a second to advance hundredths nobody can see is time
-      # taken from the one thing the member is looking at.
 
     Scenario: The stored history has one row per minute of the day
       When the system clock crosses into a new minute
@@ -179,18 +166,6 @@ Feature: Focus timer
 
   Rule: A focus interval I walked away from is not focus
 
-    The timer sees a keyboard, not a member. Time at a desk nobody is at
-    was never focus, and the state it accrues to is the one the absence
-    actually was. The interval is not abandoned by it: what was left of it is
-    what is left of it when I sit back down, and the break behind it with it.
-
-    Thirty seconds of silence is reading something short, and two minutes is
-    reading something longer — both of them still time at a keyboard. Five is
-    not. That is where the threshold is, and it is evidence rather than a
-    setting: once the silence has proved the absence, the silence itself is
-    reattributed, having been logged as focus by a timer that could not yet
-    tell. It is the one thing that rewrites a minute already stored.
-
     Scenario: Walking away
       Given a focus interval is running
       When the session has seen neither a key nor the mouse for the configured inactivity
@@ -230,7 +205,7 @@ Feature: Focus timer
 
     Scenario: A break is not watched for my absence
       Given a break is running
-      Then being away from the keyboard changes nothing, that being the point of it
+      Then being away from the keyboard changes nothing
 
     Scenario: Inactivity I turned off
       Given the inactivity in my profile is zero
@@ -241,11 +216,6 @@ Feature: Focus timer
       Then the timer runs as it would without the feature, and says so once in the log
 
   Rule: Stopping a running focus interval is held for, not clicked
-
-    A break is worth what it costs to step around, and the cheapest way around
-    one was to stop the clock a minute before it landed. So the stop costs what
-    leaving a break costs, and buys the same thing leaving one buys: the time
-    is mine, and it is penalty, because I spent it at the keyboard.
 
     Scenario: A click leaves it running
       Given a focus interval is running
@@ -277,14 +247,9 @@ Feature: Focus timer
     Scenario: A break is not held to it
       Given a break that does not take the screens is running
       When I click stop
-      Then it stops on the click, a break being the thing I am not avoiding
+      Then it stops on the click
 
   Rule: An enforced break occupies every screen until focus resumes
-
-    A break is only worth as much as it costs to step around. Covering the
-    screens is not enough on its own: a virtual desktop and an activity are
-    each somewhere else to be, and reaching one is a single keystroke that no
-    window of ours can refuse.
 
     Scenario: Enforcing a break
       Given breaks take the screens
@@ -295,10 +260,6 @@ Feature: Focus timer
       And the compositor is asked to keep all of it on every virtual desktop and activity
       And it is told which output each wall belongs on, because Qt cannot ask for one
       And the keyboard is put on the wall that shows me a file
-      # The app's own window is not the break any more. Fullscreen and focused
-      # is the one thing KWin stacks above a kept-above window, so taking it
-      # over put the application in front of the wall meant to cover it — and
-      # giving it back un-maximised a window the member had arranged.
 
     Scenario: What the break shows is on the screen I named
       Given breaks take the screens and I have more than one screen
@@ -307,26 +268,17 @@ Feature: Focus timer
       Then the wall covering that output is the one that shows me a file
       And the countdown, what is coming and the chores are on the walls beside it
       And it keeps that screen for the length of the break
-      # By name, because "primary" is three different questions: the first
-      # output the compositor announced, the one KDE gives priority 1, and the
-      # one the member is looking at. The three can disagree, and a video then
-      # opens on a monitor nobody is watching.
 
     Scenario: A screen name nothing answers to
       Given my profile names an output this session does not have
       When a break begins
       Then the file goes to the primary screen and the log says why
-      # A hand-edited name is a typo away from a break with nowhere to show
-      # anything, and the wall is not the thing to lose over it.
 
     Scenario: Every wall is put on its own output by the compositor
       Given breaks take the screens and I have more than one screen
       When a break begins
       Then each wall is on the output it was built for
       And it is the compositor that was asked to put it there, by name
-      # Qt cannot: a Wayland client asking to be fullscreen names no output at
-      # all, so the compositor picks — and it picks the screen being worked on.
-      # Every wall lands on one monitor and the others keep showing the desktop.
 
     Scenario: A monitor switched off and back on
       Given breaks take the screens and one is running
@@ -335,12 +287,6 @@ Feature: Focus timer
       And the wall on the monitor I did not touch is the one that was there
       And what was showing on the one that went dark comes back where it stopped
       And every screen dark at once is still a break, and still costs the hold
-      # Switched off is not dimmed: DisplayPort drops the link, so the output
-      # is withdrawn and the one that comes back is a new one. The wall built
-      # for the old one was left holding a screen Qt had destroyed — asked
-      # where it was once a frame, from a slot, which takes the process rather
-      # than the frame — and no wall was ever built for the new one, so a
-      # monitor in use reverts to the desktop mid-break.
 
     Scenario: Somewhere else to be is not a way out
       Given breaks take the screens and one is running
@@ -348,31 +294,17 @@ Feature: Focus timer
       Then I am put straight back, however I tried to leave
       And that does not depend on the compositor having taken a script
       And the break is there too — every screen of it, not only the one in front
-      # Three answers to one escape, because the first two cannot be verified:
-      # holding every window everywhere is a dozen property names a compositor
-      # may or may not answer for, each silent when it refuses — and a session
-      # can decline to load the script that writes them and say nothing at all.
-      # Putting the switch back through the desktop and activity managers is a
-      # client's own business, reads back, and does not care whether the
-      # switch came from a shortcut, the pager, a screen edge or the overview.
-      # A mistyped shortcut costs nothing.
 
     Scenario: Letting it follow me instead
       Given breaks take the screens
       And my profile says a switch is not put back
       When I switch to another virtual desktop or another activity
       Then the break comes with me, as far as the compositor will carry it
-      # Which is as inescapable as its answers happen to be, and is what every
-      # break did before the switch could be refused.
 
     Scenario: Closing the wall is not a way out either
       Given breaks take the screens and one is running
       When I close a wall, or quit the application from outside it
       Then nothing closes and nothing quits
-      # Alt+F4 belongs to the compositor and acts on the active window, which
-      # during a break is a wall: the likeliest keystroke to try would
-      # otherwise be free, where the documented exit costs ten seconds.
-      # Killing the process is still killing the process.
 
     Scenario: A compositor that will not pin a window is asked to follow me
       Given breaks take the screens and one is running
@@ -380,10 +312,6 @@ Feature: Focus timer
       When I switch to another virtual desktop or another activity
       Then every window of the break is moved to the one I switched to
       And what it would and would not do is said where I can read it back
-      # Which name a compositor answers for is not something the app can know,
-      # so it reads its own request back instead of trusting it — and a hold
-      # that was refused is one line in the log rather than a break escaped
-      # by accident.
 
     Scenario: Asking for every desktop the one way the compositor cannot refuse
       Given breaks take the screens
@@ -394,15 +322,6 @@ Feature: Focus timer
       And it expires when the wall closes, so the compositor removes it itself
       And my own window rules are all still there afterwards
       And it is asked for ahead of mine, so a rule of mine cannot outrank it
-      # Asking politely had been tried in six spellings, each read back and
-      # each refused in silence, while a request in the same breath to keep the
-      # wall above everything landed. A rule is the one form of this the
-      # compositor applies rather than declining: it clamps every later write,
-      # including its own. Nothing else in that file is touched, and an
-      # expiring rule is not litter — it is gone when the wall is. It is
-      # written ahead of the member's own rules because the compositor stops
-      # at the first rule that decides a value, and a break that can be
-      # stepped around is not a break.
 
     Scenario: A rule of my own cannot un-place a wall
       Given breaks take the screens
@@ -410,21 +329,11 @@ Feature: Focus timer
       When a break begins
       Then each wall still fills its own screen, in front of everything
       And it still cannot be minimised or taken out of fullscreen
-      # A member's rule for where the app window goes matches the walls as
-      # well — they carry the same application class — and the parts of it the
-      # break does not contradict apply to them, so a wall can stop covering
-      # its monitor and leave room to work behind it. The break therefore
-      # insists on the three things a wall already is, rather than leaving
-      # them for another rule to take away.
 
     Scenario: A rule that outlived the break it was written for
       Given a break was holding and my compositor restarted under it
       When I next start Traker, or ask it what this session answers for
       Then the rule that kept the walls everywhere is taken back out
-      # Killing Traker is already covered — its windows go, and the compositor
-      # drops the rule with them. What is left is a compositor that restarted
-      # while the walls were up, so the recovery is the same shape as the
-      # leftover script's: named, findable, removed by whoever notices first.
 
     Scenario: Leaving the desktops to the compositor
       Given breaks take the screens
@@ -432,19 +341,12 @@ Feature: Focus timer
       When a break begins
       Then the walls are wherever the compositor put them
       And a switch is still refused, and the break still follows me
-      # For a session that pins a window when asked — where the rule is
-      # redundant — and for anyone who would rather nothing of Traker's went
-      # near their compositor's own configuration.
 
     Scenario: A wall the compositor put on the wrong screen
       Given breaks take the screens and I have more than one screen
       When a wall ends up on an output it was not built for
       Then it names that output and fills it again
       And it does that once, not on every frame
-      # Two walls on one screen is a bare screen somewhere else, which is the
-      # thing they exist to prevent. Naming the output is the whole of what a
-      # client can ask for, and a compositor that moved the window twice is not
-      # one to argue with.
 
     Scenario: A session whose compositor does not answer
       Given breaks take the screens
@@ -461,31 +363,13 @@ Feature: Focus timer
       And each one says the break is over and to press the release key once
       And it says it at the scale of the screen it is on, inside a frame
       And that one press starts focus and takes them away
-      # Nobody is at the desk when a break ends — that is what the break was
-      # for. What has to carry is the colour of the screen from the far side
-      # of a room, and the word on it on the way back.
       And the controls that start focus are mine to use again
       But nothing is held any longer: the compositor has its desktops back
       And a switch is no longer put straight back
       And no wall takes the focus off what I reach for any more
       And what is coming and what is due go off them, with their keys
-      # This was a room with a door painted on it. The walls stayed and so did
-      # everything they had asked for, while every surface went on offering a
-      # ten-second hold that nothing answered any more — so the one documented
-      # way on was the play button, in the window a wall pulled the focus back
-      # off every time it was reached for.
-      # Standing down is not sinking, though: a wall that dropped behind the
-      # windows on its own screen as the break ended handed that screen back
-      # before anyone decided to take it, and an unwatched screen goes
-      # unnoticed. The press is the way on; the walls hold
-      # the view until it comes.
 
   Rule: A strict break has one exit, and it costs seconds
-
-    An exit one keystroke wide is enforcement nobody has to weigh; no exit at
-    all is a break that lands in the middle of a meeting I am presenting. So
-    there is exactly one, it is deliberately reachable inside fifteen seconds,
-    and it is deliberately not reachable inside one.
 
     Scenario: Pausing is refused while the screens are held
       Given breaks take the screens and one is running
@@ -524,35 +408,13 @@ Feature: Focus timer
       Given a break is showing me a video or a document
       When I hold the release key
       Then the hold is paid exactly as it is on a bare wall, and what was playing stops
-      # It is shown in Traker's own window, so the key arrives. A break that
-      # started somebody else's player had handed the keyboard away with the
-      # screen, and leaving cost a click back onto a window of ours first.
 
     Scenario: A hold I wrote wrong costs the shipped one, not the timer
       Given I wrote something that is not a number as the hold or the warning
       Then the shipped figure is used and the app says so once
       And the tab is still built
-      # The same bargain the durations strike. This file is edited by hand and
-      # the tab is built without a net, so a typo in one setting must not be
-      # the reason the whole window is missing.
 
   Rule: A held break shows me something I named
-
-    Rest away from the keyboard is the point, not rest from the screen alone.
-    An enforced break that leaves
-    nothing to do is the break most worth circumventing, so it can put
-    something hands-free in front of me instead of a black wall — and only
-    ever something I wrote down first. It never picks it, never looks for
-    content, and never shows anything I did not ask it to.
-
-    **Traker shows it itself**, on the primary screen, inside the wall that
-    covers it. It used to start my own player and ask the compositor to hold
-    that window on every desktop, above everything, un-minimised: a window it
-    did not own, stacked by rules it could only guess at, holding a keyboard
-    the release key then could not reach. Then it showed it over the tabs of
-    the app's own window, which is the window I keep fullscreen — so the app
-    was in front of it. It is a page of a wall now: whatever holds the wall
-    holds it, because it *is* the wall.
 
     Scenario: What can be shown, and what shows it
       Given my profile names activities, each with a name and a file
@@ -562,17 +424,11 @@ Feature: Focus timer
       And every screen the break covers lists them with the key for each
       And a key with no offer behind it is left alone
       And a key delivered to a field I am typing into is left to that field
-      # Escape is taken wherever it arrives; Enter, the digits and the media
-      # keys are what a command is made of, so the filter leaves a field's own
-      # keys to it. The command bar itself is behind a wall for the length of a
-      # break now — rest is the point, and the wall keeps the keyboard.
 
     Scenario: A PDF is read and anything else is played
       Given a queue with a video and a document in it
       Then neither needs anything declared for it
       And the one that is a PDF is read, a page at a time
-      # Decided by the path. One declared opener for the whole queue is what
-      # used to make a PDF among the videos a thing to write down.
 
     Scenario: Nothing runs unasked
       Given breaks take the screens and one begins
@@ -585,17 +441,12 @@ Feature: Focus timer
       And the offers are listed the whole time, titled with how long is left
       And what is due and what is coming are on the wall as they always are
       And a chore still takes its tick, because that is what being away is for
-      # Rest from the keyboard is not the whole of it: a break spent watching
-      # a film is still a break spent in front of a screen. This is the one
-      # part of a break that cannot be bought out of except by leaving it.
 
     Scenario: A longer break is longer away from the screen
       Given the wait is five minutes of an ordinary break
       When a long break of twice the length holds the screens
       Then the wait is twice as long as well
       And a wait longer than the break itself is simply the whole break
-      # Proportional, or an hour-long break is five minutes of rest and then
-      # fifty-five in front of something.
 
     Scenario: I hear when the wait is up
       Given a break is holding the screens and I am away from them
@@ -604,8 +455,6 @@ Feature: Focus timer
       And it names the key and what is behind it
       And I am told once in a break, not once a frame
       But a break with nothing written down for it says nothing at all
-      # The sound is the message: being away from the screen is the point, so
-      # nothing written on one is read.
 
     Scenario: The wait is mine to set, or to switch off
       Given my profile sets the seconds a break waits before it shows anything
@@ -618,9 +467,6 @@ Feature: Focus timer
       When one of them reaches its end
       Then nothing else starts, and the wall is what I am left looking at
       And the next thing shown is whichever one I press a key for
-      # The queue is the list to choose from. A break that started playing the
-      # next thing would be choosing instead, which is the one thing this whole
-      # rule exists not to do.
 
     Scenario: Showing one
       When I press an offer's key while the break holds
@@ -629,31 +475,21 @@ Feature: Focus timer
       And no screen is given back, and pause and skip stay refused
       And nothing is launched, and no window of anybody else's is involved
       And the wall it opens in is never taken away and put back to open it
-      # A film draws through the graphics card, and the first such surface to
-      # reach a window already on a screen has Qt rebuild that window — one
-      # frame of bare desktop, mid-break, and a compositor that drops the
-      # rule holding the walls along with the window it was written for. So a
-      # wall is built ready to carry one, before it ever goes up.
 
     Scenario: A document is read edge to edge
       Given a break is showing me a PDF
       Then the page fills the screen it is on, to every edge of it
-      # It kept a readout's height back at the foot, for a readout that is on
-      # the other screens — a strip of the wall under the page, and the
-      # reader's own frame around it.
 
     Scenario: What the other screens are for
       Given a break is showing me something and I have another screen
       Then the countdown, what is coming and the chores are on that one
       And the offers are there too, so I can ask for something else
-      # The screen being watched shows the thing and no more.
 
     Scenario: A break with only one screen
       Given a break is showing me something and there is no other screen
       Then one thin line says how long is left and what leaving costs
       And the position and the card of the keys are on that screen after all
       And they are rows under the picture, because nothing may be drawn on it
-      # Otherwise there is nowhere at all to read either of them.
 
     Scenario: What each key does is written down
       Given a break is showing me something
@@ -663,10 +499,6 @@ Feature: Focus timer
       And every wall beside the one showing it carries that card
       But the screen showing it does not, because that would be over the film
       And a screen with nothing showing on it names none of those keys
-      # The keys are single presses because a break is spent away from the
-      # keyboard, which is what makes them impossible to guess: nothing said
-      # that 0 is the one that puts Traker back. Which is also why the card
-      # comes back on the screen showing it when that is the only screen.
 
     Scenario: The five keys
       Given a break is showing me something
@@ -675,9 +507,6 @@ Feature: Focus timer
       And up and down are the volume, or scroll inside the page
       And 0 puts the wall back
       And another offer's key shows that one instead
-      # Single keys, because a break is spent away from the keyboard and what
-      # reaches it may be a voice mechanism that sends keystrokes. The chore
-      # letters are untouched: none of these is a letter.
 
     Scenario: Closing it is not a way out
       Given a break is showing me something
@@ -689,9 +518,6 @@ Feature: Focus timer
       When I ask for the wall back and then press its key again
       Then it is showing again, on the same screen, where it had got to
       And the walls, the hold and the compositor's part of it never moved
-      # Nothing is built, destroyed or reparented by either press: a second
-      # player built over a window already on screen plays the audio of a
-      # video that cannot be seen, with the app in front of it.
 
     Scenario: A second offer does not stack on the first
       When I press another offer's key during the same break
@@ -702,9 +528,6 @@ Feature: Focus timer
       Given a break is showing me something
       When I press the key it is already showing
       Then nothing happens at all
-      # The key is pressed twice when nothing seems to have happened; starting
-      # it again stops a video and re-opens it, which is a stutter for no
-      # reason. The wall comes back with 0 first.
 
     Scenario: A forty-minute video spans three breaks
       Given a break was showing me something and stopped
@@ -713,10 +536,6 @@ Feature: Focus timer
       And the next break that shows it carries on from there
       And a document opens *on* that page, not merely counting from it
       And something I had only just started is not remembered at all
-      # Which is what "--save-position-on-quit" used to answer for. The player
-      # is Traker's now, so this is too. The length is kept because "how far
-      # in" is a proportion: it is the half of it only the player knows, and a
-      # wall cannot open six files to ask.
 
     Scenario: How far into it I am, while it plays
       Given a break is showing me a video
@@ -727,15 +546,6 @@ Feature: Focus timer
       And both are as live as the countdown they stand next to
       And a document says its page there the same way
       And a break with only one screen keeps them in a row under the picture
-      # A readout, not a scrub bar: there is no pointer in a break, and the
-      # keys are single presses. It is always there because nothing could
-      # summon it back. This is its third place. A corner *over* the picture,
-      # where it could not be seen at all; a strip *under* it, which was a
-      # video that was not fullscreen with the wall showing through; then on
-      # the picture, which needed every frame painted by Traker rather than
-      # handed to the graphics card and stuttered for it. It is beside the
-      # film now, for the reason the keys already were: one screen is read and
-      # the other watched.
 
     Scenario: It plays the way the player that works here plays
       Given a break is showing me a video
@@ -743,35 +553,22 @@ Feature: Focus timer
       And the decoding, the timing and the sound server are all mpv's business
       And nothing of mpv's is started as a window, and no key of mine reaches it
       And nothing of the break is drawn over the picture, because nothing can be
-      # Qt was tried three ways on this machine and none was clean. The picture
-      # in a graphics scene painted every frame with the processor — three
-      # times as long on the interface thread, a 61 ms stall against 9 — and a
-      # plain video widget fixed that and left the sound stuttering through
-      # both of Qt's audio backends. mpv plays the same files here with none of
-      # it, so it plays them.
 
     Scenario: A machine without libmpv still holds a break
       Given libmpv is not installed
       Then the break still takes the screens, and still lists what is due
       And the screen that would show a film says it could not play it
-      # The walls, the hold and the chores are what a break is. The film is
-      # the part that may be missing, and it says so where it would have been.
 
     Scenario: How far into each one I am, before I choose
       Given offers I have opened on an earlier break
       Then the wall says how far into each of them I am, beside its key
       And a video reads as a position out of a length, a document as its page
       And closing one leaves the wall saying where I had just got to
-      # This is what the list is read with: the queue is what is available,
-      # not a playlist, so the question it answers is which of these is part
-      # way through.
 
     Scenario: Something Traker cannot place
       Given an offer whose length was never recorded
       Then no progress is drawn for it rather than a wrong one
       And a break with nothing opened yet lists the names alone
-      # A positions file written before the length was kept has none, and a
-      # column of dashes says less than the names do.
 
     Scenario: The break goes on being a break
       Given a break is showing me something
@@ -790,8 +587,6 @@ Feature: Focus timer
     Scenario: An entry written for the launcher says so
       Given an entry that still names a command and an app id
       Then it is not offered, and the log says to write the file instead
-      # The last word of a command line is a file often enough to be tempting
-      # and not often enough to be right.
 
     Scenario: A file that cannot be shown says so where I am looking
       Given an offer whose file is missing, or is not something that can be decoded
@@ -801,26 +596,17 @@ Feature: Focus timer
 
   Rule: What to open on a break is queued, not configured
 
-    The profile holds what is true for months — the PDF reader, the hands-free
-    control program. A video found this morning is not that, and editing the
-    file that holds the timer's durations to name one is friction enough to
-    stop it happening. So the queue is its own file, and Traker is one of the
-    things that may write it.
-
     Scenario: Queuing something
       When I queue a path from the command bar
       Then it is added to the end of the queue
       And it is offered on the next break, ahead of my standing entries
       And nothing has to be declared to open it
       And nothing about it reaches the household service
-      # It is a path on this machine. The other member's client could not use it.
 
     Scenario: Anything may write the queue
       Given the queue is a plain file, one path per line, comments ignored
       When something other than Traker appends to it
       Then the next break offers what it added
-      # A shell alias or a file-manager action, which is where something worth
-      # watching is usually found.
 
     Scenario: Reading the queue back
       When I ask for the queue with no path
@@ -839,9 +625,6 @@ Feature: Focus timer
       Given I opened a queued video and the break ended part-way through it
       Then it is still queued for the next break
       And opening it again carries on from exactly where I stopped
-      # Forty minutes spans three breaks; dropping it on open loses the place.
-      # An owned player means the position is Traker's to keep, rather than
-      # mpv's --save-position-on-quit.
 
     Scenario: The numbers do not move under my fingers
       Given a break is holding the screens
@@ -852,14 +635,8 @@ Feature: Focus timer
     Scenario: A queue of mixed things
       Given the queue holds a video and a PDF
       Then both are offered, and neither needed anything declared
-      # There is no opener to name any more: the path says which of the two
-      # panes shows it.
 
   Rule: A held break shows what is coming
-
-    A break holds the screens for five to thirty minutes and is the one moment
-    I am looking at Traker with nothing to do, which makes it where *upcoming*
-    things belong. Read-only: a surface I can work at is not a break.
 
     Scenario: Today's session on the break surface
       Given my cycle has a session today
@@ -876,7 +653,6 @@ Feature: Focus timer
     Scenario: A day with nothing on it
       Given my cycle has no session today
       Then the surface names the day and says nothing is planned
-      # "REST" would read as an instruction the cycle never gave.
 
     Scenario: No cycle at all
       Given I have no training cycle
@@ -890,8 +666,6 @@ Feature: Focus timer
       Given a break is showing me a video or a document
       Then the screens it still covers go on showing what is coming
       And the wall behind what is showing has it too, for when I ask for it back
-      # That screen shows the thing and nothing else while it is showing; the
-      # wall under it was never given away.
 
   Rule: A strict break is announced before it lands
 

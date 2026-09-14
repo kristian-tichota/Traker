@@ -5,16 +5,13 @@ Feature: Training plans
   I want the plan and the ledger on one screen
   So that I can see what today asks for and what the last four weeks actually were
 
-  A **cycle** is a named block of weeks — seventeen of them, say — holding one
-  **planned session** per training day, each holding the **movements**
-  prescribed for it: a set count, a target range, a load and an effort. It is
-  private to one member, unlike a workout: two people sharing one pair of
-  dumbbells are on different cycles, and a plan is a prescription rather than a
-  household fact.
+  A cycle is a named block of weeks holding one planned session per training
+  day, each holding the movements prescribed for it: a set count, a target
+  range, a load and an effort. A cycle is private to one member, unlike a
+  workout.
 
-  A plan is not a named set. A workout's loads are fixed, and four months of
-  progression would be four months of near-identical workouts; a plan carries
-  its own loads week by week. See `item_sets.feature` for what a workout is.
+  A plan is not a named set, because a plan carries its own loads week by week
+  where a workout's loads are fixed. See `item_sets.feature`.
 
   Background:
     Given the shared catalog describes the movements I train
@@ -56,8 +53,6 @@ Feature: Training plans
     Scenario: A refused import leaves nothing behind
       When a later session of the import is refused
       Then no part of the cycle is stored
-      # A calendar missing a week reads as a plan that stops in December,
-      # not as a write that failed.
 
     Scenario: A prescription is checked like any other write
       When I import a movement with a negative load
@@ -89,8 +84,6 @@ Feature: Training plans
       And I logged three of them, having substituted the rest
       Then the day is marked done
       And the table still shows which movements were not logged
-      # The plan's own rules invite substitutions; marking the day missed for
-      # one would make the calendar say something untrue.
 
     Scenario: Adherence counts only what is due
       When some of the cycle is still ahead
@@ -120,8 +113,6 @@ Feature: Training plans
       Given I am looking at last Tuesday
       When the tab refreshes because something was logged
       Then it is still showing last Tuesday
-      # The tab redraws on every exercise write; a cursor that jumped back to
-      # today would make logging a past session impossible.
 
   Rule: Each movement is shown beside what was logged against it
 
@@ -148,13 +139,10 @@ Feature: Training plans
     Scenario: A movement with no target range says how many sets, not "3x0"
       Given a movement prescribing three sets and no rep range
       Then the row reads "3 sets"
-      # "3x0" reads as a prescription to do nothing, rather than as one that
-      # never named a target.
 
     Scenario: A movement logged twice takes the first row
       Given I logged a movement once as prescribed and again as extra work
       Then the prescribed row is the one compared
-    # The ledger's answer is not part of the prescription
     Scenario: The comparison columns cannot be typed into
       Then the load, the target and the effort are editable
       And what was logged and whether it was met are not
@@ -180,8 +168,6 @@ Feature: Training plans
       When I press Enter on a planned day
       Then the command bar is filled with the command to log that day
       And nothing is written until I confirm it
-      # A keystroke on a grid must not silently append eight rows to the
-      # ledger. Every write in this application is something the member ran.
 
     Scenario: Logging a planned session
       When I confirm the command for a planned day
@@ -193,8 +179,6 @@ Feature: Training plans
       Given a movement prescribing three sets of eight to twelve at 16.5 kg
       When I log that session from the plan
       Then the row holds 8, 8, 8 at 16.5 kg with the prescribed effort
-      # The number to beat, not one edited downwards on every session that
-      # went to plan.
 
     Scenario: A hold is written in seconds
       Given a movement measured in seconds, prescribing three holds of thirty
@@ -208,7 +192,6 @@ Feature: Training plans
     Scenario: A movement whose exercise was deleted refuses the whole session
       When one movement's catalog item is no longer there
       Then the session is refused rather than logged short
-      # A session missing two movements reads as one cut short.
 
     Scenario: A logged session marks its day done
       When I log a planned session

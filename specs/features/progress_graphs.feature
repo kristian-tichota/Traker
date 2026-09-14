@@ -5,15 +5,9 @@ Feature: Progress graphs
   I want nutrition, training and activity plotted against my own goals
   So that I can see direction of travel without exporting anything
 
-  Each member's graph preferences are theirs alone, even though the underlying
-  catalog is shared.
+  Graph preferences are per member, although the catalog is shared.
 
   Rule: Drawing a chart does not take the keyboard away
-
-    A chart is the most expensive thing this client draws, and the whole input
-    path is modal, so a chart that draws on the interface thread is a chart that
-    stops the member navigating. Same guarantee as the command bar's "the bar
-    does not wait for the service" in command_line.feature, for the same reason.
 
     @accessibility
     Scenario: A chart is drawn while the window stays navigable
@@ -35,10 +29,6 @@ Feature: Progress graphs
       And the earlier one is dropped without drawing over it
 
   Rule: A chart I am waiting for says it is being drawn
-
-    A chart takes between 143 ms and 576 ms to build and rasterise, and the
-    ground it paints before its first one is indistinguishable from a chart
-    with nothing in it. So a wait long enough to notice is said out loud.
 
     Scenario: A chart being drawn for the first time
       Given a chart tab whose chart has never been drawn
@@ -100,10 +90,6 @@ Feature: Progress graphs
 
   Rule: A day that was guessed rather than logged says so on the chart
 
-    An estimate is a calorie figure and nothing else, so a day with one in it
-    is not comparable with a day read off labels. The chart says which days
-    those were, at the same scale as the number it is drawing.
-
     Scenario: The estimated share of each day is hatched
       Given days some of whose calories were estimated
       Then the calorie chart hatches that share of each day's column
@@ -111,8 +97,6 @@ Feature: Progress graphs
 
     Scenario: Only the calorie chart carries it
       Then the protein, fat, salt, fibre and sugar charts are unhatched
-      # An estimate has calories and zeroes for every macro, so hatching those
-      # would claim the shortfall was estimated when it is simply unknown.
 
     Scenario: A stretch with no estimates in it is unhatched
       Then nothing is drawn rather than an empty hatch along the axis
@@ -173,10 +157,6 @@ Feature: Progress graphs
 
   Rule: The energy estimate is a stated model, not a measurement
 
-    The figure on the calendar — and the "burned" half of the calorie bar — comes
-    from a MET model whose every number is fixed here. It estimates; it does not
-    measure. Changing any figure below changes what both readouts say.
-
     @exact
     Scenario: What a working set is worth
       Given a set of strength work
@@ -227,9 +207,6 @@ Feature: Progress graphs
       And a tax of a hundred percent withholds all of it
 
   Rule: The graphs are an optional part of the install
-
-    Plotting is the only thing here that needs matplotlib, and a member who only
-    logs food, training and chores should not have to install it.
 
     Scenario: A core install has no graph tabs
       Given the graphs extra is not installed

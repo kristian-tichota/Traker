@@ -5,10 +5,9 @@ Feature: Personal profile
   I want all of my personal settings in one file I can edit
   So that the app can be shared without either of us compromising
 
-  The profile is the only place where the two members' use of the app diverges:
-  biometrics, goals, which views they want, which keys they use, their timer
-  split, their schedule and where their window belongs in their own desktop
-  session. Everything in it has a working default, so an unedited profile is a
+  The profile is the only place where the two members' use of the application
+  diverges: biometrics, goals, views, keys, timer split, schedule and window
+  placement. Every value has a working default, so an unedited profile is a
   usable profile.
 
   Rule: A usable profile exists from the first launch
@@ -115,17 +114,11 @@ Feature: Personal profile
 
   Rule: The screens lose their colour for the hours I name
 
-    Colour at night is the part of screen hygiene a break cannot answer,
-    because a break ends. So this is a schedule and not a hold: it converges
-    on what the clock says, and nothing about it is enforced or hard to leave.
-
     Scenario: Naming the hours
       Given a [grayscale] section I have switched on
       When the clock reaches the hour it starts at
       Then every screen loses its colour, in every application
       And it has its colour back at the hour it ends at
-      # The compositor's own filter, not a window of ours: a sheet Traker drew
-      # would be grey over Traker and colour everywhere else.
 
     Scenario: Starting the app inside those hours
       Given the clock is already inside them
@@ -135,15 +128,11 @@ Feature: Personal profile
     Scenario: The hours wrap past midnight
       Given hours that start in the evening and end in the morning
       Then they are in force on both sides of midnight
-      # The same rule the schedule's regimes wrap by, computed once so the
-      # two cannot disagree.
 
     Scenario: Off is the default
       Given a profile I have not edited
       Then the hours are named but nothing is applied
       And my compositor's configuration says nothing about Traker
-      # Every setting here that reaches the session is opt-in. The other
-      # member of this household does not want their screens touched.
 
     Scenario: A session with no compositor to ask
       Given a session that is not this desktop at all
@@ -154,8 +143,6 @@ Feature: Personal profile
       Given the screens are monochrome and the hour has not passed
       When I close Traker
       Then they stay that way
-      # Unlike the window rule above, which exists only while the window does.
-      # The request is for grey evenings, not for grey evenings while Traker runs.
 
   Rule: The timer's split is declared per member
 
@@ -167,8 +154,6 @@ Feature: Personal profile
     Scenario: The wall is opt-in
       Given a generated profile
       Then breaks do not take the screens until I say so
-      # One of the household's two members does not want them taken, and
-      # meeting that unasked on a first launch is not a default.
 
     Scenario: Nothing declared
       Given a profile with no [timer] section
@@ -180,27 +165,16 @@ Feature: Personal profile
 
   Rule: The window has a desktop and an activity of its own, if I say so
 
-    A KDE session is only deterministic if a virtual desktop and an activity
-    always mean the same application. The compositor can be told that, and its
-    own settings page is the awkward way to say it: the value it stores is a
-    uuid, and one rule matched on the application class caught windows I did
-    not mean — a break's walls carry the same class as the window.
-
     Scenario: Naming where the window belongs
       Given a [window] section naming a virtual desktop and an activity
       When I start Traker
       Then its window is put on that desktop and that activity
       And it cannot be dragged off either of them
       And my screen does not move, and the log says where the window went
-      # Being taken to another desktop by a launch is worse than a window the
-      # member has to go and find, and the log is what makes the second one
-      # explicable rather than a launch that seems to do nothing.
 
     Scenario: Forcing nothing is the default
       Given a generated profile
       Then nothing of Traker's is written to the compositor's configuration
-      # A member who has not asked for this should not find Traker in the list
-      # of their own window rules.
 
     Scenario: And a monitor, which has to be asked for differently
       Given a [window] section naming a screen by its connector name
@@ -209,10 +183,6 @@ Feature: Personal profile
       And it is put back there when I let go of it somewhere else
       And it is not snatched back while I am still dragging it
       And the log says which monitor it went to, and what prompted the move
-      # KWin's own setting for this is a *number*: an index into a list it
-      # rebuilds every boot, so it means a different monitor each time, and an
-      # index past the end of the list does nothing and says nothing. Asking
-      # for the output by name is the form of the request KWin honours.
 
     Scenario: Named the way they are shown
       Given a [window] section
@@ -220,43 +190,31 @@ Feature: Personal profile
       And an activity may be named as it appears in the switcher
       And a screen is named as its connector, never as "primary"
       And all of them are resolved afresh on every launch
-      # So renaming or rebuilding one does not leave something stale behind in
-      # the member's configuration, which is what a stored uuid does.
 
     Scenario: A name this session does not have
       Given a [window] section naming a desktop or activity that is not there
       Then that one is left alone, the other still applies, and the log says which
-      # And specifically *not* forced to "everywhere", which is what an empty
-      # value means to the compositor — the opposite of what was asked for.
 
     Scenario: A monitor name this session does not have
       Given a [window] section naming a screen that is not there
       When I start Traker
       Then the window is left where the compositor put it, and nothing is moved
-      # An unplugged monitor must not send the window somewhere arbitrary.
 
     Scenario: A compositor that will not move the window
       Given a [window] section naming a screen
       And a compositor that refuses to move the window there
       When it has refused several times in a row
       Then it stops asking, and says so once
-      # It watches the window's geometry and moving the window writes its
-      # geometry, so a refusal it kept retrying would be an argument on every
-      # frame rather than a line in a log.
 
     Scenario: A session that is not this desktop at all
       Given a [window] section and a session with no compositor to tell
       When I start Traker
       Then nothing is written, and no file is left behind that was not there
-      # Including the compositor's own rules file: a member on another desktop
-      # environment should not acquire one because Traker looked for it.
 
     Scenario: Moving it for real means saying so
       Given a [window] section naming a desktop, an activity and a screen
       When I want the window somewhere else
       Then I edit the profile and restart, and there is no command for it
-      # Forced is the point. A way to move it for one session would be a way
-      # to end up not knowing where it is, which is the thing being fixed.
 
     Scenario: What a break shows follows the window, unless I say otherwise
       Given a [window] section naming a screen
@@ -264,24 +222,15 @@ Feature: Personal profile
       When a break shows me a file
       Then it goes to the monitor the window was forced onto
       And naming one for the break still overrides it
-      # The window is on that monitor because that is where the member looks.
-      # Falling back to "primary" instead means the first output the compositor
-      # announced, which is not necessarily the one in front of them.
 
     Scenario: It cannot take a break with it
       Given a [window] section naming a desktop and an activity
       When a break takes the screens
       Then the walls are still on every desktop and every activity
       And the window's placement is untouched by the break beginning or ending
-      # The two are matched differently on purpose: the walls by a title
-      # prefix, the window by its exact title, which no wall's title is. A
-      # rule matched on the application class alone reached both, and it
-      # un-placed a wall — one screen of a break stopped being covered.
 
     Scenario: Traker stops being in my configuration when it stops running
       Given a [window] section and a running Traker
       When I close it
       Then the rule that placed its window is gone
       And so is what was holding it to one monitor
-      # The compositor drops it when the window goes, and Traker takes it out
-      # itself for the session where the compositor restarted underneath.

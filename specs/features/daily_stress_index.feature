@@ -5,20 +5,14 @@ Feature: Daily Stress Index
   I want one number per day expressing strain against recovery
   So that I can see whether a day was sustainable without reading a timeline
 
-  The index is specified exactly; the presentation around it is not. The Daily
-  Stress Index is a ratio of penalty to recovery: above 1.0 the day cost more
-  than it gave back, below 1.0 it was restorative. A day of the prescribed
-  split is exactly 1.0.
+  The index is a ratio of penalty to recovery. Above 1.0 the day cost more than
+  it gave back, below 1.0 it was restorative, and a day of the prescribed split
+  is exactly 1.0. The presentation around the index is not specified.
 
   Background:
     Given the day's seconds are accumulated into the four states
 
   Rule: The index is an unweighted ratio of accumulated seconds
-
-    Each state carried a multiplier, declared per timer mode, so that time at a
-    game could be scored differently from time writing. A mode's name never
-    told anyone how much typing was in the hour, and time at a keyboard is time
-    at a keyboard whatever the hour was called.
 
     @exact
     Scenario: The formula
