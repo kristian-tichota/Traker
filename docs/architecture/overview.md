@@ -66,4 +66,3 @@ of sets would be near-copies. Contracts: `specs/features/`.
 | Why is my screen grey after eight? | `docs/guides/going-monochrome.md` |
 | When is a chore next due? | `docs/guides/keeping-a-chore.md` |
 | What is settled, and where do defects come from? | `docs/guides/reviewing.md` |
-| What is known-broken or unmeasured? | `docs/status/known-drift.md` |

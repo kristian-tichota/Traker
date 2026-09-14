@@ -60,4 +60,4 @@ uv run python scripts/check_desktop_integration.py --media    # what this machin
 uv run python scripts/check_desktop_integration.py --idle     # whether it says how long you have been away
 ```
 
-`journalctl --user -b -g 'traker:'` prints one `holding '<caption>' wall=… everyDesktop=…` line per window. Re-run the script after a Plasma upgrade. Mechanism and the upstream refusals: `docs/architecture/invariants.md`, `docs/guides/placing-the-window.md`, `docs/status/known-drift.md`.
+`journalctl --user -b -g 'traker:'` prints one `holding '<caption>' wall=… everyDesktop=…` line per window. Re-run the script after a Plasma upgrade. Mechanism and the upstream refusals: `docs/architecture/invariants.md`, `docs/guides/placing-the-window.md`.

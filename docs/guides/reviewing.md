@@ -36,7 +36,7 @@ Ranked by what has actually broken this application.
 
 ## Checking a claim before writing it down
 
-Nothing goes in `docs/status/known-drift.md` that has not been reproduced.
+A defect MUST be reproduced before it is reported.
 
 ```bash
 uv run pytest -q                                    # necessary, nowhere near sufficient
