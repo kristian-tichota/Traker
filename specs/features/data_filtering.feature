@@ -9,9 +9,9 @@ Feature: Filtering and sorting what a table shows
   makes them unreadable. Filtering is how a member asks a question of that
   ledger; sorting is how they order the answer.
 
-  Everything here is keyboard-first. The member this application is built for
-  has chronic finger tendinosis, so the most common question must cost the
-  fewest keystrokes: a bare word, and nothing else.
+  Everything here is keyboard-first, and keystrokes are the cost that matters,
+  so the most common question must cost the fewest: a bare word, and nothing
+  else.
 
   Background:
     Given the application is open

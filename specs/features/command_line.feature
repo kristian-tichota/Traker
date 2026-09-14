@@ -93,7 +93,7 @@ Feature: Command line logging
   Rule: An argument a member would always type the same way may be left out
 
     The arguments omitted are the ones that would otherwise be retyped every
-    single time: one serving, and the time it is now. This is the tendinosis
+    single time: one serving, and the time it is now. This is the keystroke-cost
     constraint applied to the grammar rather than to the keys.
 
     Two things keep it unambiguous rather than positional guesswork: each

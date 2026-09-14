@@ -5,8 +5,9 @@ Feature: Modal keyboard navigation
   I want every routine action to be a couple of keystrokes away
   So that logging a day costs me almost no finger movement
 
-  One of the two users has chronic finger tendinosis. Assistive input (voice
-  control, head tracking) reaches the app as ordinary key and pointer events, so
+  This application is used by members who cannot type comfortably. Assistive
+  input (voice control, head tracking) reaches the app as ordinary key and
+  pointer events, so
   anything reachable from the keyboard is reachable by those too. The cost of a
   mistake must stay low: no interaction may trap the user in a mode they cannot
   leave, and Escape always means "back to NORMAL".

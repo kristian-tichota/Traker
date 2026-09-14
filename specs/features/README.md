@@ -4,7 +4,7 @@ Behaviour in Gherkin, one file per feature. They describe **what the app must do
 
 One household, two members. They share a single catalog of foods, drinks, exercises, supplements and mobility routines — a nutrition label is entered once, by whoever has the packet — while logs, targets, timer history and view preferences stay separate. That is what lets one member track a deficit and the other a surplus against the same food database.
 
-One member has chronic finger tendinosis. This is the reason for the modal keyboard interface, the one-line command bar, the fuzzy completion and the focus timer; accessibility is the premise, not a layer. Assistive input arrives as ordinary key and pointer events, so keyboard reachability is the whole accessibility story.
+The application is built for members who need to limit keystrokes and time at a keyboard. This is the reason for the modal keyboard interface, the one-line command bar, the fuzzy completion and the focus timer; accessibility is the premise, not a layer. Assistive input arrives as ordinary key and pointer events, so keyboard reachability is the whole accessibility story.
 
 ## Reading order
 
@@ -18,7 +18,7 @@ One member has chronic finger tendinosis. This is the reason for the modal keybo
 
 - `@exact` — the numbers and state routing *are* the specification; do not paraphrase.
 - `@core` — load-bearing for daily use; a regression makes the app unusable, not degraded.
-- `@accessibility` — exists because of the tendinosis constraint; never traded for polish.
+- `@accessibility` — exists because of the keystroke-cost constraint; never traded for polish.
 - `@shared` / `@per-user` — about data both members see, or that must differ between them.
 - `@gap` — a verified defect, not an aspiration.
 
