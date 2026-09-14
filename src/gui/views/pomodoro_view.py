@@ -1549,7 +1549,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Say the wait is up, the way a coming break is said: out loud."""
         self._said_the_offers_are_open = True
         notify_service.notify(
-            "The break will show you something now",
+            "The break can show something now",
             f"{media.as_elapsed(self.away_ms())} away from the screen is up. "
             f"{self.offer_key(0)} shows “{self._offers[0].name}”.",
             sound_name=self._warn_sound,

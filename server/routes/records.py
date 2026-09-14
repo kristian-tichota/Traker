@@ -29,7 +29,7 @@ def delete_record(table_name, row_id):
             ).rowcount
 
     if not removed:
-        return jsonify({"error": f"No row {row_id} of {table_name} that you may delete."}), 404
+        return jsonify({"error": f"No row {row_id} of {table_name} that this member may delete."}), 404
 
     if spec.is_catalog:
         event_broadcaster.broadcast(
@@ -87,7 +87,7 @@ def update_record(table_name, row_id):
             ).rowcount
 
     if not changed:
-        return jsonify({"error": f"No row {row_id} of {table_name} that you may edit."}), 404
+        return jsonify({"error": f"No row {row_id} of {table_name} that this member may edit."}), 404
 
     if spec.is_catalog:
         event_broadcaster.broadcast(

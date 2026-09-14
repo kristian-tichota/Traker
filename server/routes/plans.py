@@ -23,7 +23,7 @@ def _owned_plan(conn, plan_id: int):
         "SELECT id, name, start_date, weeks, notes FROM training_plans "
         "WHERE id = ? AND user_id = ?", (plan_id, g.user_id)).fetchone()
     if row is None:
-        raise BadValue(f"No training plan {plan_id} of yours.")
+        raise BadValue(f"No training plan {plan_id} for this member.")
     return row
 
 

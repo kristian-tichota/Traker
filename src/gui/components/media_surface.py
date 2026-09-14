@@ -116,7 +116,7 @@ class MpvScreen(QOpenGLWidget):
         self.frame_ready.emit()
 
     def paintGL(self):
-        """Draw whatever mpv has, into the framebuffer Qt gave us."""
+        """Draw whatever mpv has into the framebuffer Qt provided."""
         if self._context is None:
             return
         ratio = self.devicePixelRatioF()

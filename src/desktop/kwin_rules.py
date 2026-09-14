@@ -41,7 +41,7 @@ def _rule_names(general):
 
 
 def written(text, group, keys):
-    """text with one rule of ours in it, first, and everything else kept."""
+    """Insert one rule first and keep every other line."""
     sections = [(n, lines) for n, lines in kde_config.split(text) if n != group]
     last = sections[-1][1]
     if last and not last[-1].endswith("\n"):
@@ -162,14 +162,14 @@ def _restore(path, was, existed) -> bool:
 
 
 def carried(group=None, path=None) -> bool:
-    """Whether the file has one of our rules in it right now."""
+    """Report whether the file currently holds one of this application's rules."""
     carries = kde_config.text(path or DEFAULT_PATH) or ""
     wanted = [group] if group else [REST_GROUP, WINDOW_GROUP]
     return any(f"[{one}]" in carries for one in wanted)
 
 
 def prune(groups=(REST_GROUP, WINDOW_GROUP), path=None, reconfigure=None) -> bool:
-    """Take our rules out, whoever left them there."""
+    """Remove this application's rules, whatever left them there."""
     path = path or DEFAULT_PATH
     before = kde_config.text(path)
     if before is None:

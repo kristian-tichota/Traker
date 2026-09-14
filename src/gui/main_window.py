@@ -601,7 +601,7 @@ class MainWindow(QMainWindow):
         """Carry out :break: whether the next break is the long one."""
         view = self.views.get("pomodoro")
         if view is None:
-            raise CommandError("The Focus Timer is switched off in your profile.")
+            raise CommandError("The Focus Timer is switched off in the profile.")
         if not payload["action"]:
             return view.long_break_state()
         return view.set_long_break_queued(payload["action"] == BREAK_LONG)

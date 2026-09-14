@@ -48,7 +48,7 @@ def report_idle(profile):
     print("  leave the keyboard alone and watch it climb; touch it and watch it drop")
     for _ in range(6):
         away = idle.idle_ms()
-        print("  no answer: the clock will keep running while you are away"
+        print("  no answer: the clock will keep running during an absence"
               if away is None else f"  {away / 1000:>8.1f} s")
         if away is None:
             return
@@ -249,7 +249,7 @@ def report_where_we_are(bus):
     """Which desktop and activity the member is on, as a client can read them."""
     from src.desktop import switch_guard
 
-    print("\nwhere the session says you are")
+    print("\nwhere the session reports the member to be")
     guard = switch_guard.SwitchGuard()
     desktop = guard._read_desktop()
     activity = guard._read_activity()
@@ -273,9 +273,9 @@ def report_screens(app_id, seconds):
 
     try:
         print(f"  watching for {seconds:.0f}s. Now, while it runs:")
-        print("   - switch virtual desktop and activity with the focus on your")
+        print("   - switch virtual desktop and activity with the focus on the")
         print("     *primary* screen, then again with the focus on the other one")
-        print("   - start a strict break first if you want the walls in the list")
+        print("   - start a strict break first to include the walls in the list")
         time.sleep(seconds)
     finally:
         print(f"  unloaded: {unload_script(PROBE_PLUGIN)}")
@@ -287,7 +287,7 @@ def report_screens(app_id, seconds):
              "-o", "cat", "-n", "400"],
             capture_output=True, text=True, timeout=20)
     except (OSError, subprocess.SubprocessError) as e:
-        print(f"  could not read the journal ({e}); read it yourself with:")
+        print(f"  could not read the journal ({e}); read it by hand with:")
         print("  journalctl --user -b -g 'traker: probe'")
         return
     lines = [line for line in said.stdout.splitlines() if "traker: probe" in line]
@@ -361,20 +361,20 @@ def main():
                         help="unload a leftover strict-break script, give back "
                              "what it held, and stop")
     parser.add_argument("--window", action="store_true",
-                        help="ask KWin what it calls a window you click, and where it has it")
+                        help="ask KWin what it calls a clicked window, and where it has it")
     parser.add_argument("--activities", action="store_true",
                         help="what a break would offer to open, and whether it can")
     parser.add_argument("--media", action="store_true",
                         help="what libmpv, the decoder and the sinks are on "
                              "this machine")
     parser.add_argument("--idle", action="store_true",
-                        help="whether this session says how long you have been "
-                             "away, which is what stops the timer for you")
+                        help="whether this session reports how long the member has "
+                             "been away, which is what stops the timer")
     parser.add_argument("--screens", action="store_true",
                         help="what KWin answers for outputs and windows, and what "
                              "a desktop or activity switch does to them")
     parser.add_argument("--engage-secs", type=float, default=8.0,
-                        help="how long to hold, so you can try to leave (default 8)")
+                        help="how long to hold, leaving time to try an escape (default 8)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG, format="  [%(name)s] %(message)s")
@@ -434,12 +434,12 @@ def main():
         sound_name=profile.get_metric("strict_break", "sound_name", "dialog-warning"),
         sound_file=profile.get_metric("strict_break", "sound_file", ""),
     )
-    print(f"  sent: {sent}   (if you saw it but heard nothing, set [strict_break] sound_file)")
+    print(f"  sent: {sent}   (shown but silent means [strict_break] sound_file is unset)")
 
     print(f"\nholding for {args.engage_secs:.0f}s as app id '{app_id}'")
     print("  switch desktop or activity now: the Traker window should follow")
     print("  and so should every wall -- the covered screen that stays behind")
-    print("  is the escape this is here to catch, not the one you are on")
+    print("  is the escape this is here to catch, not the current one")
     if not pin.engage():
         print("  KWin did not take the script -- a break will hold one desktop only")
         return 1
@@ -448,12 +448,13 @@ def main():
     time.sleep(args.engage_secs)
     print(f"  released: {pin.release()}")
     print("\nkwin's own view of the script: journalctl --user -b -g 'traker:'")
-    print("  one \'holding <caption>\' line per window of ours, saying what this")
-    print("  Plasma took: everyDesktop=false is a window that is only *followed*")
-    print("  onto each desktop as you switch, and (absent) is a name it does not")
-    print("  answer for at all. In a real break wall=false marks the one window")
-    print("  that is not the break: Traker's own, which keeps neither keepAbove")
-    print("  nor the focus, because fullscreen and focused outranks kept-above")
+    print("  one \'holding <caption>\' line per window of this application,")
+    print("  saying what Plasma took: everyDesktop=false is a window only")
+    print("  *followed* onto each desktop on a switch, and (absent) is a name")
+    print("  it does not answer for at all. In a real break wall=false marks")
+    print("  the one window that is not the break: Traker's own, which keeps")
+    print("  neither keepAbove nor the focus, because fullscreen and focused")
+    print("  outranks kept-above")
     return 0
 
 

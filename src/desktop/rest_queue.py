@@ -8,7 +8,7 @@ DEFAULT_PATH = os.path.expanduser("~/.config/traker/rest-queue.m3u")
 HEADER = ("# Traker: what to watch on the next break, newest last.\n"
           "# One path per line; a line starting with # is ignored. Append with\n"
           "# ':rest <path>' in Traker, or with anything else that can write a\n"
-          "# file. Nothing here is opened until you press its key on a break.\n")
+          "# file. Nothing here is opened until its key is pressed on a break.\n")
 
 
 def path_for(profile) -> str:

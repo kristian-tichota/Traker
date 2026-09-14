@@ -21,6 +21,6 @@ def idle_ms():
     if not answered or away is None:
         _unanswered = True
         log.info("%s does not say how long this session has been idle: the "
-                 "timer will not pause itself when you walk away.", SCREENSAVER)
+                 "timer will not pause itself on an absence.", SCREENSAVER)
         return None
     return int(away)

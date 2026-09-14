@@ -159,7 +159,7 @@ break_mins = {DEFAULT_BREAK_MINS}
 long_break_mins = {DEFAULT_LONG_BREAK_MINS}
 long_breaks_per_day = {DEFAULT_LONG_BREAKS_PER_DAY}
 # Whether a break takes every screen: the overlays, the release hold and the
-# keys that open an activity. Off is a countdown you can pause and skip.
+# keys that open an activity. Off is a countdown that may be paused and skipped.
 strict = false
 # After this many seconds with neither a key nor the mouse, the interval
 # pauses itself and the time counts as rest overtime. Input carries it on from
@@ -170,8 +170,7 @@ idle_pause_secs = {DEFAULT_IDLE_PAUSE_SECS}
 stop_hold_secs = {DEFAULT_STOP_HOLD_SECS}
 
 # Recurring household chores, defined on the Chores tab. This says whether a
-# break shows what is due today and lets you tick it off with the letter beside
-# it. Off, the break surface does not mention them.
+# break shows what is due today and takes the tick on the letter beside it. Off, the break surface does not mention them.
 [chores]
 on_break = false
 
@@ -185,7 +184,7 @@ on_break = false
 # does not have costs that one dimension and a line in the log.
 #
 # The window cannot be dragged off, and KWin drops the rule when Traker closes.
-# Launching Traker does not switch you to the desktop; the log says where the
+# Launching Traker does not change the current desktop; the log says where the
 # window went.
 [window]
 desktop = ""
@@ -201,12 +200,12 @@ screen = ""
 # request with a red-green filter rather than refusing it.
 #
 # Off leaves the filter untouched: nothing is written and nothing is switched
-# off for you.
+# off.
 #
 # This is a schedule, not a hold. Nothing is enforced and nothing is undone
 # when Traker closes. Setting enabled = false returns the colour within the
 # minute while Traker runs; set while it is closed, the screens stay as they
-# are until you untick the effect yourself.
+# are until the effect is unticked by hand.
 [grayscale]
 enabled = false
 from = "20:00"
@@ -283,7 +282,7 @@ sheet_mode = "s"
 filter = "/"
 sort = "o"
 
-# Which regime each part of the day belongs to. The names are yours; a time
+# Which regime each part of the day belongs to. The names are arbitrary; a time
 # outside every block reports "Unscheduled". A [schedule.<weekday>] table,
 # lower case, replaces this one for that day.
 [schedule.default]
