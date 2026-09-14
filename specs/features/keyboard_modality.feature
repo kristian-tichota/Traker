@@ -19,7 +19,7 @@ Feature: Modal keyboard navigation
     Scenario: The status bar teaches the current mode
       Then the status bar names the active mode
       And it lists the keys that leave it
-      And the keys it lists are the user's own remapped keys, not hardcoded ones
+      And the keys it lists are the member's own remapped keys, not hardcoded ones
       And the mode is coloured as well as named
 
     Scenario: A message does not take the mode away
@@ -121,7 +121,7 @@ Feature: Modal keyboard navigation
       Then the visible tab does not change
       And no error is reported
 
-    Scenario: Tabs the user disabled are skipped entirely
+    Scenario: Tabs disabled in the profile are skipped entirely
       Given I disabled some views in my profile
       Then the remaining tabs are renumbered without gaps
       And every one of them is still reachable by a single keystroke

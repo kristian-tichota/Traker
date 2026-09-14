@@ -37,7 +37,7 @@ def switched_on(profile) -> bool:
 
 
 def wanted_at(profile, at) -> bool:
-    """Whether the screens should be grey at at, a datetime."""
+    """Whether the screens should be grey at the given datetime."""
     if not switched_on(profile):
         return False
     start = minutes_of_day(profile.get_metric("grayscale", "from", DEFAULT_FROM))

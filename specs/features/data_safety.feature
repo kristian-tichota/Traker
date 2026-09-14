@@ -25,7 +25,7 @@ Feature: Data safety
 
     Scenario: Constraints live with the data
       Then positive quantities, in-range ratings and fixed state sets are enforced by the store itself
-      And a rejected write is reported to the user with the reason
+      And a rejected write is reported with the reason
 
     Scenario: A value of the wrong kind is refused, not stored
       Given a column that holds a number

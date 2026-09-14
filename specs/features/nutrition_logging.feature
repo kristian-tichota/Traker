@@ -18,7 +18,7 @@ Feature: Food and drink logging
 
   Rule: Nutrients are derived, never stored on the log row
 
-    Scenario: A food log row carries only what the user chose
+    Scenario: A food log row carries only what was entered
       When I log a food
       Then the row stores the date, the meal, the item and how much of it
 

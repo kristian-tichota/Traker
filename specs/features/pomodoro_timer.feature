@@ -532,7 +532,7 @@ Feature: Focus timer
     Scenario: A forty-minute video spans three breaks
       Given a break was showing me something and stopped
       Then where it got to is remembered — a position, or a page
-      And how long the file is is remembered with it
+      And the length of the file is remembered with it
       And the next break that shows it carries on from there
       And a document opens *on* that page, not merely counting from it
       And something I had only just started is not remembered at all

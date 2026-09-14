@@ -29,7 +29,7 @@ CATALOG_STRETCH, SETS_STRETCH = 6, 4
 
 
 def lay_out_tables(into, ledger, catalog, sets_pane):
-    """Put a domain tab's three panes into into, at the stretches above."""
+    """Place a domain tab's three panes at the stretches above."""
     right_column = QVBoxLayout()
     right_column.addLayout(catalog, CATALOG_STRETCH)
     right_column.addLayout(sets_pane, SETS_STRETCH)

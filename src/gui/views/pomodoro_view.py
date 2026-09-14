@@ -316,11 +316,11 @@ class StrictOverlay(QWidget):
         super().closeEvent(event)
 
     def forget_screen(self):
-        """Let go of the output this wall covers, because it is going away."""
+        """Release the output this wall covers."""
         self.screen_covered = None
 
     def dismiss(self):
-        """Close it because the break is over, which is the only way it does."""
+        """Close the wall at the end of the break."""
         self.let_go = True
         self.close()
 

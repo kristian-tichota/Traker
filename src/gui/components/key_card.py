@@ -42,7 +42,7 @@ class KeyCard(QWidget):
         return tuple(self._hints)
 
     def sizeHint(self) -> QSize:
-        """As wide as its widest row, because it is placed by its own corner."""
+        """Size the card to its widest row."""
         if not self._hints:
             return QSize(0, 0)
         metrics = QFontMetrics(self._font)

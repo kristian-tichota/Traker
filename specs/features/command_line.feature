@@ -116,7 +116,7 @@ Feature: Command line logging
       When I submit "bevlog 25:99 Black Coffee"
       Then it is refused as a bad time
 
-  Rule: The bar tells the user what to type next
+  Rule: The bar states what to type next
 
     Scenario: Completing a command name
       When I have typed a prefix of a known command
