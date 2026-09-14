@@ -12,14 +12,14 @@ HEADER = ("# Traker: what to watch on the next break, newest last.\n"
 
 
 def path_for(profile) -> str:
-    """Where this member's queue file is, from [strict_break.queue] path."""
+    """Return this member's queue file, from [strict_break.queue] path."""
     written = str((profile.get_metric("strict_break", "queue", {}) or {})
                   .get("path") or "").strip()
     return os.path.expanduser(written) if written else DEFAULT_PATH
 
 
 def describe(entries) -> str:
-    """The queue as one status-bar line: 1 a.mp4 · 2 b.mp4."""
+    """Format the queue as one status-bar line: 1 a.mp4 · 2 b.mp4."""
     if not entries:
         return "empty."
     return " · ".join(f"{index} {label(entry)}"
@@ -27,7 +27,7 @@ def describe(entries) -> str:
 
 
 def read(path=None) -> list:
-    """The queued paths, in the order they were added."""
+    """Return the queued paths, in the order they were added."""
     try:
         with open(path or DEFAULT_PATH, encoding="utf-8") as f:
             lines = f.read().splitlines()
@@ -42,7 +42,6 @@ def read(path=None) -> list:
 
 
 def append(entry, path=None) -> list:
-    """Add entry to the end."""
     wanted = os.path.expanduser(str(entry or "").strip())
     if not wanted:
         raise ValueError("Nothing to queue.")
@@ -63,12 +62,11 @@ def remove(position, path=None) -> list:
 
 
 def clear(path=None) -> list:
-    """Empty the queue, keeping the file and what it says about itself."""
+    """Empty the queue, keeping the file and its header."""
     return write([], path)
 
 
 def write(entries, path=None) -> list:
-    """Replace the file with entries."""
     target = path or DEFAULT_PATH
     body = "".join(f"{entry}\n" for entry in entries)
     try:
@@ -81,5 +79,5 @@ def write(entries, path=None) -> list:
 
 
 def label(entry) -> str:
-    """How one queued path reads on a break surface: its own name."""
+    """Return how one queued path reads on a break surface: its own name."""
     return os.path.basename(str(entry).rstrip("/")) or str(entry)

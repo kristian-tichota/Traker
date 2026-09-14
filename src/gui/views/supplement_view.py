@@ -43,5 +43,5 @@ class SupplementsView(BaseManagedView):
         self.fetch_table(2, lambda: self.db.get_sets("supplement"))
 
     def _read_logs(self):
-        """The ledger, grouped so a logged stack reads as one line over its doses."""
+        """Read the ledger, grouped so a logged stack reads as one line of doses."""
         return grouped_by_set(self.db.get_supplement_logs())

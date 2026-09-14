@@ -79,7 +79,7 @@ def delete_item_by_name(name):
 
 
 def _set_domain(domain):
-    """This domain's set registration, or the refusal that it has none."""
+    """Return this domain's set registration, or the refusal that it has none."""
     spec = item_sets.spec_for(domain)
     if spec is None:
         raise BadValue(f"'{domain}' has no named sets.")
@@ -94,7 +94,7 @@ def get_sets(domain):
 
 
 def _component_amounts(conn, spec, entry, item_name):
-    """One component's amount columns, coerced and checked."""
+    """Return one component's amount columns, coerced and checked."""
     given = {column: entry.get(column) for column in spec.amount_columns
              if entry.get(column) is not None}
     if spec.has_single_amount and "amount" not in given:

@@ -111,7 +111,7 @@ USER_LOG_TABLES = frozenset(
 
 
 def get_spec(table_name: str) -> Optional[TableSpec]:
-    """The registration for table_name, or None if it is not exposed."""
+    """Return the registration for table_name, or None where it is not exposed."""
     return _REGISTRY.get(table_name)
 
 
@@ -126,7 +126,7 @@ def non_negative_columns(table_name: str) -> FrozenSet[str]:
 
 
 def exclusive_partners(table_name: str, column: str) -> FrozenSet[str]:
-    """The columns a write to column has to empty, or nothing."""
+    """Return the columns a write to column must empty, or nothing."""
     spec = get_spec(table_name)
     if spec is None:
         return frozenset()
@@ -141,7 +141,7 @@ _type_cache = {}
 
 
 def column_type(conn, table_name: str, column: str):
-    """The Python type column is declared as, from PRAGMA table_info."""
+    """Return the declared Python type of column, from PRAGMA table_info."""
     types = _type_cache.get(table_name)
     if types is None:
         types = {
@@ -172,5 +172,5 @@ def coerce_value(conn, table_name: str, column: str, value):
 
 
 def reset_type_cache() -> None:
-    """Forget the cached PRAGMA reads — used by tests that rebuild the schema."""
+    """Forget the cached PRAGMA reads."""
     _type_cache.clear()

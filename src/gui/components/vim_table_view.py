@@ -66,7 +66,7 @@ class VimTableView(QTableView):
         self._measured = True
 
     def column_layout(self, declared) -> ColumnLayout:
-        """What this header is showing, as a ColumnLayout."""
+        """Return what this header is showing, as a ColumnLayout."""
         header = self.horizontalHeader()
         order, hidden = [], set()
         for visual in range(header.count()):
@@ -79,7 +79,7 @@ class VimTableView(QTableView):
         return ColumnLayout(tuple(order), frozenset(hidden))
 
     def arrange_columns(self, declared, layout) -> None:
-        """Put the header in layout's order, hiding what it hides."""
+        """Put the header in layout order, hiding what it hides."""
         header = self.horizontalHeader()
         logical_of = {name: index for index, name in enumerate(declared)}
         self._rearranging = True
@@ -98,7 +98,7 @@ class VimTableView(QTableView):
         self.settle_cursor()
 
     def first_visible_column(self):
-        """The leftmost column on screen, or None if there is none."""
+        """Return the leftmost column on screen, or None where there is none."""
         header = self.horizontalHeader()
         for visual in range(header.count()):
             logical = header.logicalIndex(visual)
@@ -118,7 +118,7 @@ class VimTableView(QTableView):
             self._move_to(index.row(), column)
 
     def _column_beside(self, column, step):
-        """The next column in the order the member sees, or None."""
+        """Return the next column in visual order, or None."""
         header = self.horizontalHeader()
         visual = header.visualIndex(column) + step
         while 0 <= visual < header.count():
@@ -142,7 +142,7 @@ class VimTableView(QTableView):
         self.columns_rearranged.emit(self.table_idx)
 
     def focus_first_cell(self):
-        """Take focus, putting the cursor on the first cell if it has none."""
+        """Take focus, putting the cursor on the first cell where it has none."""
         self.setFocus()
         model = self.model()
         if not self.currentIndex().isValid() and model is not None and model.rowCount() > 0:

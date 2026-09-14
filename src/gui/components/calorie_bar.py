@@ -43,7 +43,6 @@ class AnimatedProgressBar(PausesWhenHidden, QWidget):
         self.timer.timeout.connect(self.update_animation)
 
     def set_value(self, val):
-        """The measured amount."""
         self.actual_value = float(val)
         self.update()
 
@@ -115,13 +114,13 @@ class AnimatedProgressBar(PausesWhenHidden, QWidget):
         self.update()
 
     def _net_value(self) -> float:
-        """What the bar is measuring: the calorie bar nets off the day's burn."""
+        """Return what the bar measures, netting off the day's burn."""
         if self.metric_type == "calories":
             return max(0.0, self.displayed_value - self.displayed_burned_value)
         return self.displayed_value
 
     def _get_bar_color(self) -> QColor:
-        """Green on target, blue short of it, magenta past it."""
+        """Return green on target, blue short of it, magenta past it."""
         green = QColor(PALETTE['green'])
         magenta = QColor(PALETTE['magenta'])
         blue = QColor(PALETTE['blue'])

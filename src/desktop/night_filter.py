@@ -32,12 +32,12 @@ TICK_MS = 60_000
 
 
 def switched_on(profile) -> bool:
-    """Whether [grayscale] is asked for at all, whatever the hour is."""
+    """Report whether [grayscale] is asked for at all, whatever the hour."""
     return profile.get_metric("grayscale", "enabled", False) is True
 
 
 def wanted_at(profile, at) -> bool:
-    """Whether the screens should be grey at the given datetime."""
+    """Report whether the screens should be grey at the given datetime."""
     if not switched_on(profile):
         return False
     start = minutes_of_day(profile.get_metric("grayscale", "from", DEFAULT_FROM))
@@ -61,16 +61,16 @@ class NightFilter:
         self._tick.timeout.connect(self.follow_the_clock)
 
     def begin(self):
-        """Start following the clock, from wherever it happens to be now."""
+        """Start following the clock from wherever it stands now."""
         self.follow_the_clock()
         self._tick.start()
 
     def stop(self):
-        """Stop following it, and leave the screens exactly as they are."""
+        """Stop following the clock and leave the screens exactly as they are."""
         self._tick.stop()
 
     def follow_the_clock(self):
-        """Ask for what the hour calls for, if that is not what was asked last."""
+        """Ask for what the hour calls for, unless it was asked for last."""
         profile = UserProfile()
         if not switched_on(profile) and self._asked_for is None:
             self._asked_for = False
@@ -85,7 +85,7 @@ class NightFilter:
             self._asked_for = wanted
 
     def apply(self, grey, intensity=DEFAULT_INTENSITY) -> bool:
-        """Write it down and then ask for it."""
+        """Write the setting down and then ask for it."""
         self._persist(grey, intensity)
         method = "loadEffect" if grey else "unloadEffect"
         reached, took = self._call(SERVICE, EFFECTS_PATH, EFFECTS, method, EFFECT)
@@ -104,7 +104,7 @@ class NightFilter:
         return True
 
     def _persist(self, grey, intensity) -> bool:
-        """The two kwinrc groups, edited rather than replaced."""
+        """Edit the two kwinrc groups rather than replacing them."""
         path = kde_config.KWINRC_PATH
         before = kde_config.text(path)
         if before is None:

@@ -46,6 +46,6 @@ class ChoreView(BaseManagedView):
         self.fetch_table(1, self.db.get_chore_completions)
 
     def _read_board(self):
-        """The board, off the one read and the one scheduling function."""
+        """Read the board, through the one read and the one scheduling function."""
         return [ChoreBoardRow.of(entry, STANDING_WORDS)
                 for entry in chores.board(self.db.get_chores())]

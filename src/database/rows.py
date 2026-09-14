@@ -4,7 +4,7 @@ from src.domain import formulas, plans
 
 
 def _count(value):
-    """A rep or second count, kept whole when it is whole."""
+    """Format a rep or second count, kept whole where it is whole."""
     number = float(value or 0.0)
     return int(number) if number.is_integer() else number
 
@@ -21,7 +21,7 @@ _HEADING_TYPES = {}
 
 
 def heading_type(row_type):
-    """row_type again, marked as a heading."""
+    """Return row_type again, marked as a heading."""
     made = _HEADING_TYPES.get(row_type)
     if made is None:
         made = type(f"{row_type.__name__}Heading", (row_type,), {"is_heading": True})
@@ -30,7 +30,7 @@ def heading_type(row_type):
 
 
 def heading_over(rows):
-    """The heading for rows, which are one logged set at one moment."""
+    """Build the heading for rows, which are one logged set at one moment."""
     first = rows[0]
     cls = type(first)
     values = dict.fromkeys(cls._fields)
@@ -43,7 +43,7 @@ def heading_over(rows):
 
 
 def grouped_by_set(rows):
-    """rows with a heading inserted over each logged set."""
+    """Return rows with a heading inserted over each logged set."""
     if not rows:
         return list(rows)
     cls = type(rows[0])
@@ -125,7 +125,7 @@ class DailyTotals(NamedTuple):
 
     @property
     def estimated_share(self) -> float:
-        """What fraction of the day's energy was guessed."""
+        """Return what fraction of the day's energy was estimated."""
         return self.estimated_kcal / self.energy_kcal if self.energy_kcal else 0.0
 
 NUTRIENT_FIELDS = ("energy_kcal", "protein_g", "carbs_g", "fat_g", "salt_g",
@@ -162,7 +162,7 @@ class MatchedTotals(NamedTuple):
 
 
 def _by_name(cls, row):
-    """row (a JSON object) as cls, matched field by field."""
+    """Return row, a JSON object, as cls, matched field by field."""
     try:
         return cls(*(row[field] for field in cls._fields))
     except (KeyError, TypeError) as missing:
@@ -171,7 +171,7 @@ def _by_name(cls, row):
 
 
 def completion_name(row) -> str:
-    """The name a member types to reach this row from the command line."""
+    """Return the name a member types to reach this row from the command line."""
     return getattr(row, type(row).COMPLETION_FIELD, "") or ""
 
 
@@ -397,12 +397,12 @@ class ExerciseLogRow(NamedTuple):
 
     @property
     def active_sets(self) -> int:
-        """How many of the five sets were actually worked."""
+        """Return how many of the five sets were worked."""
         return sum(1 for value in self.sets if value > 0)
 
     @property
     def sets_display(self) -> str:
-        """The worked sets as the Exercise tab and the graph both show them."""
+        """Return the worked sets as the Exercise tab and the graph show them."""
         worked = list(self.sets)
         while len(worked) > 1 and worked[-1] == 0:
             worked.pop()
@@ -410,7 +410,7 @@ class ExerciseLogRow(NamedTuple):
 
     @property
     def one_rep_max(self) -> float:
-        """The estimate as a number, for a timeline that must plot something."""
+        """Return the estimate as a number, for a timeline that must plot one."""
         if self.is_time_based:
             return 0.0
         return formulas.one_rep_max_or_weight(self.weight_kg, self.max_reps)
@@ -559,7 +559,7 @@ class PlannedMovementRow(NamedTuple):
 
     @classmethod
     def of(cls, movement, log_row) -> "PlannedMovementRow":
-        """Join one PlanMovementRow to the log row for its day, if any."""
+        """Join one PlanMovementRow to the log row for its day, where there is one."""
         return cls(
             movement.id, movement.position, movement.name, movement.sets,
             _count(movement.target_low), _count(movement.target_high),
@@ -619,7 +619,7 @@ class ChoreBoardRow(NamedTuple):
 
     @classmethod
     def of(cls, entry, words) -> "ChoreBoardRow":
-        """One src.domain.chores.Standing, as a row of the board."""
+        """Return one src.domain.chores.Standing as a row of the board."""
         chore = entry.chore
         return cls(entry.id, entry.name, entry.period_days, entry.grace_days,
                    chore.anchor, entry.lands_on, chore.last_done, entry.due_iso,

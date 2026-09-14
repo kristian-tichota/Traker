@@ -71,7 +71,7 @@ class TestSaturationIsMeasuredAgainstToday:
 
     @pytest.fixture
     def b12_target(self, profile_path):
-        """A declared B12 target, which a generated profile leaves at zero."""
+        """Declare a B12 target, which a generated profile leaves at zero."""
         import src.profile as profile_module
 
         profile_module.UserProfile()

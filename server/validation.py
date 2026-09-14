@@ -13,7 +13,7 @@ def _clock_time(value):
 
 
 def _iso_moment(value):
-    """An ISO-8601 moment, which is what datetime.isoformat() writes."""
+    """Match an ISO-8601 moment, as datetime.isoformat() writes one."""
     parsed = datetime.datetime.fromisoformat(value)
     if parsed.time() == datetime.time.min and len(value.strip()) <= 10:
         raise ValueError("a date alone carries no moment")
@@ -48,7 +48,7 @@ def validate_column_bound(table_name: str, column: str, value) -> None:
 
 
 def checked_columns(conn, table_name: str, values: dict) -> dict:
-    """values coerced to table_name's declared types, then checked."""
+    """Return values coerced to the declared types of table_name, then checked."""
     checked = {}
     for column, value in values.items():
         coerced = coerce_value(conn, table_name, column, value)
@@ -59,7 +59,7 @@ def checked_columns(conn, table_name: str, values: dict) -> dict:
 
 
 def checked_payload(conn, table_name: str, payload: dict, columns, defaults=None) -> dict:
-    """columns of payload, coerced and checked for table_name."""
+    """Return the named columns of payload, coerced and checked for table_name."""
     values = dict(defaults or {})
     values.update({column: payload[column] for column in columns if column in payload})
     return checked_columns(conn, table_name, values)

@@ -19,12 +19,12 @@ WORTH_SHOWING = (OVERDUE, DUE, EARLY)
 
 
 def today_iso() -> str:
-    """Today as the store spells it."""
+    """Return today as the store spells it."""
     return datetime.date.today().isoformat()
 
 
 def as_date(value):
-    """An ISO date as a date, or None if it will not read as one."""
+    """Return an ISO date as a date, or None where it will not read."""
     try:
         return datetime.datetime.strptime(str(value).strip(), ISO_DATE).date()
     except (AttributeError, TypeError, ValueError):
@@ -32,13 +32,13 @@ def as_date(value):
 
 
 def default_grace(period_days) -> int:
-    """How far ahead of its day a chore of this cadence may be done."""
+    """Return how far ahead of its day a chore of this cadence may be done."""
     period = whole(period_days, 1)
     return max(0, min(period // GRACE_DIVISOR, GRACE_CAP_DAYS))
 
 
 def whole(value, fallback: int) -> int:
-    """value as a whole number, or fallback."""
+    """Return value as a whole number, or fallback."""
     if isinstance(value, bool) or value is None:
         return fallback
     try:
@@ -48,7 +48,7 @@ def whole(value, fallback: int) -> int:
 
 
 def grace_of(chore) -> int:
-    """A chore's own grace, or the default for its cadence."""
+    """Return a chore's own grace, or the default for its cadence."""
     declared = getattr(chore, "grace_days", None)
     if declared is None:
         return default_grace(getattr(chore, "period_days", 1))
@@ -56,7 +56,7 @@ def grace_of(chore) -> int:
 
 
 def lands_on(anchor, period_days) -> str:
-    """The weekday this chore always falls on, or DRIFTS."""
+    """Return the weekday this chore always falls on, or DRIFTS."""
     start = as_date(anchor)
     period = max(1, whole(period_days, 1))
     if start is None or period % DAYS_IN_WEEK:
@@ -65,7 +65,7 @@ def lands_on(anchor, period_days) -> str:
 
 
 def next_due(anchor, period_days, grace_days, last_done):
-    """The date this chore is next wanted, as a date, or None."""
+    """Return the date this chore is next wanted, or None."""
     start = as_date(anchor)
     if start is None:
         return None
@@ -83,7 +83,7 @@ def next_due(anchor, period_days, grace_days, last_done):
 
 
 def standing(due, grace_days, today) -> str:
-    """Where a chore due on due stands on today."""
+    """Return where a chore due on due stands today."""
     if due is None:
         return LATER
     ahead = (due - today).days
@@ -112,14 +112,14 @@ class Standing:
 
     @property
     def days_over(self) -> int:
-        """Days past due, or 0 for a chore that is not late."""
+        """Return days past due, or 0 for a chore that is not late."""
         if self.due is None or self.due >= self.today:
             return 0
         return (self.today - self.due).days
 
     @property
     def days_ahead(self) -> int:
-        """Days until due, or 0 for one that is due or late."""
+        """Return days until due, or 0 for one that is due or late."""
         if self.due is None or self.due <= self.today:
             return 0
         return (self.due - self.today).days
@@ -129,7 +129,7 @@ class Standing:
         return None if self.due is None else self.due.isoformat()
 
     def said(self) -> str:
-        """How late or early this is, in the fewest words that are true."""
+        """Describe how late or early this is, in the fewest accurate words."""
         if self.due is None:
             return "no start date"
         if self.standing == OVERDUE:
@@ -146,7 +146,7 @@ class Standing:
 
 
 def board(chores, today=None) -> list:
-    """Every chore as a Standing, worst first."""
+    """Return every chore as a Standing, worst first."""
     day = as_date(today) or datetime.date.today()
     standings = [Standing(chore, day) for chore in chores
                  if _is_active(chore)]
@@ -154,18 +154,18 @@ def board(chores, today=None) -> list:
 
 
 def due_now(chores, today=None) -> list:
-    """The chores a break surface offers: overdue, due, or doable early."""
+    """Return the chores a break offers: overdue, due, or doable early."""
     return [entry for entry in board(chores, today)
             if entry.standing in WORTH_SHOWING]
 
 
 def _is_active(chore) -> bool:
-    """Whether a chore is being kept."""
+    """Report whether a chore is being kept."""
     value = getattr(chore, "active", 1)
     return True if value is None else bool(value)
 
 
 def _worst_first(entry):
-    """Sort key: standing, then how long it has waited, then the name."""
+    """Build the sort key: standing, then time waited, then name."""
     return (STANDINGS.index(entry.standing), -entry.days_over,
             entry.days_ahead, entry.name.lower())

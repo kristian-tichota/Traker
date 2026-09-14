@@ -21,7 +21,7 @@ class FilterProxyModel(QSortFilterProxyModel):
         self.invalidateFilter()
 
     def sort(self, column, order=Qt.SortOrder.AscendingOrder):
-        """Sort, and re-decide which rows are acceptable."""
+        """Sort, then re-decide which rows are acceptable."""
         super().sort(column, order)
         self.invalidateFilter()
 
@@ -49,7 +49,7 @@ class FilterProxyModel(QSortFilterProxyModel):
         return self._query.matches(values, folded)
 
     def lessThan(self, left, right):
-        """Compare the values, not their renderings."""
+        """Compare the values rather than their renderings."""
         model = self.sourceModel()
         if model is None:
             return super().lessThan(left, right)
@@ -69,7 +69,7 @@ class FilterProxyModel(QSortFilterProxyModel):
             return str(left_value) < str(right_value)
 
     def matched_rows(self):
-        """The source rows currently showing, as the NamedTuples they are."""
+        """Return the source rows currently showing, as NamedTuples."""
         model = self.sourceModel()
         if model is None:
             return []

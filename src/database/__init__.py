@@ -44,7 +44,7 @@ class ConnectionStatus:
 
 
 def _refusal(response) -> str:
-    """The reason a response carries, whatever shape it arrived in."""
+    """Return the reason a response carries, whatever shape it arrived in."""
     try:
         payload = response.json()
     except ValueError:
@@ -105,7 +105,7 @@ class DatabaseClient(DBAnalyticsMixin):
         return success, message
 
     def _delete_with_body(self, path: str):
-        """_delete, plus whatever the answer carried."""
+        """Delete and return whatever the answer carried."""
         try:
             r = requests.delete(f"{self.base_url}{path}", headers=self.headers, timeout=REQUEST_TIMEOUT_S)
         except RequestException as e:
@@ -127,7 +127,7 @@ class DatabaseClient(DBAnalyticsMixin):
         return data.get("value", default_val) if isinstance(data, dict) else default_val
 
     def get_settings(self, keys, defaults=None) -> dict:
-        """Several preferences in one round trip, defaults filled in here."""
+        """Return several preferences in one round trip, filling in defaults here."""
         keys = list(keys)
         if not keys:
             return {}
@@ -141,7 +141,7 @@ class DatabaseClient(DBAnalyticsMixin):
         return self._post(f"/api/settings/{key}", {"value": value})
 
     def _catalog(self, domain: str, shape):
-        """One shared catalog, as shape."""
+        """Return one shared catalog as shape."""
         return [shape.from_server(item) for item in self._get(f"/api/catalog/{domain}")]
 
     def get_all_foods(self):
@@ -151,12 +151,12 @@ class DatabaseClient(DBAnalyticsMixin):
         return self._post("/api/catalog/food", d)
 
     def get_sets(self, domain: str):
-        """Every shared set of one domain, one row per component."""
+        """Return every shared set of one domain, one row per component."""
         shape = WorkoutComponentRow if domain == "exercise" else SetComponentRow
         return [shape.from_server(r) for r in self._get(f"/api/catalog/sets/{domain}")]
 
     def get_set_names(self, domain: str):
-        """The set names of one domain, for completion."""
+        """Return the set names of one domain, for completion."""
         return list(dict.fromkeys(row.set_name for row in self.get_sets(domain)))
 
     def add_set(self, domain: str, d: dict):
@@ -203,7 +203,7 @@ class DatabaseClient(DBAnalyticsMixin):
 
     @staticmethod
     def _since(since):
-        """?since= query parameters for a date-bounded log read."""
+        """Build the ?since= query parameters for a date-bounded log read."""
         return {"since": since} if since else None
 
     def _invalidate_for(self, path: str):
@@ -217,7 +217,7 @@ class DatabaseClient(DBAnalyticsMixin):
             self.cache.drop(domain)
 
     def _cached(self, domain, since, read):
-        """Answer from the cache if it can, otherwise read and remember."""
+        """Answer from the cache where it can, otherwise read and remember."""
         held = self.cache.get(domain, since)
         if held is not None:
             return held
@@ -240,7 +240,6 @@ class DatabaseClient(DBAnalyticsMixin):
         return self._cached("food", since, read)
 
     def add_food_log(self, d: dict):
-        """Log a food or a meal set."""
         return self._post("/api/logs/food", d)
 
     def add_quick_food_log(self, d: dict):
@@ -326,14 +325,14 @@ class DatabaseClient(DBAnalyticsMixin):
         return True, "Success"
 
     def get_chores(self):
-        """The board: every chore, its cadence, and when it was last done."""
+        """Return the board: every chore, its cadence and its last completion."""
         def read():
             return [ChoreRow.from_server(r) for r in self._get("/api/chores")]
 
         return self._cached("chore", None, read)
 
     def get_chore_completions(self, since: str = None):
-        """The shared history, most recent first."""
+        """Return the shared history, most recent first."""
         params = {"since": since} if since else None
         return [ChoreDoneRow.from_server(r)
                 for r in self._get("/api/chores/completions", params)]
@@ -346,7 +345,6 @@ class DatabaseClient(DBAnalyticsMixin):
         return self._post("/api/chores/done", d)
 
     def get_training_plans(self):
-        """This member's cycles."""
         def read():
             return [TrainingPlanRow.from_server(r) for r in self._get("/api/plans")]
 
@@ -357,7 +355,7 @@ class DatabaseClient(DBAnalyticsMixin):
                 for r in self._get(f"/api/plans/{plan_id}/sessions")]
 
     def get_plan_movements(self, plan_id: int):
-        """Every movement of one cycle, in one read."""
+        """Return every movement of one cycle, in one read."""
         return [PlanMovementRow.from_server(r)
                 for r in self._get(f"/api/plans/{plan_id}/movements")]
 

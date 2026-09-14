@@ -36,20 +36,20 @@ class MediaProgress(QWidget):
 
     @property
     def says(self) -> str:
-        """The position it is showing, as the member reads it."""
+        """Return the position shown, as it is read."""
         return self._says
 
     @property
     def fraction(self) -> float:
-        """How much of the line is filled, between nothing and all of it."""
+        """Return how much of the line is filled, between nothing and all of it."""
         return self._fraction
 
     def sizeHint(self) -> QSize:
-        """As wide as it is given and exactly as tall as the band."""
+        """Size to the given width and exactly the height of the band."""
         return QSize(super().sizeHint().width(), HEIGHT)
 
     def show_place(self, place, unit=media.TIME):
-        """Say where place is."""
+        """Show where place is."""
         says = media.how_far(place, unit)
         fraction = media.fraction(place, unit)
         if says == self._says and self._filled(fraction) == self._filled(self._fraction):
@@ -62,7 +62,7 @@ class MediaProgress(QWidget):
         return int(round(max(0.0, min(1.0, fraction)) * self.width()))
 
     def paintEvent(self, event):
-        """The line, and the position over its right-hand end."""
+        """Draw the line, and the position over its right-hand end."""
         painter = QPainter(self)
         painter.setPen(Qt.PenStyle.NoPen)
 

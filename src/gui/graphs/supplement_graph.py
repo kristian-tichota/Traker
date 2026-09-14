@@ -17,20 +17,20 @@ log = logging.getLogger(__name__)
 
 
 def _unit_of(display_name: str) -> str:
-    """The unit a target's label carries: "mcg" in "B12 (mcg)"."""
+    """Return the unit a target label carries: "mcg" in "B12 (mcg)"."""
     match = re.search(r'\((.*?)\)', display_name)
     return match.group(1).strip() if match else "units"
 
 
 def _column_from_display_name(display_name: str) -> str:
-    """The log column a target's label spells out — the old matching rule."""
+    """Return the log column a target label spells out."""
     col_name = str(display_name).lower().strip()
     col_name = col_name.replace("(", "").replace(")", "").strip()
     return col_name.replace(" ", "_").replace("-", "_")
 
 
 def log_column_for(target: dict, columns) -> str:
-    """The supplement-log column this target measures, or None."""
+    """Return the supplement-log column this target measures, or None."""
     key = str(target.get("key") or "").strip().lower()
     if key:
         prefix = f"{key}_"
@@ -53,7 +53,7 @@ class SupplementGraphView(BaseGraphView):
         self.canvas.mpl_connect("motion_notify_event", self.on_hover)
 
     def animate_node(self, node, wave):
-        """Grow a node; a tick marker grows twice as far as a dot."""
+        """Grow a node, a tick marker growing twice as far as a dot."""
         artist = node['artist']
         growth = 4 if artist.get_marker() == '|' else 2
         artist.set_markersize(node['base_size'] + (wave * growth))

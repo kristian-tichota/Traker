@@ -20,24 +20,24 @@ class BreakActivity(NamedTuple):
 
 
 def kind_of(path) -> str:
-    """DOCUMENT for a PDF, VIDEO for anything else."""
+    """Return DOCUMENT for a PDF and VIDEO for anything else."""
     return DOCUMENT if str(path).lower().endswith(".pdf") else VIDEO
 
 
 def readout_of(kind) -> str:
-    """Which readout says how far through this kind of thing the member is."""
+    """Return the readout that says how far through this kind the member is."""
     return media.PAGES if kind == DOCUMENT else media.TIME
 
 
 def offer_key(index) -> str:
-    """What to press for the offer at index."""
+    """Return the key to press for the offer at index."""
     if index == 0:
         return "ENTER"
     return str(index + 1) if index < 9 else "—"
 
 
 def read(entries) -> list:
-    """The activities the profile declares, in the order it declares them."""
+    """Return the activities the profile declares, in declared order."""
     activities = []
     for position, entry in enumerate(entries or (), start=1):
         activity = _one(entry, position)
@@ -47,14 +47,14 @@ def read(entries) -> list:
 
 
 def queued(paths) -> list:
-    """Each queued path as an activity, named by its own file name."""
+    """Return each queued path as an activity, named by its own file name."""
     return [BreakActivity(rest_queue.label(path), os.path.expanduser(str(path)),
                           kind_of(path))
             for path in paths if str(path).strip()]
 
 
 def _one(entry, position):
-    """One entry as a BreakActivity, or None with the reason said."""
+    """Return one entry as a BreakActivity, or None with the reason logged."""
     if not isinstance(entry, dict):
         log.warning("Break activity %d is not a table: %r", position, entry)
         return None

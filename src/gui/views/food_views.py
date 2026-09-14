@@ -9,7 +9,7 @@ from src.gui.components.calorie_bar import AnimatedProgressBar
 
 
 def estimated_line(totals) -> str:
-    """How much of the day was guessed rather than read off a label."""
+    """Report how much of the day was estimated rather than read off a label."""
     if totals is None or not totals.estimated_rows:
         return ""
     rows = "row" if totals.estimated_rows == 1 else "rows"

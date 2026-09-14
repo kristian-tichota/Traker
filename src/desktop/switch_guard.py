@@ -22,7 +22,6 @@ _session_call = session_call
 
 
 def _subscribe(service, path, interface, signal, slot) -> bool:
-    """Listen for one signal."""
     from PyQt6.QtDBus import QDBusConnection
 
     bus = QDBusConnection.sessionBus()
@@ -60,7 +59,7 @@ class SwitchGuard(QObject):
         return self._holding
 
     def hold(self) -> bool:
-        """Remember where the member is and start putting switches back."""
+        """Remember the current desktop and start reversing switches."""
         self.release()
 
         self.held_desktop = self._read_desktop()
@@ -86,7 +85,7 @@ class SwitchGuard(QObject):
         return self._holding
 
     def release(self):
-        """Stop refusing."""
+        """Stop reversing switches."""
         if self._holding:
             if self.held_desktop is not None:
                 self._unsubscribe(KWIN, DESKTOPS_PATH, DESKTOPS,
@@ -103,7 +102,7 @@ class SwitchGuard(QObject):
     @pyqtSlot()
     @pyqtSlot(str)
     def _desktop_changed(self, which=None):
-        """KWin says the desktop changed."""
+        """Handle KWin reporting a desktop change."""
         if not self._holding or self._restoring or self.held_desktop is None:
             return
         if which is not None and str(which) == str(self.held_desktop):
@@ -113,7 +112,7 @@ class SwitchGuard(QObject):
     @pyqtSlot()
     @pyqtSlot(str)
     def _activity_changed(self, which=None):
-        """The activity manager says the activity changed."""
+        """Handle the activity manager reporting an activity change."""
         if not self._holding or self._restoring or self.held_activity is None:
             return
         if which is not None and str(which) == str(self.held_activity):
@@ -135,7 +134,7 @@ class SwitchGuard(QObject):
                         "is following rather than holding.", what)
 
     def _read_desktop(self):
-        """Which desktop the member is on, as this KWin names one."""
+        """Return the current desktop, as this KWin names one."""
         reached, answer = self._call(KWIN, DESKTOPS_PATH, PROPERTIES, "Get",
                                      DESKTOPS, "current")
         if reached and answer is not None:
@@ -157,7 +156,7 @@ class SwitchGuard(QObject):
         return reached
 
     def _read_activity(self):
-        """Which activity the member is on, or None on a session with none."""
+        """Return the current activity, or None on a session without any."""
         reached, answer = self._call(ACTIVITIES_SERVICE, ACTIVITIES_PATH,
                                      ACTIVITIES, "CurrentActivity")
         return answer if reached and answer else None

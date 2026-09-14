@@ -40,12 +40,12 @@ db_path = "data/traker_server.db"
 
 
 def config_path() -> str:
-    """The file the service reads its settings from."""
+    """Return the file the service reads its settings from."""
     return os.environ.get("TRAKER_SERVER_CONFIG") or DEFAULT_CONFIG_PATH
 
 
 def write_template(path: str) -> bool:
-    """Put a commented starting point at path, unless something is already there."""
+    """Write a commented starting point at path, unless one is already there."""
     if os.path.exists(path):
         return False
     try:
@@ -60,7 +60,7 @@ def write_template(path: str) -> bool:
 
 
 def _read(path: str) -> dict:
-    """The parsed settings, or nothing at all when the file is missing or broken."""
+    """Return the parsed settings, or nothing where the file is missing or broken."""
     if not os.path.exists(path):
         return {}
     try:
@@ -74,7 +74,7 @@ def _read(path: str) -> dict:
 
 
 def _members(entries, path):
-    """Every named member with a token, and whether any token had to be minted."""
+    """Return every named member with a token, and whether a token was minted."""
     members, minted, seen = [], False, set()
     for entry in entries if isinstance(entries, list) else []:
         username = str(entry.get("username", "")).strip() if isinstance(entry, dict) else ""
@@ -96,7 +96,7 @@ def _members(entries, path):
 
 
 def _persist(path: str, raw: dict, members) -> None:
-    """Write the settings back with the minted tokens in place, environment excluded."""
+    """Write the settings back with the minted tokens, excluding the environment."""
     lines = []
     server = raw.get("server", {})
     if isinstance(server, dict) and server:

@@ -20,7 +20,7 @@ BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 
 
 def resolve_db_path(preferred: str = None):
-    """The live database to snapshot, or None when there is not one yet."""
+    """Return the live database to snapshot, or None where there is none yet."""
     candidates = (preferred,) if preferred else ()
     for candidate in candidates + (DEFAULT_DB_PATH,) + LEGACY_DB_PATHS:
         if os.path.exists(candidate):

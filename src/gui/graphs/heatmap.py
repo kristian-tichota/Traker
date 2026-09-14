@@ -13,7 +13,7 @@ from src.gui.graphs.base import BaseGraphView
 
 
 def calendar_start(today: datetime.date) -> datetime.date:
-    """The first day the activity calendar shows: the 1st of the month two months back."""
+    """Return the first day the calendar shows: the 1st, two months back."""
     month, year = today.month - 2, today.year
     if month <= 0:
         month += 12
@@ -44,7 +44,7 @@ class ActivityHeatmapView(BaseGraphView):
     PULSE_SPEED = 3.5
 
     def animate_node(self, node, wave):
-        """A calendar node is an outline around today, not a marker."""
+        """Advance the outline around today, a calendar node being no marker."""
         node['artist'].set_linewidth(1.0 + (wave * 2.0))
         node['artist'].set_alpha(0.5 + (wave * 0.5))
 
@@ -153,7 +153,7 @@ class ActivityHeatmapView(BaseGraphView):
         self.ax.set_ylim(-0.5, 8.5)
 
     def cell_under(self, xdata, ydata):
-        """The day whose square holds this point, or None."""
+        """Return the day whose square holds this point, or None."""
         if xdata is None or ydata is None:
             return None
         column, row = math.floor(xdata), math.floor(ydata)
@@ -188,7 +188,7 @@ class ActivityHeatmapView(BaseGraphView):
         self._last_hovered = date_str
 
     def hover_text(self, date_str, day_data) -> str:
-        """What one day of the calendar says when the cursor is on it."""
+        """Return what one day of the calendar says under the cursor."""
         extra_kcal = day_data.get('extra_kcal', 0.0)
         if extra_kcal == 0:
             return f"Date: {date_str}\nNo Activity Logged"

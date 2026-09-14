@@ -45,7 +45,7 @@ def stream_events():
 @system_bp.route("/settings", methods=["GET"])
 @require_auth
 def get_settings():
-    """Several of this member's preferences in one round trip."""
+    """Return several of this member's preferences in one round trip."""
     raw = request.args.get("keys", "")
     wanted = [key.strip() for key in raw.split(",") if key.strip()]
     if not wanted:

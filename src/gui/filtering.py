@@ -45,7 +45,7 @@ def _as_number(value):
 
 
 def resolve_field(token: str, headers) -> str:
-    """The header a field token names, or raise."""
+    """Return the header a field token names, or raise."""
     folded = normalize(token)
     alias = ALIASES.get(folded)
     if alias is not None:
@@ -84,7 +84,7 @@ class Term:
         return f"Term({self.field!r} {self.operator} {self.value!r})"
 
     def matches(self, values_by_header: dict, folded=None) -> bool:
-        """Whether a row matches; folded is the caller's cached text and cells."""
+        """Report whether a row matches, against the caller's cached text and cells."""
         if self.field is None:
             if folded is not None:
                 return self._folded in folded[0]
@@ -93,7 +93,7 @@ class Term:
                              None if folded is None else folded[1].get(self.field))
 
     def _contains(self, value) -> bool:
-        """Bare-word match: the folded needle anywhere in the folded cell."""
+        """Match the folded needle anywhere in the folded cell."""
         if value is None:
             return False
         return self._folded in normalize(str(value))
@@ -116,7 +116,7 @@ class Term:
         return left <= right
 
     def _equalish(self, value, folded_cell=None) -> bool:
-        """Containment on text, exact on numbers."""
+        """Match by containment on text and exactly on numbers."""
         if value is None:
             return self._folded in ("", "-", "none")
         if self._number is not None:
@@ -129,7 +129,7 @@ class Term:
         return self._folded in folded_value
 
     def _orderable(self, value, folded_cell=None):
-        """(cell, needle) as comparable types, or (None, None)."""
+        """Return (cell, needle) as comparable types, or (None, None)."""
         if value is None:
             return None, None
         if self._number is not None:
@@ -149,7 +149,7 @@ class Query:
 
     @property
     def fields(self) -> tuple:
-        """The columns whose typed value some term has to read."""
+        """Return the columns whose typed value some term reads."""
         return tuple({term.field for term in self.terms if term.field is not None})
 
     def __len__(self):
@@ -159,7 +159,7 @@ class Query:
         return f"Query({self.terms!r})"
 
     def matches(self, values_by_header: dict, folded=None) -> bool:
-        """Terms AND together."""
+        """Report whether every term matches."""
         return all(term.matches(values_by_header, folded) for term in self.terms)
 
 EMPTY = Query(())
@@ -200,6 +200,6 @@ def _looks_like_a_date_or_time(value: str) -> bool:
 
 
 def _as_iso_if_a_date(value: str) -> str:
-    """A Czech date as the ISO string the row holds, else unchanged."""
+    """Return a Czech date as the ISO string the row holds, else unchanged."""
     stripped = value.strip()
     return as_stored_date(stripped) if _CZECH_DATE.match(stripped) else value

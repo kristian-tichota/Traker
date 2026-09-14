@@ -64,14 +64,14 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         self._resize_timer.timeout.connect(self._flush_owed_render)
 
     def fetch(self, fn, on_result, *args, on_error=None, **kwargs):
-        """Read off the UI thread, with both outcomes wired."""
+        """Read off the interface thread, with both outcomes wired."""
         if self.is_shut_down():
             return None
         return run_in_background(self.threadpool, fn, on_result, on_error,
                                  *args, **kwargs)
 
     def refresh_profile(self):
-        """Re-read the profile this chart draws against, before it draws it."""
+        """Re-read the profile this chart draws against, before drawing."""
         self.profile.reload()
 
     paused_timer_attribute = "pulse_timer"
@@ -92,7 +92,7 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
             self._resize_timer.start(self.RESIZE_SETTLE_MS)
 
     def resume_animation(self):
-        """Restart the pulse and the loading arc, and pay whatever this chart owes."""
+        """Restart the pulse and the loading arc, and pay any owed render."""
         super().resume_animation()
         if self._renders_out:
             self.canvas.spinner.start()
@@ -105,7 +105,7 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         self.canvas.spinner.stop()
 
     def invalidate_background(self):
-        """Say that the blit cache no longer matches what is on the canvas."""
+        """Mark the blit cache as no longer matching the canvas."""
         self._needs_bg_recapture = True
 
     def refresh(self):
@@ -115,10 +115,10 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         self._render(read=True)
 
     def prepare_refresh(self):
-        """Whatever a refresh must do on the interface thread."""
+        """Do whatever a refresh must do on the interface thread."""
 
     def read_chart_data(self):
-        """The rows this chart draws."""
+        """Return the rows this chart draws."""
         return None
 
     def reset_axes(self):
@@ -128,12 +128,11 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         """Build this chart's artists for data."""
 
     def _owe(self, read: bool):
-        """Note a render this chart will have to do when it is next shown."""
+        """Note a render to do when this chart is next shown."""
         if self._owed_render is None or read:
             self._owed_render = read
 
     def _render(self, read: bool):
-        """Start a render."""
         if self.is_shut_down():
             return None
         if read is False and self._last_payload is _NOTHING:
@@ -166,7 +165,7 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         self._render(read=owed)
 
     def _read_and_render(self, generation, read, size, ratio):
-        """Read, build and rasterise — the whole chart, on a worker thread."""
+        """Read, build and rasterise the whole chart, on a worker thread."""
         data = self.read_chart_data() if read else self._last_payload
         with self.canvas.render_lock:
             if generation != self._render_generation:
@@ -196,23 +195,23 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         self.canvas.set_image(image)
 
     def _on_render_failed(self, failure):
-        """A render that raised on the worker."""
+        """Handle a render that raised on the worker."""
         self._render_settled()
         error, formatted = failure
         log.error("Rendering %s failed: %s\n%s", type(self).__name__, error, formatted)
 
     def _render_settled(self):
-        """One render is no longer out, whichever way it ended."""
+        """Record that one render is no longer out, however it ended."""
         self._renders_out = max(0, self._renders_out - 1)
         if not self._renders_out:
             self.canvas.spinner.stop()
 
     def wave(self, speed: float) -> float:
-        """A 0..1 sine on the shared clock, so every chart pulses in step."""
+        """Return a 0..1 sine on the shared clock, so every chart pulses in step."""
         return (math.sin(self.master_clock * speed) + 1) / 2
 
     def has_animation(self) -> bool:
-        """Whether anything needs redrawing this pulse."""
+        """Report whether anything needs redrawing this pulse."""
         return bool(self.anim_nodes)
 
     PULSE_SPEED = 3.0
@@ -230,10 +229,10 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         node["artist"].set_alpha(0.3 + (wave * 0.5))
 
     def draw_extra_artists(self):
-        """Anything animated that is not one of anim_nodes."""
+        """Draw anything animated that is not one of anim_nodes."""
 
     def update_animation(self):
-        """One frame of the pulse: restore, redraw what moves, blit."""
+        """Draw one frame of the pulse: restore, redraw what moves, blit."""
         if not self.has_animation():
             return
         if self._needs_bg_recapture or not self.figure_bg:

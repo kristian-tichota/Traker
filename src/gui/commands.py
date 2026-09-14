@@ -62,7 +62,7 @@ EVERY_CATALOG = tuple(CATALOG_READERS)
 
 
 def catalog_names(db, catalogs) -> list[str]:
-    """The item names of the given shared catalogs, in catalog order."""
+    """Return the item names of the given shared catalogs, in catalog order."""
     names = []
     for key in catalogs:
         names.extend(completion_name(row) for row in CATALOG_READERS[key](db))
@@ -95,14 +95,14 @@ class Param:
         return self.default is not None
 
     def recognises(self, token: str) -> bool:
-        """Whether token could be this argument's value."""
+        """Report whether token could be this argument's value."""
         if self.looks_like is None:
             return True
         return bool(self.looks_like(token.strip()))
 
 
 def _finite(written, label: str) -> float:
-    """written as a number, refusing the infinities float accepts."""
+    """Read written as a number, refusing the infinities float accepts."""
     quantity = float(written)
     if not math.isfinite(quantity):
         raise CommandError(f"{label} must be a finite number, not '{written}'.")
@@ -136,18 +136,18 @@ def _read_non_empty(name: str, label: str):
 
 def required_text(name: str, label: str = None, expects: str = "a name",
                   rest: bool = False) -> Param:
-    """A name that must be given."""
+    """Declare a name that must be given."""
     label = label or f"[{name}]"
     return Param(label, _read_non_empty(name, label), expects, rest=rest)
 
 
 def free_text(name: str, label: str = None) -> Param:
-    """A trailing field that may itself contain the field separator."""
+    """Declare a trailing field that may contain the field separator."""
     return Param(label or f"[{name}]", lambda v: {name: v}, "some text", rest=True)
 
 
 def item(name: str, label: str, catalogs) -> Param:
-    """A trailing catalog item name — the argument Tab completes."""
+    """Declare a trailing catalog item name, the argument Tab completes."""
     return Param(label, _read_non_empty(name, label), "a catalog item name",
                  rest=True, catalogs=tuple(catalogs))
 
@@ -175,7 +175,7 @@ def _looks_like_a_clock_time(token: str) -> bool:
 
 
 def amount(label: str = "[1 or 100g]") -> Param:
-    """How much was eaten: servings, or grams if it ends in g."""
+    """Declare an amount: servings, or grams where it ends in g."""
     def read(value):
         value = value.strip()
         if not _looks_like_an_amount(value):
@@ -205,7 +205,7 @@ def _read_display_date(name: str, label: str):
 
 
 def optional_display_date(name: str, label: str) -> Param:
-    """A leading date that may be left out, meaning today."""
+    """Declare a leading date that may be left out, meaning today."""
     return Param(label, _read_display_date(name, label), "a date as DD.MM.YYYY",
                  default=lambda: {name: datetime.date.today().isoformat()},
                  looks_like=lambda token: bool(_LOOKS_LIKE_A_DATE.match(token.strip())))
@@ -214,7 +214,7 @@ _LOOKS_LIKE_A_CADENCE = re.compile(r"^\d+(\.\d+)?[wW]?$")
 
 
 def cadence(name: str, label: str) -> Param:
-    """Days between occurrences, or weeks with a w: 7, 2w, 4w."""
+    """Declare days between occurrences, or weeks with a w: 7, 2w, 4w."""
     def read(value):
         text = value.strip()
         weeks = text[-1:].lower() == "w"
@@ -231,19 +231,19 @@ def cadence(name: str, label: str) -> Param:
 
 
 def optional_number(name: str, label: str, fallback: float = 1.0) -> Param:
-    """A leading count that may be left out, meaning fallback."""
+    """Declare a leading count that may be left out, meaning fallback."""
     return Param(label, _read_number(name, label), "a number",
                  default=lambda: {name: fallback},
                  looks_like=_looks_like_a_number)
 
 
 def _example(label: str) -> str:
-    """A label read back as the example it is."""
+    """Read a label back as the example it is."""
     return label.strip("[]").split(";")[0].strip()
 
 
 def _each_component(value: str, trailing: int, shape: str):
-    """The semicolon-separated fields of a set definition, one at a time."""
+    """Yield the semicolon-separated fields of a set definition, one at a time."""
     for field in value.split(";"):
         field = field.strip()
         if not field:
@@ -255,7 +255,7 @@ def _each_component(value: str, trailing: int, shape: str):
 
 
 def components(name: str, label: str, unit: str, catalogs) -> Param:
-    """The component list of a named set: Item 100; Other Item 50."""
+    """Declare the component list of a named set: Item 100; Other Item 50."""
     shape = f"needs a name and an amount in {unit}, as 'Rolled Oats 100'."
 
     def read(value):
@@ -278,7 +278,7 @@ def components(name: str, label: str, unit: str, catalogs) -> Param:
 
 
 def workout_components(name: str, label: str) -> Param:
-    """The movement list of a workout: Bench 8,8,6 60 8; Plank 60 0 6."""
+    """Declare the movement list of a workout: Bench 8,8,6 60 8; Plank 60 0 6."""
     shape = ("needs a movement, its sets, its weight and its effort, "
              "as 'Bench Press 8,8,6 60 8'.")
 
@@ -313,7 +313,7 @@ def _read_clock_time(name: str, label: str):
 
 
 def optional_clock_time(name: str, label: str) -> Param:
-    """A time that may be left out, meaning now."""
+    """Declare a time that may be left out, meaning now."""
     return Param(label, _read_clock_time(name, label), "a time as HH:MM",
                  default=lambda: {name: datetime.datetime.now().strftime("%H:%M")},
                  looks_like=_looks_like_a_clock_time)
@@ -322,7 +322,7 @@ MEALS = tuple(MEAL_SHORTCUTS.values())
 
 
 def meal_type(name: str, label: str) -> Param:
-    """One of the four meals, by name or by initial."""
+    """Declare one of the four meals, by name or by initial."""
     def read(value):
         meal = MEAL_SHORTCUTS.get(value.lower(), value).capitalize()
         if meal not in MEALS:
@@ -335,7 +335,7 @@ def meal_type(name: str, label: str) -> Param:
 
 
 def _read_set_scheme(value: str, label: str) -> dict:
-    """7,7,7 as the five set columns."""
+    """Read 7,7,7 as the five set columns."""
     reps = [part.strip() for part in value.split(",")]
     if len(reps) > 5:
         raise CommandError(f"{label} takes at most five sets.")
@@ -381,7 +381,7 @@ def one_of(name: str, label: str, allowed, refusal: str) -> Param:
 
 def optional_one_of(name: str, label: str, allowed, refusal: str,
                     fallback: str) -> Param:
-    """One of a fixed set of words, which may be left out."""
+    """Declare one of a fixed set of words, which may be left out."""
     return Param(label, _read_one_of(name, allowed, refusal),
                  "one of " + ", ".join(allowed),
                  default=lambda: {name: fallback},
@@ -389,7 +389,7 @@ def optional_one_of(name: str, label: str, allowed, refusal: str,
 
 
 def optional_position(name: str, label: str) -> Param:
-    """A position counted from 1, which may be left out."""
+    """Declare a position counted from 1, which may be left out."""
     def read(value):
         position = int(value)
         if position < 1:
@@ -402,13 +402,13 @@ def optional_position(name: str, label: str) -> Param:
 
 
 def optional_text(name: str, label: str) -> Param:
-    """A trailing name that may be left out altogether."""
+    """Declare a trailing name that may be left out altogether."""
     return Param(label, lambda value: {name: value}, "some text", rest=True,
                  default=lambda: {name: ""})
 
 
 def dsi_value(name: str, label: str) -> Param:
-    """A stress-index override, or one of the words that removes it."""
+    """Declare a stress-index override, or one of the words that removes it."""
     def read(value):
         if value.lower() in CLEARING_WORDS:
             return {name: None}
@@ -457,7 +457,7 @@ class Command:
     aliases: tuple = ()
 
     def pending_row(self, payload: dict):
-        """The row to insert optimistically, or None."""
+        """Return the row to insert optimistically, or None."""
         if self.optimistic is None:
             return None
         values = {**payload, **dict(self.optimistic.fixed)}
@@ -465,7 +465,7 @@ class Command:
 
     @property
     def domains(self) -> tuple:
-        """What this command may have changed, always as a tuple."""
+        """Return what this command may have changed, always as a tuple."""
         if self.domain is None:
             return ()
         if isinstance(self.domain, str):
@@ -481,7 +481,7 @@ class Command:
         return " " + self.usage
 
     def name_position(self, text: str = "") -> int | None:
-        """Token index at which the catalog-completed name begins, or None."""
+        """Return the token index where the catalog-completed name begins, or None."""
         if self.separator != " ":
             return None
         if not any(param.catalogs for param in self.params):
@@ -489,7 +489,7 @@ class Command:
         return 1 + self._leading_tokens(text.split()[1:])
 
     def _walk(self, tokens):
-        """(tokens taken, arguments settled) for the arguments before the trailing one."""
+        """Return (tokens taken, arguments settled) for all but the trailing argument."""
         used = settled = 0
         ran_out = False
         for param in self.params:
@@ -511,7 +511,7 @@ class Command:
         return used, settled
 
     def awaiting_name(self, text: str) -> bool:
-        """Whether the catalog name is the only argument left to give."""
+        """Report whether the catalog name is the only argument left to give."""
         answerable = sum(1 for param in self.params if not param.rest)
         return self._walk(text.split()[1:])[1] == answerable
 
@@ -526,7 +526,7 @@ class Command:
         return ()
 
     def name_fragment(self, text: str) -> str:
-        """The part of text the user has typed into the name position."""
+        """Return the part of text typed into the name position."""
         index = self.name_position(text)
         if index is None:
             return ""
@@ -534,7 +534,7 @@ class Command:
         return tokens[index] if len(tokens) > index else ""
 
     def hint_for_position(self, position: int, text: str = "") -> str:
-        """The arguments still owed, given what has been typed so far."""
+        """Return the arguments still owed, given what has been typed."""
         if text:
             typed = text.split()[1:]
             consumed = self._walk(typed)[1]
@@ -545,7 +545,7 @@ class Command:
         return ""
 
     def current_argument(self, text: str) -> int | None:
-        """Index of the argument being asked for, None once all are answered."""
+        """Return the index of the argument being asked for, None once all are given."""
         tokens = text.split(maxsplit=1)
         remainder = tokens[1] if len(tokens) > 1 else ""
         if self.separator != " ":
@@ -559,7 +559,7 @@ class Command:
         return None
 
     def hint_for_fields(self, remainder: str) -> str:
-        """The definition fields still owed, given what is typed after the name."""
+        """Return the definition fields still owed, given what follows the name."""
         index = remainder.count(";")
         if 0 <= index < len(self.params):
             return " " + ";".join(param.label for param in self.params[index:])
@@ -568,7 +568,7 @@ class Command:
         return ""
 
     def field_being_typed(self, remainder: str):
-        """The Param the caret is inside, for a ;-separated command."""
+        """Return the Param the caret is inside, for a ;-separated command."""
         index = remainder.count(";")
         if index >= len(self.params):
             last = self.params[-1]
@@ -576,7 +576,7 @@ class Command:
         return self.params[index]
 
     def field_fragment(self, remainder: str) -> str:
-        """What has been typed into the catalog name of the current field."""
+        """Return what has been typed into the catalog name of the current field."""
         field = remainder.rsplit(";", 1)[-1].strip()
         if not field:
             return ""
@@ -586,7 +586,7 @@ class Command:
         return field
 
     def split(self, remainder: str) -> list[str]:
-        """The argument tokens; a trailing rest argument keeps its separators."""
+        """Split into argument tokens, a trailing rest argument keeping its separators."""
         if not remainder.strip():
             return []
         if self.separator != " ":
@@ -598,7 +598,7 @@ class Command:
         return remainder.split()
 
     def _assign(self, tokens):
-        """Each argument paired with its token, or with None where it was left out."""
+        """Pair each argument with its token, or with None where it was left out."""
         pairs, position = [], 0
         for param in self.params:
             token = tokens[position] if position < len(tokens) else None
@@ -629,17 +629,17 @@ class Command:
 
 
 def _carried_out_by_the_window(db, payload):
-    """The invoke of a command the window carries out."""
+    """Stand in for the invoke of a command the window carries out."""
     raise CommandError("This is carried out by the window, not by a write.")
 
 
 def _quantity(value: float) -> str:
-    """1.0 reads as "1", 1.5 as "1.5"."""
+    """Format 1.0 as "1" and 1.5 as "1.5"."""
     return f"{value:g}"
 
 
 def _confirm_new_chore(payload) -> str:
-    """What was defined, read back with the rule it will follow."""
+    """Read back what was defined, with the rule it will follow."""
     period = payload["period_days"]
     grace = payload.get("grace_days")
     if grace is None:
@@ -670,7 +670,7 @@ def _confirm_dsi(payload):
 
 
 def _definition(name: str, params: tuple, method: str, domain: str) -> Command:
-    """A define command: semicolon-separated fields, one catalog write."""
+    """Build a define command: semicolon-separated fields, one catalog write."""
     return Command(
         name=name,
         params=params,
@@ -682,7 +682,7 @@ def _definition(name: str, params: tuple, method: str, domain: str) -> Command:
 
 
 def _amount_written(payload: dict) -> str:
-    """How much was logged, in the unit the member typed it in."""
+    """Read back how much was logged, in the unit it was typed in."""
     if payload.get("grams") is not None:
         return f"{_quantity(payload['grams'])} g of"
     return f"{_quantity(payload['servings'])} x"
@@ -690,7 +690,7 @@ def _amount_written(payload: dict) -> str:
 
 def _set_definition(name: str, domain: str, word: str, component_param: Param,
                     label: str, aliases: tuple = ()) -> Command:
-    """A *set command: one named bundle of catalog items, defined in a line."""
+    """Build a *set command: one named bundle of catalog items, in a line."""
     return Command(
         name=name,
         params=(required_text("name", label,
@@ -975,39 +975,39 @@ def resolve(text: str):
 
 
 def command_word(text: str) -> str:
-    """The first word of a line, folded the way COMMANDS is keyed."""
+    """Return the first word of a line, folded the way COMMANDS is keyed."""
     tokens = text.split(maxsplit=1)
     return tokens[0].lower() if tokens else ""
 
 
 def naming_a_command(text: str) -> bool:
-    """Whether the caret is still inside the command word itself."""
+    """Report whether the caret is still inside the command word itself."""
     tokens = text.split(maxsplit=1)
     return len(tokens) <= 1 and not text[-1:].isspace()
 
 
 def command_being_typed(text: str):
-    """The command whose arguments are being given, or None."""
+    """Return the command whose arguments are being given, or None."""
     if naming_a_command(text):
         return None
     return COMMANDS.get(command_word(text))
 
 
 def candidates_for(text: str, domains=()) -> list:
-    """The commands this line could still become, best first."""
+    """Return the commands this line could still become, best first."""
     if command_being_typed(text) is not None:
         return []
     return commands_for(command_word(text), domains)
 
 
 def belongs_to(command: Command, domains) -> bool:
-    """Whether command is one of domains’ own."""
+    """Report whether command is one of the given domains' own."""
     written = set(command.domains)
     return bool(written) and written <= set(domains)
 
 
 def commands_for(typed: str, domains=()) -> list:
-    """Every command a half-typed word could become, best answer first."""
+    """Return every command a half-typed word could become, best answer first."""
     by_name = {command.name: command for command in _COMMAND_LIST}
     ranked = ranked_matches(typed, list(by_name),
                             prefer=lambda name: belongs_to(by_name[name], domains))
@@ -1015,6 +1015,6 @@ def commands_for(typed: str, domains=()) -> list:
 
 
 def token_position(text: str) -> int:
-    """Index of the token the caret is in: 0 is the command word itself."""
+    """Return the index of the token the caret is in, 0 being the command word."""
     words = text.split()
     return len(words) if text[-1:].isspace() else len(words) - 1

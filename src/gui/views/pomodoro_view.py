@@ -59,14 +59,14 @@ WALL_NAME = "strictWall"
 
 
 def read_day(db):
-    """The day summary and this member's stress overrides, in one call."""
+    """Read the day summary and this member's stress overrides, in one call."""
     summary = db.get_pomodoro_daily_summary()
     overrides = getattr(db, "get_pomodoro_dsi_overrides", dict)()
     return summary, overrides
 
 
 def read_upcoming(db) -> list:
-    """Today's planned session, as a break surface says it."""
+    """Read today's planned session, as a break surface states it."""
     plan = plans.current_plan(db.get_training_plans())
     if plan is None:
         return []
@@ -85,7 +85,7 @@ def read_upcoming(db) -> list:
 
 
 def read_chores(db) -> list:
-    """What the household owes today, worst first."""
+    """Read what the household owes today, worst first."""
     return chores.due_now(db.get_chores())
 
 
@@ -97,12 +97,12 @@ def complete_chore(db, chore_id: int, name: str) -> tuple:
 
 
 def is_typing_into(watched) -> bool:
-    """Whether this key was delivered to a text field."""
+    """Report whether this key was delivered to a text field."""
     return isinstance(watched, QLineEdit)
 
 
 def read_long_breaks_spent(db) -> tuple:
-    """(date, count): how many long breaks today has already spent."""
+    """Read (date, count) for the long breaks today has already spent."""
     today = datetime.date.today().isoformat()
     events = db.get_pomodoro_events_for_day(today)
     return today, sum(1 for event in events
@@ -121,7 +121,7 @@ def rewrite_as_rest(db, minutes) -> tuple:
 
 
 def read_was_answered(db) -> bool:
-    """Whether the last read actually reached the household service."""
+    """Report whether the last read reached the household service."""
     connection = getattr(db, "connection", None)
     return connection is None or connection.online
 
@@ -261,7 +261,7 @@ WALL_CAPTION = "Traker rest"
 
 
 def wall_caption(screen) -> str:
-    """What to call the wall on screen."""
+    """Return what to call the wall on screen."""
     name = screen.name() if screen is not None else ""
     return f"{WALL_CAPTION} \u2014 {name}" if name else WALL_CAPTION
 
@@ -309,7 +309,7 @@ class StrictOverlay(QWidget):
         self.update_display()
 
     def closeEvent(self, event):
-        """Refuse to be closed while the break still holds."""
+        """Refuse to close while the break still holds."""
         if not self.let_go and self.timer_ref.holds_the_screens():
             event.ignore()
             return
@@ -325,7 +325,7 @@ class StrictOverlay(QWidget):
         self.close()
 
     def media_parent(self):
-        """What to build the media surface as a child of."""
+        """Return the widget to build the media surface under."""
         return self.stack
 
     def host_media(self, surface):
@@ -341,7 +341,7 @@ class StrictOverlay(QWidget):
         return True
 
     def hide_media(self):
-        """The readouts again, which is what 0 asks for."""
+        """Show the readouts again."""
         self.stack.setCurrentWidget(self.readouts)
 
     def is_showing_media(self) -> bool:
@@ -362,7 +362,7 @@ class StrictOverlay(QWidget):
         self._dress_for_the_state()
 
     def covers_its_own_screen(self) -> bool:
-        """Whether the compositor put this wall on the output it was built for."""
+        """Report whether the compositor put this wall on its intended output."""
         handle = self.windowHandle()
         if handle is None or self.screen_covered is None:
             return True
@@ -379,7 +379,7 @@ class StrictOverlay(QWidget):
         self.raise_()
 
     def _build_body(self, layout):
-        """The countdown, and what it costs to leave it."""
+        """Build the countdown, and what it costs to leave it."""
         layout.addStretch()
 
         self.label = QLabel()
@@ -420,11 +420,11 @@ class StrictOverlay(QWidget):
         self.chores.set_entries(entries)
 
     def set_offers_note(self, note):
-        """Say how long the offers are still held back for, or nothing."""
+        """State how long the offers are still held back, or nothing."""
         self.upcoming.set_note(self.timer_ref.OFFERS_TITLE, note)
 
     def set_playing(self, playing):
-        """Name what is on the screen beside this one, and where it has got to."""
+        """Name what is on the screen beside this one, and where it has reached."""
         self.progress.setVisible(playing is not None)
         if playing is None:
             self._playing_name = None
@@ -437,7 +437,7 @@ class StrictOverlay(QWidget):
         self.progress.show_place(place, unit)
 
     def update_display(self):
-        """The countdown, and what the way on is -- both, every tick."""
+        """Update the countdown and the way on, both on every tick."""
         if self.timer_ref.waiting_for_work_start:
             self.label.setText("BREAK OVER")
         else:
@@ -447,7 +447,7 @@ class StrictOverlay(QWidget):
         self._dress_for_the_state()
 
     def _dress_for_the_state(self):
-        """A countdown to read at the desk, or a sign to read from the door."""
+        """Dress the wall as a desk countdown or as a sign read from the door."""
         prompting = self.timer_ref.prompts_for_focus()
         dressed = (prompting, self.height())
         if dressed == self._dressed:
@@ -475,7 +475,7 @@ class StrictOverlay(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        """The frame around a wall whose break has run out."""
+        """Paint the frame around a wall whose break has run out."""
         super().paintEvent(event)
         if not self._prompting:
             return
@@ -491,7 +491,7 @@ class StrictOverlay(QWidget):
         self.hold_ring.setVisible(visible)
 
     def changeEvent(self, event):
-        """Come back in front a moment after something else takes the focus."""
+        """Return to the front a moment after something else takes the focus."""
         if event.type() == event.Type.ActivationChange and not self.isActiveWindow() \
                 and self.timer_ref.holds_the_screens():
             active_win = QApplication.activeWindow()
@@ -500,7 +500,7 @@ class StrictOverlay(QWidget):
         super().changeEvent(event)
 
     def _take_the_screen_back(self):
-        """Come back in front, a moment after something else took the focus."""
+        """Return to the front, a moment after something else took the focus."""
         if not self.timer_ref.owns_window(self) or not self.timer_ref.holds_the_screens():
             return
         self.raise_()
@@ -619,7 +619,7 @@ class StressCalendar(PausesWhenHidden, QWidget):
     POPUP_MARGIN_PX = 10
 
     def _day_at(self, pos):
-        """The day whose square is under pos, or None."""
+        """Return the day whose square is under pos, or None."""
         for rect, date_iso in self.rect_map:
             if rect.contains(pos):
                 return date_iso
@@ -879,14 +879,14 @@ class PomodoroView(ShutdownMixin, QWidget):
     FALLBACK_REFRESH_HZ = 180.0
 
     def visible_interval_ms(self):
-        """One frame at the screen's refresh rate."""
+        """Return one frame at the screen's refresh rate."""
         screen = QApplication.primaryScreen()
         rate = screen.refreshRate() if (screen and screen.refreshRate() > 0) \
             else self.FALLBACK_REFRESH_HZ
         return max(1, int(math.floor(1000.0 / rate)))
 
     def engine_interval_ms(self):
-        """The cadence the engine should be running at right now."""
+        """Return the cadence the engine should be running at now."""
         if not self.isVisible():
             return self.HIDDEN_INTERVAL_MS
         return self.COVERED_INTERVAL_MS if self._strict_engaged \
@@ -1028,7 +1028,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._start_waiting()
 
     def _record(self, event_type: str, amount_ms: int = 0):
-        """Append one telemetry event, off-thread, with its failure reported."""
+        """Append one telemetry event off-thread, reporting any failure."""
         run_in_background(
             self.threadpool, self.db.log_pomodoro_event, discard, None,
             {
@@ -1039,7 +1039,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         )
 
     def _get_current_state(self):
-        """Which of the four states this second accrues to."""
+        """Return which of the four states this second accrues to."""
         if self.is_running:
             return 'focus' if self.current_phase == 'work' else 'rest'
         if self._idled or self.waiting_for_work_start:
@@ -1047,14 +1047,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         return 'focus_overtime'
 
     def split_text(self) -> str:
-        """The schedule, said once on the view rather than picked per session."""
+        """Return the schedule, stated once on the view."""
         return (f"{self.work_ms // MS_PER_MINUTE} / "
                 f"{self.break_ms // MS_PER_MINUTE}"
                 f"   ·   {self.long_break_ms // MS_PER_MINUTE} LONG "
                 f"x{self.long_breaks_per_day}")
 
     def long_breaks_left(self) -> int:
-        """How many long breaks today still has in it."""
+        """Return how many long breaks today still holds."""
         self._roll_the_day()
         return max(0, self.long_breaks_per_day - self._long_breaks_used)
 
@@ -1066,11 +1066,11 @@ class PomodoroView(ShutdownMixin, QWidget):
             self._long_breaks_used = 0
 
     def toggle_long_break(self) -> str:
-        """What the button does: the other state from the one it is in."""
+        """Toggle the queued long break and return the new state."""
         return self.set_long_break_queued(not self._long_break_queued)
 
     def set_long_break_queued(self, wanted: bool) -> str:
-        """Make the next break the long one, or not."""
+        """Set whether the next break is the long one."""
         if not wanted:
             was = self._long_break_queued
             self._long_break_queued = False
@@ -1095,7 +1095,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 f" {self.long_breaks_per_day} left today.")
 
     def long_break_state(self) -> str:
-        """The line that answers a member asking rather than telling."""
+        """Return the line that answers a query about the long break."""
         queued = "queued" if self._long_break_queued else "not queued"
         return (f" Long break {queued}"
                 f" · {self.long_break_ms // MS_PER_MINUTE} min"
@@ -1103,7 +1103,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 f" left today.")
 
     def _apply_long_break_controls(self):
-        """What the button says about the state it is in, and the dots with it."""
+        """Apply the button text and the dots for the current state."""
         minutes = self.long_break_ms // MS_PER_MINUTE
         self.btn_long.setText(f"{minutes}m Break Queued" if self._long_break_queued
                               else f"Queue {minutes}m Break")
@@ -1113,7 +1113,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                                      self.long_breaks_per_day)
 
     def _spend_long_break(self):
-        """Take the queued long break."""
+        """Spend the queued long break."""
         self._long_break_queued = False
         self._long_breaks_used += 1
         self._record(LONG_BREAK_EVENT)
@@ -1124,7 +1124,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                           self._apply_long_breaks_spent, None, self.db)
 
     def _apply_long_breaks_spent(self, payload):
-        """A named receiver, like every other."""
+        """Apply the long breaks already spent today."""
         if not read_was_answered(self.db):
             log.warning("Not seeding today's long breaks: the read did not "
                         "reach the service.")
@@ -1133,7 +1133,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._apply_long_break_controls()
 
     def _start_waiting(self):
-        """Focus on the clock, nothing running, waiting for the member."""
+        """Put focus on the clock, stopped, waiting for a start."""
         self.current_phase = "work"
         self.time_left_ms = self.work_ms
         self.is_running = False
@@ -1153,7 +1153,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.refresh()
 
     def refresh(self):
-        """The day's telemetry, and — while a break holds — what is still due."""
+        """Read the day's telemetry and, during a break, what is still due."""
         self._reload_day()
         self._update_tray()
         if self._strict_break_is_holding():
@@ -1166,7 +1166,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         return f"{mins:02d}:{secs:02d}.{hundredths:02d}"
 
     def _reload_day(self, handing_over=False):
-        """Read today once, and feed both readouts of it."""
+        """Read today once and feed both readouts of it."""
         self._handing_over = handing_over
         run_in_background(self.threadpool, read_day, self._apply_day, None, self.db)
 
@@ -1342,23 +1342,23 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._update_tray()
 
     def _focus_is_running(self) -> bool:
-        """Whether a focus interval is on the clock right now."""
+        """Report whether a focus interval is on the clock now."""
         return self.is_running and self.current_phase == "work"
 
     def _say_phase(self, text, colour):
-        """The phase line, in the colour of the state it names."""
+        """Set the phase line, in the colour of the state it names."""
         self.lbl_phase.setText(text)
         self.lbl_phase.setStyleSheet(
             f"color: {colour}; font-size: 10px; font-weight: bold; "
             f"font-family: 'Fira Code'; letter-spacing: 2px;")
 
     def _begin_stop_hold(self):
-        """The play button went down: on a running interval that is the stop."""
+        """Begin the stop hold, the play button being the stop while running."""
         self._paid_stop_hold = False
         self.begin_hold(HOLD_STOP)
 
     def _stop_focus(self):
-        """The hold was paid: the clock stops, and the waiting is focus overtime."""
+        """Stop the clock once the hold is paid, the waiting being focus overtime."""
         self._paid_stop_hold = True
         self.is_running = False
         self.btn_play.set_playing(False)
@@ -1368,7 +1368,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._update_tray()
 
     def _watch_for_the_member(self):
-        """Stop the clock for an absence, and start it again on their return."""
+        """Stop the clock for an absence, and start it again on any input."""
         if not self.idle_pause_ms or not (self._idled or self._focus_is_running()):
             return
 
@@ -1383,7 +1383,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             self._walked_away()
 
     def _walked_away(self):
-        """Time at a desk the member is not at was never focus."""
+        """Stop the interval for a proven absence."""
         self.cancel_hold()
         self._idled = True
         self.is_running = False
@@ -1413,7 +1413,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                           self._absence_rewritten, None, self.db, minutes)
 
     def _absence_rewritten(self, payload):
-        """A named receiver, like every other."""
+        """Apply the long breaks already spent today."""
         written, asked = payload
         if written < asked:
             log.warning("Today still counts %d minute(s) of an absence as focus: "
@@ -1490,17 +1490,17 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.refresh()
 
     def release_hint(self) -> str:
-        """What to hold, and for how long."""
+        """Return what to hold, and for how long."""
         return f"HOLD {RELEASE_KEY_NAME} {self.release_hold_secs:.0f}s TO LEAVE"
 
     def wall_hint(self) -> str:
-        """What the way on is, in the state the break is actually in."""
+        """Return the way on, for the state the break is in."""
         if self.prompts_for_focus():
             return f"PRESS {RELEASE_KEY_NAME} TO START FOCUS"
         return self.release_hint()
 
     def media_key_hints(self, kind) -> list:
-        """Every key that drives what is showing, in reading order."""
+        """Return every key that drives what is showing, in reading order."""
         paging = kind == break_activities.DOCUMENT
         hints = [
             ("SPACE", "turn the page" if paging else "pause"),
@@ -1515,7 +1515,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         return hints
 
     def take_offers(self) -> list:
-        """What this break may be handed to, in key order."""
+        """Return what this break may be handed to, in key order."""
         self._offers = (break_activities.queued(rest_queue.read(self._queue_path))
                         + list(self.activities))
         return self._offers
@@ -1523,30 +1523,30 @@ class PomodoroView(ShutdownMixin, QWidget):
     OFFERS_TITLE = "SOMETHING TO DO"
 
     def away_ms(self) -> int:
-        """How long this break holds its offers back before it will show one."""
+        """Return how long this break holds its offers back."""
         return media.away_ms(self.away_secs, self.phase_length_ms(), self.break_ms)
 
     def opens_in_ms(self) -> int:
-        """What is left of that wait, or nothing outside a break that holds."""
+        """Return what is left of that wait, or nothing outside a held break."""
         if not self._strict_break_is_holding():
             return 0
         return media.opens_in(self.away_ms(), self.phase_length_ms(),
                               self.time_left_ms)
 
     def offers_note(self) -> str:
-        """What the offers are titled with while they are still held back."""
+        """Return the title the offers carry while they are still held back."""
         left = self.opens_in_ms()
         return f"OPENS IN {media.as_elapsed(left)}" if left > 0 else ""
 
     def _say_when_the_offers_open(self):
-        """Put that note on every panel listing the offers, as it counts down."""
+        """Put the countdown note on every panel listing the offers."""
         note = self.offers_note()
         self.upcoming.set_note(self.OFFERS_TITLE, note)
         for overlay in self.overlays:
             overlay.set_offers_note(note)
 
     def _say_the_offers_are_open(self):
-        """Say the wait is up, the way a coming break is said: out loud."""
+        """Announce that the wait is up, as a coming break is announced."""
         self._said_the_offers_are_open = True
         notify_service.notify(
             "The break can show something now",
@@ -1557,14 +1557,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         )
 
     def offer_section(self) -> list:
-        """The offers as a panel section, or nothing where there are none."""
+        """Return the offers as a panel section, or nothing where there are none."""
         if not self._offers:
             return []
         places = rest_positions.read(self._positions_path)
         return [(self.OFFERS_TITLE, self._offer_lines(places))]
 
     def _offer_lines(self, places) -> list:
-        """One line per offer: its key, its name, and how far in it is."""
+        """Build one line per offer: its key, its name, and how far in it is."""
         said = [media.how_far(places.get(offer.path, media.Place()),
                               break_activities.readout_of(offer.kind))
                 for offer in self._offers]
@@ -1581,7 +1581,7 @@ class PomodoroView(ShutdownMixin, QWidget):
     offer_key = staticmethod(break_activities.offer_key)
 
     def _break_surfaces(self) -> list:
-        """Every surface a break draws besides the timer view itself."""
+        """Return every surface a break draws besides the timer view itself."""
         surfaces = list(self.overlays)
         if self.media_surface is not None:
             surfaces.append(self.media_surface)
@@ -1600,14 +1600,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._keep_the_walls_on_their_screens()
 
     def _playing(self) -> tuple:
-        """What is showing, and where it has got to: (name, place, unit)."""
+        """Return what is showing and where it has reached: (name, place, unit)."""
         if self._showing is None or self.media_surface is None:
             return None
         place = self.media_surface.place()
         return ((self._showing.name,) + place) if place else None
 
     def _keep_the_walls_on_their_screens(self):
-        """Say — or fix — a wall the compositor placed on somebody else's output."""
+        """Report or correct a wall the compositor placed on another output."""
         placing = self.kwin_pin is not None and self.kwin_pin.engaged
         for overlay in self.overlays:
             if overlay.stands_corrected or overlay.covers_its_own_screen():
@@ -1623,24 +1623,24 @@ class PomodoroView(ShutdownMixin, QWidget):
             overlay.take_its_screen_again()
 
     def owns_window(self, window) -> bool:
-        """Whether the window that has just taken the focus is one of the walls."""
+        """Report whether the window that took the focus is one of the walls."""
         return window is not None and window in self.overlays
 
     def holds_the_screens(self) -> bool:
-        """Whether a strict break owns the screens right now."""
+        """Report whether a strict break owns the screens now."""
         return self._strict_break_is_holding()
 
     def _strict_break_is_holding(self) -> bool:
-        """Whether a running strict break owns the screens right now."""
+        """Report whether a running strict break owns the screens now."""
         return (self._strict_engaged and self.is_running
                 and "break" in self.current_phase)
 
     def prompts_for_focus(self) -> bool:
-        """Whether the walls are up only to say the break is over."""
+        """Report whether the walls are up only to state that the break is over."""
         return self._strict_engaged and not self._strict_break_is_holding()
 
     def stop_hint(self) -> str:
-        """What stopping a running interval costs, said beside the ring."""
+        """Return what stopping a running interval costs, stated beside the ring."""
         return f"HOLD TO STOP · {self.stop_hold_secs:.0f}s"
 
     def _apply_exit_controls(self):
@@ -1653,7 +1653,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.lbl_release_hint.setVisible(holding or self._focus_is_running())
 
     def eventFilter(self, watched, event):
-        """Every key a break answers, wherever the member's focus happens to be."""
+        """Handle every key a break answers, wherever the focus is."""
         if event.type() not in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
             return super().eventFilter(watched, event)
 
@@ -1686,7 +1686,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         return super().eventFilter(watched, event)
 
     def _activity_for(self, key):
-        """The offer a key opens, or None — which is a key left alone."""
+        """Return the offer a key opens, or None for a key left alone."""
         if not self._offers:
             return None
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -1698,7 +1698,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         return None
 
     def _drive_media(self, key) -> bool:
-        """One key onto what the break is showing."""
+        """Apply one key to what the break is showing."""
         pane = self.media_surface.pane if self.media_surface is not None else None
         if self._showing is None or pane is None:
             return False
@@ -1720,18 +1720,18 @@ class PomodoroView(ShutdownMixin, QWidget):
         return True
 
     def hold_secs(self, purpose) -> float:
-        """How long this hold has to be paid for."""
+        """Return how long this hold must be paid for."""
         return (self.release_hold_secs if purpose == HOLD_RELEASE
                 else self.stop_hold_secs)
 
     def _hold_is_live(self, purpose) -> bool:
-        """Whether what the hold would pay for is still the case."""
+        """Report whether what the hold would pay for is still the case."""
         if purpose == HOLD_RELEASE:
             return self._strict_break_is_holding()
         return self._focus_is_running()
 
     def begin_hold(self, purpose=HOLD_RELEASE):
-        """The key or the button went down: start charging for what it buys."""
+        """Start charging for what the hold buys."""
         if self._hold_timer.isActive() or not self._hold_is_live(purpose):
             return
         self._hold_for = purpose
@@ -1741,7 +1741,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._hold_timer.start(HOLD_TICK_MS)
 
     def cancel_hold(self):
-        """It came up early: nothing was paid, so nothing is owed."""
+        """Cancel a hold released early, with nothing paid and nothing owed."""
         if not self._hold_timer.isActive():
             return
         self._hold_timer.stop()
@@ -1749,7 +1749,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._show_hold(0.0, False)
 
     def _hold_tick(self):
-        """Advance the hold, measured against the wall clock not tick count."""
+        """Advance the hold, measured against the wall clock rather than ticks."""
         purpose = self._hold_for
         if not self._hold_is_live(purpose):
             self.cancel_hold()
@@ -1773,13 +1773,13 @@ class PomodoroView(ShutdownMixin, QWidget):
             surface.show_hold(fraction, visible)
 
     def _release_strict_break(self):
-        """The hold was paid: give the screens back, and record what it cost."""
+        """Give the screens back once the hold is paid, and record the cost."""
         self._record("overridden_break", int(max(0, self.time_left_ms)))
         self._clear_overlays()
         self._next_phase()
 
     def _warn_of_coming_break(self):
-        """Say a strict break is coming while there is still time to leave it."""
+        """Announce a coming strict break while there is still time to leave."""
         self._warned_of_break = True
         coming = self.long_break_ms if self._long_break_queued else self.break_ms
         notify_service.notify(
@@ -1840,7 +1840,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._show_upcoming()
 
     def _stop_showing(self):
-        """Take what is showing away, remembering where it got to."""
+        """Take what is showing away, remembering where it reached."""
         self._remember_where_it_stopped()
         for wall in self.overlays:
             wall.set_keys([])
@@ -1851,7 +1851,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._redraw_break_surfaces()
 
     def _engage_kwin(self, caption="", wall_outputs=None) -> bool:
-        """Ask KWin to hold this break's windows wherever the member goes."""
+        """Ask KWin to hold this break's windows across every desktop."""
         if self.kwin_pin is None:
             return False
         return self.kwin_pin.engage(focus_caption=caption,
@@ -1865,7 +1865,6 @@ class PomodoroView(ShutdownMixin, QWidget):
                           None, self.db)
 
     def _apply_upcoming(self, sections):
-        """The read landed."""
         if not read_was_answered(self.db):
             log.warning("Showing nothing coming: its read did not reach the service.")
             return
@@ -1873,14 +1872,13 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._show_upcoming()
 
     def _read_chores(self):
-        """Read what is due: as the break begins, and after one is ticked."""
+        """Read what is due, as the break begins and after one is ticked."""
         if not self._chores_on_break:
             return
         run_in_background(self.threadpool, read_chores, self._apply_chores,
                           None, self.db)
 
     def _apply_chores(self, entries):
-        """The read landed."""
         if not read_was_answered(self.db):
             log.warning("Showing no chores: their read did not reach the service.")
             return
@@ -1888,7 +1886,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._show_chores()
 
     def _show_chores(self):
-        """Hand what is due to every surface that still has room for it."""
+        """Hand what is due to every surface with room for it."""
         entries = self._chores if self._strict_break_is_holding() else []
         self.chores_panel.set_entries(entries)
         for overlay in self.overlays:
@@ -1905,7 +1903,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                           None, self.db, chore_id, entry.name)
 
     def _chore_ticked(self, answer):
-        """The write landed."""
+        """Apply the answer to a chore tick."""
         chore_id, success, message = answer
         if not success:
             log.warning("Chore %s was not ticked: %s", chore_id, message)
@@ -1915,18 +1913,18 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.data_changed.emit(CHORE)
 
     def _chore_surfaces(self) -> list:
-        """Every chore panel a break is drawing, the timer view's included."""
+        """Return every chore panel a break is drawing, the timer view's included."""
         return [self.chores_panel] + [o.chores for o in self.overlays]
 
     def _chore_for(self, key):
-        """The chore a key ticks, or None — which is a key left alone."""
+        """Return the chore a key ticks, or None for a key left alone."""
         if not self._chores or not Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
             return None
         index = CHORE_KEYS.find(chr(key).lower())
         return self._chores[index] if 0 <= index < len(self._chores) else None
 
     def _show_upcoming(self):
-        """Hand what is coming to every surface that still has room for it."""
+        """Hand what is coming to every surface with room for it."""
         sections = (self._upcoming + self.offer_section()
                     if self._strict_break_is_holding() else [])
         self.upcoming.set_sections(sections)
@@ -1935,14 +1933,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._say_when_the_offers_open()
 
     def _member_screen(self):
-        """Which screen the break's focus starts on: the one this window is on."""
+        """Return the screen the break's focus starts on, being this window's."""
         main_win = self.window()
         handle = main_win.windowHandle() if main_win is not None else None
         screen = handle.screen() if handle is not None else None
         return screen or QApplication.primaryScreen()
 
     def _media_screen(self):
-        """Which screen shows what the break was asked for."""
+        """Return the screen that shows what the break was asked for."""
         for wanted in (self._media_screen_name, self._window_screen_name):
             if not wanted:
                 continue
@@ -1954,24 +1952,24 @@ class PomodoroView(ShutdownMixin, QWidget):
         return QApplication.primaryScreen() or self._member_screen()
 
     def screens_to_cover(self) -> list:
-        """Every output a break walls, which is all of them."""
+        """Return every output a break walls, which is all of them."""
         return list(QApplication.screens())
 
     def wall_outputs(self) -> dict:
-        """Which output each wall belongs on, by the title it carries."""
+        """Return which output each wall belongs on, keyed by its title."""
         return {wall.windowTitle(): wall.output_name
                 for wall in self.overlays
                 if wall.screen_covered is not None and wall.output_name}
 
     def _wall_for(self, screen):
-        """The wall covering screen, or the first one there is."""
+        """Return the wall covering screen, or the first one there is."""
         for wall in self.overlays:
             if wall.screen_covered is screen:
                 return wall
         return self.overlays[0] if self.overlays else None
 
     def _build_wall(self, screen):
-        """One output's wall, mapped onto the output it names."""
+        """Build one output's wall, mapped onto the output it names."""
         wall = StrictOverlay(self, screen)
         wall.setScreen(screen)
         wall.showFullScreen()
@@ -1990,7 +1988,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._media_host.host_media(self.media_surface)
 
     def _watch_the_outputs(self):
-        """Answer a monitor going away and coming back, for the break's length."""
+        """Watch for a monitor going away and coming back, for the break's length."""
         app = QApplication.instance()
         if app is None or self._watching_outputs:
             return
@@ -1999,7 +1997,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._watching_outputs = True
 
     def _stop_watching_the_outputs(self):
-        """Stop answering them, and drop a rebuild that was still pending."""
+        """Stop watching the outputs, and drop a pending rebuild."""
         self._screens_settling.stop()
         app = QApplication.instance()
         if app is not None and self._watching_outputs:
@@ -2008,13 +2006,13 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._watching_outputs = False
 
     def _an_output_arrived(self, screen):
-        """A monitor came back."""
+        """Handle a monitor coming back."""
         log.info("Output %r appeared; the break's walls will be rebuilt to "
                  "match.", screen.name() if screen is not None else "")
         self._screens_settling.start(SCREENS_SETTLE_MS)
 
     def _an_output_went(self, screen):
-        """A monitor went away."""
+        """Handle a monitor going away."""
         log.info("Output %r went away; the break's wall for it is standing "
                  "down.", screen.name() if screen is not None else "")
         for wall in self.overlays:
@@ -2026,7 +2024,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._screens_settling.start(SCREENS_SETTLE_MS)
 
     def _rewall_for_the_outputs(self):
-        """Make the walls match the outputs there are now."""
+        """Make the walls match the outputs that exist now."""
         if not self._strict_engaged or self.is_shut_down():
             return
 
@@ -2186,7 +2184,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._clear_overlays()
 
     def phase_length_ms(self) -> int:
-        """How long the interval now running was given."""
+        """Return how long the interval now running was given."""
         if self.current_phase == "work":
             return self.work_ms
         return self.long_break_ms if self.current_phase == "long_break" else self.break_ms

@@ -160,7 +160,7 @@ def main() -> int:
     print("== the mode readout ==")
 
     def press(target, key):
-        """Through Qt's own dispatch, so the filters and the focus are real."""
+        """Send one key through Qt's own dispatch, so filters and focus are real."""
         app.sendEvent(target, QKeyEvent(QKeyEvent.Type.KeyPress, key,
                                         Qt.KeyboardModifier.NoModifier))
         settle(500)

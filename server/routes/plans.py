@@ -18,7 +18,7 @@ MOVEMENT_COLUMNS = ("position", "sets", "target_low", "target_high",
 
 
 def _owned_plan(conn, plan_id: int):
-    """The member's plan by id, or the refusal that they have no such plan."""
+    """Return the member's plan by id, or the refusal that there is none."""
     row = conn.execute(
         "SELECT id, name, start_date, weeks, notes FROM training_plans "
         "WHERE id = ? AND user_id = ?", (plan_id, g.user_id)).fetchone()
@@ -28,7 +28,7 @@ def _owned_plan(conn, plan_id: int):
 
 
 def _exercise_id(conn, name):
-    """The catalog id for a movement name, or a refusal naming it."""
+    """Return the catalog id for a movement name, or a refusal naming it."""
     if not isinstance(name, str):
         raise BadValue(
             f"A movement name must be text, not a {type(name).__name__}.")
@@ -41,7 +41,7 @@ def _exercise_id(conn, name):
 
 
 def _checked_movements(conn, entries):
-    """entries as (exercise_item_id, checked columns), or a refusal."""
+    """Return entries as (exercise_item_id, checked columns), or a refusal."""
     prepared = []
     for position, entry in enumerate(entries):
         if not isinstance(entry, dict):
@@ -92,7 +92,7 @@ def _insert_session(conn, plan_id: int, entry: dict):
 @plans_bp.route("", methods=["GET"])
 @require_auth
 def get_plans():
-    """This member's cycles, newest start first."""
+    """Return this member's cycles, newest start first."""
     conn = get_db()
     rows = conn.execute("""
         SELECT p.id, p.name, p.start_date, p.weeks, p.notes,
@@ -106,7 +106,7 @@ def get_plans():
 @plans_bp.route("/<int:plan_id>/sessions", methods=["GET"])
 @require_auth
 def get_plan_sessions(plan_id):
-    """Every session of one cycle, in calendar order."""
+    """Return every session of one cycle, in calendar order."""
     conn = get_db()
     _owned_plan(conn, plan_id)
     rows = conn.execute("""
@@ -121,7 +121,7 @@ def get_plan_sessions(plan_id):
 @plans_bp.route("/<int:plan_id>/movements", methods=["GET"])
 @require_auth
 def get_plan_movements(plan_id):
-    """Every movement of one cycle, carrying the date of the session it is in."""
+    """Return every movement of one cycle, each carrying its session date."""
     conn = get_db()
     _owned_plan(conn, plan_id)
     rows = conn.execute("""

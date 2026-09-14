@@ -12,7 +12,7 @@ KEEP = 100
 
 
 def read(path=None) -> dict:
-    """Every remembered place, by path."""
+    """Return every remembered place, keyed by path."""
     try:
         with open(path or DEFAULT_PATH, encoding="utf-8") as f:
             stored = json.load(f)
@@ -28,7 +28,7 @@ def read(path=None) -> dict:
 
 
 def _place(value):
-    """One entry as a place, or None for something else writing nonsense."""
+    """Return one entry as a place, or None where the value is unusable."""
     at = _number(value)
     if at is not None:
         return Place(int(at), 0)
@@ -40,19 +40,19 @@ def _place(value):
 
 
 def _number(value):
-    """value if it is a number, or None."""
+    """Return value where it is a number, or None."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return value
 
 
 def position_for(item, path=None) -> int:
-    """Where to resume item: milliseconds for a video, a page for a PDF."""
+    """Return where to resume item: milliseconds for a video, a page for a PDF."""
     return place_for(item, path).at
 
 
 def place_for(item, path=None) -> Place:
-    """How far through item the member got, for a readout rather than a seek."""
+    """Return how far through item the member got, for a readout not a seek."""
     return read(path).get(str(item), Place())
 
 
@@ -76,6 +76,6 @@ def remember(item, position, path=None, duration=0) -> None:
 
 
 def beside(queue_path) -> str:
-    """The positions file that belongs with this member's queue."""
+    """Return the positions file that belongs with this member's queue."""
     folder = os.path.dirname(str(queue_path or "").strip() or DEFAULT_PATH)
     return os.path.join(folder or ".", os.path.basename(DEFAULT_PATH))

@@ -34,7 +34,7 @@ def strict(qapp, strict_timer, recording_db):
 
 
 def stop_by_hand(view, seconds=None):
-    """The stop held for as long as it asks, the way the button drives it."""
+    """Hold the stop for as long as it asks, as the button drives it."""
     view._begin_stop_hold()
     paid = view.stop_hold_secs if seconds is None else seconds
     view._hold_started_ms = QDateTime.currentMSecsSinceEpoch() - int(paid * 1000)

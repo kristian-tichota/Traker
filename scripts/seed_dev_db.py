@@ -48,7 +48,7 @@ FOOD_QUALIFIERS = ("", " (raw)", " (cooked)", " 100 g", " bio", " light",
 
 
 def _spread(rng, per_day, days):
-    """How many rows land on each day, jittered around the rate."""
+    """Return how many rows land on each day, jittered around the rate."""
     for offset in range(days):
         count = int(per_day) + (1 if rng.random() < (per_day % 1) else 0)
         count = max(0, int(round(count * rng.uniform(0.4, 1.6))))
@@ -56,7 +56,7 @@ def _spread(rng, per_day, days):
 
 
 def _catalog_names(stems, qualifiers, wanted):
-    """Distinct names, since every catalog folds them COLLATE NOCASE UNIQUE."""
+    """Build distinct names, which every catalog folds COLLATE NOCASE UNIQUE."""
     names, index = [], 0
     while len(names) < wanted:
         stem = stems[index % len(stems)]

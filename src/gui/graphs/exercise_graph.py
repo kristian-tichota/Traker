@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 def timelines_by_name(rows, names):
-    """One timeline per requested movement, from a single read of the log."""
+    """Return one timeline per requested movement, from a single log read."""
     wanted = {str(name).lower(): str(name) for name in names if name}
     timelines = {name: [] for name in wanted.values()}
     for row in rows:
@@ -82,7 +82,7 @@ class ExerciseGraphView(BaseGraphView):
                    self.set_grid_dims)
 
     def set_grid_dims(self, dims):
-        """Adopt a layout that has already been stored, and redraw at it."""
+        """Adopt a stored layout and redraw at it."""
         if dims not in self.LAYOUTS:
             log.warning("Ignoring an unsupported grid layout %r; supported: %s",
                         dims, ", ".join(self.LAYOUTS))
@@ -97,7 +97,7 @@ class ExerciseGraphView(BaseGraphView):
         return bool(self.anim_nodes) or any(h.get_visible() for h in self.hover_nodes.values())
 
     def animate_node(self, node, wave):
-        """Each slot carries its own speed, so nine charts do not pulse as one block."""
+        """Advance one node at its slot's own speed, so the charts do not pulse together."""
         node['artist'].set_markersize(node['base_size'] + (wave * 6))
         node['artist'].set_alpha(0.2 + (wave * 0.4))
 
@@ -154,17 +154,17 @@ class ExerciseGraphView(BaseGraphView):
                    self._on_slot_assignment_stored)
 
     def _on_slot_assignment_stored(self, _outcome):
-        """The new pin is in the store; redraw the grid off the back of it."""
+        """Redraw the grid once the new pin is in the store."""
         self.refresh()
 
     def on_layout_changed(self, text):
-        """The member picked a layout from the combo: store it, then draw it."""
+        """Store the layout picked from the combo, then draw it."""
         self._dims = text
         self.fetch(lambda: self.db.set_setting("ex_graph_layout_dims", text), discard)
         self.refresh()
 
     def read_chart_data(self):
-        """Every slot's pinned exercise and its timeline, on one worker thread."""
+        """Read every slot's pinned exercise and timeline, on one worker thread."""
         rows, cols = self._grid_shape()
         return self._pinned_timelines(rows * cols)
 

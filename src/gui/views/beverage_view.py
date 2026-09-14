@@ -39,7 +39,7 @@ class BeveragesView(BaseManagedView):
         self.fetch_table(2, lambda: self.db.get_sets("beverage"))
 
     def _read_logs(self):
-        """The ledger, grouped so a logged drink set reads as one line."""
+        """Read the ledger, grouped so a logged drink set reads as one line."""
         rows = self.db.get_beverage_logs()
         return rows, grouped_by_set(rows)
 

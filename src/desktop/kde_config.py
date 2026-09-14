@@ -8,7 +8,7 @@ KWINRC_PATH = os.path.join(CONFIG_DIR, "kwinrc")
 
 
 def split(text):
-    """The file as [(group, lines)]; anything above the first group is None's."""
+    """Split the file into [(group, lines)], with None above the first group."""
     sections = [(None, [])]
     for line in text.splitlines(keepends=True):
         stripped = line.strip()
@@ -45,7 +45,7 @@ def set_key(lines, key, value):
 
 
 def group(text, name):
-    """The lines of one group, or none where the file has no such group."""
+    """Return the lines of one group, or none where there is no such group."""
     for found, lines in split(text):
         if found == name:
             return lines
@@ -53,7 +53,7 @@ def group(text, name):
 
 
 def group_or_new(sections, name):
-    """The lines of one group, appending an empty one where there is none."""
+    """Return the lines of one group, appending an empty one where absent."""
     for found, lines in sections:
         if found == name:
             return lines
@@ -63,7 +63,7 @@ def group_or_new(sections, name):
 
 
 def with_keys(text, group_name, keys):
-    """text with keys set in group_name, and nothing else touched."""
+    """Return text with keys set in group_name and nothing else touched."""
     sections = split(text)
     last = sections[-1][1]
     if last and not last[-1].endswith("\n"):
@@ -75,7 +75,7 @@ def with_keys(text, group_name, keys):
 
 
 def text(path):
-    """A file's text, "" when it is absent, None when it cannot be read."""
+    """Read a file's text, "" where absent and None where unreadable."""
     if not os.path.exists(path):
         return ""
     try:

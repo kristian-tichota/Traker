@@ -11,7 +11,7 @@ _unanswered = False
 
 
 def idle_ms():
-    """Milliseconds since the session last saw a key or the mouse, or None."""
+    """Return milliseconds since the session last saw input, or None."""
     global _unanswered
     if _unanswered:
         return None

@@ -37,7 +37,7 @@ class ChartCanvas(QWidget):
         return self._agg.device_pixel_ratio
 
     def mpl_connect(self, signal, func):
-        """The matplotlib callback registry, unchanged."""
+        """Return the matplotlib callback registry, unchanged."""
         return self._agg.mpl_connect(signal, func)
 
     def size_figure_for(self, size, ratio):
@@ -55,7 +55,7 @@ class ChartCanvas(QWidget):
         self._agg.draw()
 
     def snapshot(self) -> QImage:
-        """The Agg buffer as an independent QImage."""
+        """Return the Agg buffer as an independent QImage."""
         buffer = memoryview(self._agg.buffer_rgba())
         height, width, _ = buffer.shape
         image = QImage(sip.voidptr(buffer), width, height,
@@ -97,7 +97,7 @@ class ChartCanvas(QWidget):
             painter.end()
 
     def _spinner_centre(self) -> QPointF:
-        """The middle of an empty canvas, the corner of a full one."""
+        """Return the middle of an empty canvas and the corner of a full one."""
         box = self.rect()
         if self._image is None:
             return QPointF(box.center())
@@ -129,6 +129,6 @@ class ChartCanvas(QWidget):
 
 
 def _qcolor_of(rgba) -> QColor:
-    """A matplotlib 0..1 RGBA tuple as a Qt colour."""
+    """Return a matplotlib 0..1 RGBA tuple as a Qt colour."""
     red, green, blue = (int(round(channel * 255)) for channel in rgba[:3])
     return QColor(red, green, blue)

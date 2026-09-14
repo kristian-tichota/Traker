@@ -42,7 +42,7 @@ def report_session():
 
 
 def report_idle(profile):
-    """Whether this session says how long the member has been away from it."""
+    """Report whether this session answers how long the member has been away."""
     threshold = profile.number("timer", "idle_pause_secs", 300, low=0.0)
     print(f"\nidle time  (the timer stops itself past {threshold:.0f}s)")
     print("  leave the keyboard alone and watch it climb; touch it and watch it drop")
@@ -56,7 +56,7 @@ def report_idle(profile):
 
 
 def report_window(bus):
-    """What KWin calls a window, and where it has it."""
+    """Report what KWin calls a window, and where it has it."""
     print("\nclick a Traker window...")
     message = QDBusMessage.createMethodCall(
         "org.kde.KWin", "/KWin", "org.kde.KWin", "queryWindowInfo")
@@ -227,7 +227,7 @@ PROBE_PLUGIN = "traker-desktop-probe"
 
 
 def report_interfaces(bus):
-    """What KWin and the activity manager actually offer this session."""
+    """Report what KWin and the activity manager offer this session."""
     for service, path in (("org.kde.KWin", "/Scripting"),
                           ("org.kde.KWin", "/VirtualDesktopManager"),
                           ("org.kde.ActivityManager", "/ActivityManager/Activities")):
@@ -246,7 +246,7 @@ def report_interfaces(bus):
 
 
 def report_where_we_are(bus):
-    """Which desktop and activity the member is on, as a client can read them."""
+    """Report the current desktop and activity, as a client reads them."""
     from src.desktop import switch_guard
 
     print("\nwhere the session reports the member to be")
@@ -300,7 +300,7 @@ def report_screens(app_id, seconds):
 
 
 def report_activities(profile):
-    """What a break would show, in the order its keys are in."""
+    """Report what a break would show, in the order of its keys."""
     queue_path = rest_queue.path_for(profile)
     offers = break_activities.queued(rest_queue.read(queue_path)) \
         + break_activities.read(
@@ -322,7 +322,7 @@ def report_activities(profile):
 
 
 def report_media():
-    """What this machine gives a break's player: mpv, its decoder, its sinks."""
+    """Report what this machine gives a break player: mpv, decoder and sinks."""
     print("== what a break would play through ==")
     try:
         import mpv

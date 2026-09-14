@@ -16,7 +16,7 @@ class LedgerCache:
         self.misses = 0
 
     def get(self, domain, since=None):
-        """Rows for this read, or None if nothing here can answer it."""
+        """Return rows for this read, or None where nothing here answers it."""
         with self._lock:
             exact = self._entries.get((domain, since))
             if exact is not None:
@@ -33,7 +33,6 @@ class LedgerCache:
             return None
 
     def put(self, domain, since, rows):
-        """Remember what a read answered."""
         with self._lock:
             self._entries[(domain, since)] = list(rows)
         return rows
@@ -52,7 +51,7 @@ class LedgerCache:
         return len(doomed)
 
     def clear(self):
-        """Forget everything: the service came back, or the member asked."""
+        """Forget every cached read."""
         with self._lock:
             count = len(self._entries)
             self._entries.clear()
@@ -68,7 +67,7 @@ class LedgerCache:
 
 
 def _row_date(row):
-    """The date a log row carries, as the string the API stores, or None."""
+    """Return the date a log row carries, as the API stores it, or None."""
     value = getattr(row, "date", None)
     if value is None:
         try:
@@ -79,7 +78,7 @@ def _row_date(row):
 
 
 def _within(row, since):
-    """Whether a row belongs in a read bounded at since."""
+    """Report whether a row belongs in a read bounded at since."""
     date = _row_date(row)
     return True if date is None else date >= since
 
@@ -87,7 +86,7 @@ _PATH_DOMAINS = ("food", "beverage", "exercise", "supplement", "mobility")
 
 
 def domain_for_path(path: str):
-    """The domain(s) a write to path changes, or None if it cannot say."""
+    """Return the domains a write to path changes, or None where unknown."""
     path = (path or "").split("?", 1)[0].strip("/")
     parts = path.split("/")
     if len(parts) < 2 or parts[0] != "api":

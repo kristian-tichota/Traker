@@ -28,7 +28,7 @@ class FilterLineEdit(HintingLineEdit):
         self.textChanged.connect(self._on_text_changed)
 
     def open_for(self, headers, names=()):
-        """Point the bar at a table: its headers, and names worth completing."""
+        """Point the bar at a table: its headers and the names worth completing."""
         self.headers = list(headers)
         self.completion_names = list(names)
         self._on_text_changed(self.text())

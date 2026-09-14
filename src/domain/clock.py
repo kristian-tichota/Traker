@@ -8,7 +8,7 @@ DISPLAY_DATE = "%d.%m.%Y"
 
 @lru_cache(maxsize=4096)
 def as_displayed_date(value, default=None):
-    """"2026-09-05" as "05.09.2026"."""
+    """Render "2026-09-05" as "05.09.2026"."""
     try:
         parsed = datetime.datetime.strptime(str(value), ISO_DATE)
     except (TypeError, ValueError):
@@ -18,7 +18,7 @@ def as_displayed_date(value, default=None):
 
 @lru_cache(maxsize=4096)
 def as_stored_date(value, default=None):
-    """"05.09.2026" as "2026-09-05"; the inverse of the above."""
+    """Render "05.09.2026" as "2026-09-05"."""
     try:
         parsed = datetime.datetime.strptime(str(value).strip(), DISPLAY_DATE)
     except (TypeError, ValueError):
@@ -27,7 +27,7 @@ def as_stored_date(value, default=None):
 
 
 def within_window(at, start, end) -> bool:
-    """Whether at falls in start--end, all of them minutes of a day."""
+    """Report whether at falls in start-end, all of them minutes of a day."""
     if start == end:
         return False
     if start < end:
@@ -36,7 +36,7 @@ def within_window(at, start, end) -> bool:
 
 
 def minutes_of_day(text, default=None):
-    """Minutes since midnight for "HH:MM"; default if it will not parse."""
+    """Return minutes since midnight for "HH:MM", or default."""
     try:
         hours, minutes = (int(part) for part in str(text).strip().split(":"))
     except (AttributeError, TypeError, ValueError):
@@ -47,7 +47,7 @@ def minutes_of_day(text, default=None):
 
 
 def minutes_covered(began, ended) -> list:
-    """Each stored minute a span covers, as (date, minute of day)."""
+    """Return each stored minute a span covers, as (date, minute of day)."""
     edge = began.replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
     covered = []
     while edge <= ended:

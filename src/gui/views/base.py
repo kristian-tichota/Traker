@@ -39,7 +39,7 @@ def lay_out_tables(into, ledger, catalog, sets_pane):
 
 
 def summary_line(totals, headers) -> str:
-    """The line under a filtered table: how much of what, and over what span."""
+    """Build the line under a filtered table: how much of what, over what span."""
     parts = [f"{totals.rows:,} row" + ("" if totals.rows == 1 else "s")]
     present = set(headers)
     for field, header, template in SUMMARY_PARTS:
@@ -67,7 +67,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
     command_requested = pyqtSignal(str)
 
     def __init__(self, db, tables, headers, mappings):
-        """One entry per table this view hosts, indexed by table_idx."""
+        """Build one entry per table this view hosts, indexed by table_idx."""
         super().__init__()
         self.db = db
         self.tables = tables
@@ -109,7 +109,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
         self.status_message.emit(f" Background call failed: {error}")
 
     def editable_columns(self, table_idx=0):
-        """Column indices a member may type into: the ones the mapping names."""
+        """Return the column indices that may be typed into, from the mapping."""
         return editable_columns(self.headers[table_idx], self.mappings[table_idx])
 
     def build_table_layout(self, title: str, headers: list, table_idx: int):
@@ -150,13 +150,13 @@ class BaseManagedView(ShutdownMixin, QWidget):
         return self._table_glows[table_idx]
 
     def show_pending_row(self, row, table_idx=0):
-        """Put a row the store has confirmed but not yet described on screen."""
+        """Show a row the store has confirmed but not yet described."""
         position = self._table_models[table_idx].insert_pending_row(row)
         self._table_glows[table_idx].start()
         return position
 
     def showEvent(self, event):
-        """Arriving at the tab is when this member's column layouts are read."""
+        """Read this member's column layouts on arrival at the tab."""
         super().showEvent(event)
         self.load_column_layouts()
 
@@ -180,7 +180,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
             self._warm_fold(table_idx)
 
     def _cursor_identity(self, widget):
-        """(row id, column) under the cursor, or None if it has none."""
+        """Return (row id, column) under the cursor, or None where it has none."""
         index = widget.currentIndex()
         if not index.isValid():
             return None
@@ -190,7 +190,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
         return model.row_id(source), index.column()
 
     def _restore_cursor(self, widget, keep):
-        """Put the cursor back on its row, if that row is still here."""
+        """Put the cursor back on its row, where that row is still here."""
         if keep is None:
             return
         row_id, column = keep
@@ -213,19 +213,17 @@ class BaseManagedView(ShutdownMixin, QWidget):
         self._warm_fold(table_idx)
 
     def _warm_fold(self, table_idx):
-        """Dispatch the fold."""
         if not self._table_models[table_idx].rows:
             return
         self.fetch(self._fold_rows, self._adopt_fold, table_idx)
 
     def _fold_rows(self, table_idx):
-        """On the pool thread."""
         model = self._table_models[table_idx]
         rows = model.rows
         return table_idx, rows, model.fold_all(rows)
 
     def _adopt_fold(self, payload):
-        """One receiver for every table: the payload names which one."""
+        """Adopt a fold for the table the payload names."""
         table_idx, rows, prebuilt = payload
         self._table_models[table_idx].adopt_fold(prebuilt, rows)
 
@@ -234,19 +232,19 @@ class BaseManagedView(ShutdownMixin, QWidget):
         return len(model._folded) >= model.rowCount()
 
     def populate_table(self, table, data, table_idx=0):
-        """set_rows under the name every view and test calls."""
+        """Put data in table table_idx, under the alternative name."""
         self.set_rows(table_idx, data)
 
     def table_title(self, table_idx=0) -> str:
-        """What the heading over this table calls it, for a status line."""
+        """Return what the heading over this table calls it, for a status line."""
         return self._table_titles.get(table_idx) or self.tables[table_idx]
 
     def column_layout(self, table_idx=0) -> ColumnLayout:
-        """What table table_idx is showing, in the order it shows it."""
+        """Return what table table_idx is showing, in the order it shows it."""
         return self._table_widgets[table_idx].column_layout(self.headers[table_idx])
 
     def apply_column_layout(self, table_idx, layout) -> None:
-        """Show layout without storing it — what the stored one arrives by."""
+        """Show layout without storing it."""
         self._table_widgets[table_idx].arrange_columns(self.headers[table_idx], layout)
         self._update_summary(table_idx)
 
@@ -263,7 +261,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
         self.fetch(self._read_column_layouts, self._adopt_column_layouts)
 
     def _read_column_layouts(self):
-        """On the pool thread: self.db is an HTTP client."""
+        """Read the stored layouts on the pool thread."""
         keys = [setting_key(self.tables[table_idx])
                 for table_idx in sorted(self._table_widgets)]
         return self.db.get_settings(keys, {key: "" for key in keys})
@@ -284,21 +282,21 @@ class BaseManagedView(ShutdownMixin, QWidget):
                    self.tables[table_idx], layout.encoded)
 
     def _write_column_layout(self, table, encoded):
-        """On the pool thread, for the same reason every other write is."""
+        """Write one column layout on the pool thread."""
         return self.db.set_setting(setting_key(table), encoded)
 
     def _on_column_layout_stored(self, outcome):
-        """Only a refusal is worth a line: the columns are already on screen."""
+        """Report a refusal, the columns being on screen already."""
         success, message = outcome
         if not success:
             self.status_message.emit(f" Column layout not saved: {message}")
 
     def on_columns_rearranged(self, table_index):
-        """A heading was dragged: store where it landed."""
+        """Store where a dragged heading landed."""
         self._store_column_layout(table_index, self.column_layout(table_index))
 
     def on_header_menu_requested(self, table_index, pos):
-        """Right-click on a header: which columns this table shows."""
+        """Offer the columns this table shows, from the header menu."""
         table_widget = self._table_widgets[table_index]
         layout = self.column_layout(table_index)
         menu = QMenu()
@@ -338,7 +336,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
         self._table_proxies[table_idx].sort(column, order)
 
     def clear_sort(self, table_idx=0):
-        """Back to the order the server answered in."""
+        """Return to the order the service answered in."""
         from PyQt6.QtCore import Qt as _Qt
 
         self._table_proxies[table_idx].sort(-1, _Qt.SortOrder.AscendingOrder)
@@ -347,7 +345,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
         return MatchedTotals.of(self._table_proxies[table_idx].matched_rows())
 
     def _update_summary(self, table_idx=0):
-        """The line under the table: what the matched set comes to."""
+        """Update the line under the table with what the matched set comes to."""
         if self.summary_label is None or table_idx != 0:
             return
         proxy = self._table_proxies[table_idx]
@@ -379,7 +377,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
                        self.tables[table_index], row_id)
 
     def domain_of(self, table_idx=0):
-        """The household subject this view's table belongs to."""
+        """Return the household subject this view's table belongs to."""
         return domain_of_table(self.tables[table_idx]) or ""
 
     def _delete_row(self, table, row_id):
@@ -396,7 +394,7 @@ class BaseManagedView(ShutdownMixin, QWidget):
         self.data_changed.emit(domain_of_table(table) or "")
 
     def on_cell_edited(self, table_target, row_id, col_name, new_val):
-        """A cell was typed into; send it to the store off the interface thread."""
+        """Send an edited cell to the store, off the interface thread."""
         if col_name in self.DATE_HEADERS:
             new_val = as_stored_date(new_val)
 

@@ -39,7 +39,7 @@ _BUILT = {}
 
 
 def tab_icon(registry_key: str) -> QIcon:
-    """The icon for a tab, or an empty one for a tab with none declared."""
+    """Return the icon for a tab, or an empty one where none is declared."""
     entry = TAB_ICONS.get(registry_key)
     if entry is None:
         return QIcon()
@@ -47,7 +47,7 @@ def tab_icon(registry_key: str) -> QIcon:
 
 
 def coloured_icon(name: str, accent: str) -> QIcon:
-    """One vendored glyph, stroked in PALETTE[accent]."""
+    """Return one vendored glyph, stroked in PALETTE[accent]."""
     key = (name, accent)
     if key in _BUILT:
         return _BUILT[key]
@@ -73,7 +73,7 @@ def _read(name: str) -> str:
 
 
 def _rendered(markup: str, name: str) -> QIcon:
-    """The tinted markup as an icon, or an empty one if it will not parse."""
+    """Return the tinted markup as an icon, or an empty one if unparseable."""
     renderer = QSvgRenderer(QByteArray(markup.encode("utf-8")))
     if not renderer.isValid():
         log.warning("Tab icon %r is not valid SVG; leaving that tab bare.", name)

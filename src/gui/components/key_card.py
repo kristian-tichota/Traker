@@ -31,14 +31,13 @@ class KeyCard(QWidget):
         self.set_hints(hints)
 
     def set_hints(self, hints):
-        """Show these keys."""
         self._hints = [(str(key), str(says)) for key, says in hints]
         self.resize(self.sizeHint())
         self.update()
 
     @property
     def hints(self) -> tuple:
-        """What it is saying, as (key, what it does) pairs."""
+        """Return what the card says, as (key, effect) pairs."""
         return tuple(self._hints)
 
     def sizeHint(self) -> QSize:
@@ -52,7 +51,7 @@ class KeyCard(QWidget):
                      ROW_HEIGHT * len(self._hints) + 2 * PAD_Y)
 
     def place_top_right(self, within):
-        """Sit in the top-right corner of within, in its parent's own coordinates."""
+        """Place the card in the top-right corner of within, in parent coordinates."""
         size = self.sizeHint()
         self.setGeometry(within.right() - size.width() - MARGIN,
                          within.top() + MARGIN, size.width(), size.height())

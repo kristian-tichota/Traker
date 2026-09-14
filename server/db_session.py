@@ -8,7 +8,7 @@ _G_ATTR = "_db_conn"
 
 
 def get_db() -> sqlite3.Connection:
-    """The connection for this request, opened on first use."""
+    """Return the connection for this request, opened on first use."""
     conn = getattr(g, _G_ATTR, None)
     if conn is None:
         conn = db_service.get_connection()

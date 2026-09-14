@@ -22,7 +22,6 @@ class UpcomingPanel(QWidget):
         self.setVisible(False)
 
     def set_sections(self, sections):
-        """Replace what is shown."""
         self.sections = [(title, list(lines)) for title, lines in sections]
         self._clear()
         for title, lines in self.sections:
@@ -34,14 +33,14 @@ class UpcomingPanel(QWidget):
         self.setVisible(bool(self.sections))
 
     def set_note(self, title, note):
-        """Say something beside one section's title, without rebuilding either."""
+        """Show a note beside one section title, without rebuilding either."""
         if title not in self._titles:
             return
         self._notes[title] = note
         self._titles[title].setText(self._said(title))
 
     def lines(self) -> list:
-        """Every line on the panel, titles included, in the order shown."""
+        """Return every line on the panel, titles included, in the order shown."""
         said = []
         for title, lines in self.sections:
             said.append(self._said(title))
@@ -49,7 +48,7 @@ class UpcomingPanel(QWidget):
         return said
 
     def _said(self, title) -> str:
-        """A title as it is shown: with whatever note it carries, or bare."""
+        """Return a title as shown, with whatever note it carries, or bare."""
         note = self._notes.get(title)
         return f"{title}   ({note})" if note else title
 
@@ -71,7 +70,7 @@ class UpcomingPanel(QWidget):
 
 
 def _font(size_px, bold=False) -> QFont:
-    """Fira Code, and monospaced whatever happens."""
+    """Return Fira Code, monospaced in every case."""
     font = QFont("Fira Code")
     font.setStyleHint(QFont.StyleHint.Monospace)
     font.setPixelSize(size_px)

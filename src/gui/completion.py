@@ -15,7 +15,7 @@ def nocase_fold(text: str) -> str:
 
 
 def is_subsequence(needle: str, haystack: str) -> bool:
-    """Do the characters of needle appear in haystack, in order?"""
+    """Report whether the characters of needle appear in haystack, in order."""
     position = 0
     for char in needle:
         found = haystack.find(char, position)
@@ -26,7 +26,7 @@ def is_subsequence(needle: str, haystack: str) -> bool:
 
 
 def _score(typed_norm: str, name: str):
-    """Rank one candidate, or None when it does not match at all."""
+    """Rank one candidate, or return None where it does not match."""
     name_norm = normalize(name)
     if name_norm.startswith(typed_norm):
         quality, offset = PREFIX, 0
@@ -42,7 +42,7 @@ def _score(typed_norm: str, name: str):
 
 
 def best_match(typed: str, names) -> str | None:
-    """The catalog name that best answers what the user typed, or None."""
+    """Return the catalog name that best answers the typed text, or None."""
     typed_norm = normalize(typed)
     if not typed_norm:
         return None
@@ -51,7 +51,7 @@ def best_match(typed: str, names) -> str | None:
 
 
 def ranked_matches(typed: str, names, prefer=None) -> list:
-    """Every name that answers typed, best answer first."""
+    """Return every name that answers typed, best answer first."""
     typed_norm = normalize(typed)
     keys = []
     for position, name in enumerate(names):
@@ -68,7 +68,7 @@ def ranked_matches(typed: str, names, prefer=None) -> list:
 
 
 def completion_tail(typed: str, name: str) -> str | None:
-    """Characters to append so typed becomes name, None when that breaks lookup."""
+    """Return the characters to append, or None where that would break lookup."""
     if nocase_fold(name[:len(typed)]) != nocase_fold(typed):
         return None
     return name[len(typed):]

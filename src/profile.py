@@ -46,7 +46,7 @@ DEFAULT_SUPPLEMENT_TARGETS = [
 
 
 def _supplement_targets_toml() -> str:
-    """The [supplement_targets] tables, rendered from the list above."""
+    """Render the [supplement_targets] tables from the list above."""
     return "\n".join(
         f'[supplement_targets.{entry["key"]}]\n'
         f'name = "{entry["name"]}"\n'
@@ -57,7 +57,7 @@ _document_cache = {}
 
 
 def _profile_stamp(path):
-    """Enough of the file's identity to notice an edit."""
+    """Return enough of the file's identity to notice an edit."""
     try:
         stat = os.stat(path)
     except OSError:
@@ -66,7 +66,7 @@ def _profile_stamp(path):
 
 
 def load_profile_document() -> dict:
-    """The parsed profile document, re-read only when the file has changed."""
+    """Return the parsed profile document, re-read only after a change."""
     path = PROFILE_PATH
     stamp = _profile_stamp(path)
     cached = _document_cache.get(path)
@@ -92,7 +92,7 @@ def reload_profile() -> None:
 
 
 def _generate_default_profile():
-    """Write a full default document, including every section the app reads."""
+    """Write a full default document, with every section the application reads."""
     from src.config import LOCAL_SERVER_URL, PALETTE
 
     os.makedirs(os.path.dirname(PROFILE_PATH), exist_ok=True)
@@ -350,7 +350,7 @@ class UserProfile:
 
     def number(self, section: str, key: str, default: float,
                low: float = None, high: float = None) -> float:
-        """One hand-edited setting as a number, clamped, and never raising."""
+        """Return one hand-edited setting as a clamped number, never raising."""
         raw = self.get_metric(section, key, default)
         try:
             value = None if isinstance(raw, bool) else float(raw)
@@ -367,7 +367,7 @@ class UserProfile:
         return value
 
     def timer_split(self) -> dict:
-        """The one split, and the long break that can be queued in place of one."""
+        """Return the split, and the long break that may be queued in its place."""
         if "pomodoro_modes" in self.data and "timer" not in self.data:
             log.info("[pomodoro_modes] is no longer read: the timer is one "
                      "split now. Write a [timer] section to change it, and "
@@ -385,11 +385,11 @@ class UserProfile:
         }
 
     def _whole(self, key: str, default: int) -> int:
-        """One of the timer's durations, in whole minutes and at least one."""
+        """Return one timer duration, in whole minutes and at least one."""
         return int(self.number("timer", key, default, low=1))
 
     def get_current_regime(self) -> str:
-        """Which regime the schedule says is running now, or "Unscheduled"."""
+        """Return the regime the schedule says is running now, or "Unscheduled"."""
         now = datetime.datetime.now()
         day_name = now.strftime("%A").lower()
         current = now.hour * 60 + now.minute
@@ -428,23 +428,23 @@ class UserProfile:
         return float(self.get_metric("biometrics", "weight_kg", DEFAULT_WEIGHT_KG))
 
     def daily_adjustment_kcal(self) -> float:
-        """How far from maintenance this member is aiming, unsigned."""
+        """Return how far from maintenance this member aims, unsigned."""
         return float(self.get_metric("goals", "daily_adjustment_kcal",
                                      DEFAULT_DAILY_ADJUSTMENT_KCAL))
 
     def tick_markers(self) -> list:
-        """The offsets from maintenance the calorie bar marks."""
+        """Return the offsets from maintenance the calorie bar marks."""
         return self.get_metric("goals", "tick_markers", DEFAULT_TICK_MARKERS)
 
     def overflow_buffer(self) -> float:
         return float(self.get_metric("goals", "overflow_buffer", DEFAULT_OVERFLOW_BUFFER))
 
     def goal_type(self) -> str:
-        """The declared goal, folded."""
+        """Return the declared goal, folded."""
         return formulas.normalise_goal(self.get_metric("goals", "goal_type", None))
 
     def calculate_target_calories(self) -> float:
-        """Maintenance need, adjusted in the direction of the declared goal."""
+        """Return maintenance need, adjusted towards the declared goal."""
         return formulas.energy_target(
             self.calculate_tdee(),
             self.daily_adjustment_kcal(),
@@ -462,7 +462,7 @@ class UserProfile:
         return weight * multiplier
 
     def get_supplement_targets(self) -> list:
-        """One entry per tracked nutrient: key, name and target."""
+        """Return one entry per tracked nutrient: key, name and target."""
         targets = self.data.get("supplement_targets", {})
         if not targets:
             return [dict(entry) for entry in DEFAULT_SUPPLEMENT_TARGETS]

@@ -417,7 +417,7 @@ class ServerDatabase:
 
     @staticmethod
     def _ensure_folded_name_index(conn, table: str) -> None:
-        """Add the case-insensitive uniqueness index, or say why it could not be."""
+        """Add the case-insensitive uniqueness index, or log the refusal."""
         try:
             conn.execute(
                 f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_name_nocase "

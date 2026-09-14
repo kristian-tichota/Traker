@@ -5,7 +5,7 @@ from src.profile import (DEFAULT_ACTIVITY_LEVEL, DEFAULT_NEAT_TAX_PERCENT,
 
 
 def daily_totals(food_rows) -> dict:
-    """Each day's nutrient totals, keyed by date."""
+    """Return each day's nutrient totals, keyed by date."""
     by_date = {}
     for row in food_rows:
         by_date.setdefault(row.date, []).append(row)
@@ -14,12 +14,12 @@ def daily_totals(food_rows) -> dict:
 
 class DBAnalyticsMixin:
     def get_daily_aggregates(self):
-        """Each day's nutrient totals, oldest first, as DailyTotals."""
+        """Return each day's nutrient totals, oldest first, as DailyTotals."""
         totals = daily_totals(self.get_food_logs())
         return [totals[date] for date in sorted(totals)]
 
     def get_exercise_history_by_name(self, exercise_name: str):
-        """One point per logged session of this movement, oldest first."""
+        """Return one point per logged session of this movement, oldest first."""
         timeline = []
         for row in self.get_exercise_logs():
             if not row.name or row.name.lower() != exercise_name.lower():
@@ -30,7 +30,7 @@ class DBAnalyticsMixin:
         return timeline
 
     def get_activity_heatmap_data(self, since: str = None):
-        """MET-hours above the member's own baseline, per day."""
+        """Return MET-hours above the member's own baseline, per day."""
         profile = UserProfile()
         activity_level = float(profile.get_metric("goals", "activity_level", DEFAULT_ACTIVITY_LEVEL))
         neat_tax_percent = float(profile.get_metric("goals", "neat_tax_percent", DEFAULT_NEAT_TAX_PERCENT))

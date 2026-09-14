@@ -54,7 +54,7 @@ class CommandLineEdit(HintingLineEdit):
                           catalog)
 
     def _read_catalog(self, catalog):
-        """One catalog's names, on a pool thread."""
+        """Read one catalog's names, on a pool thread."""
         names = catalog_names(self.db, (catalog,))
         connection = getattr(self.db, "connection", None)
         reachable = connection.online if connection is not None else True
@@ -74,7 +74,7 @@ class CommandLineEdit(HintingLineEdit):
         log.warning("Reading the catalogs for completion failed: %s", error)
 
     def _catalog_names(self, catalogs):
-        """The names catalogs offer, or None while they are being read."""
+        """Return the names catalogs offer, or None while they are being read."""
         missing = [key for key in catalogs if key not in self._names_by_catalog]
         for key in missing:
             self._start_catalog_read(key)
@@ -87,7 +87,7 @@ class CommandLineEdit(HintingLineEdit):
         return names
 
     def catalog_names_for_filter(self):
-        """Every catalog name already cached, for the filter bar to complete."""
+        """Return every catalog name already cached, for the filter bar."""
         names = []
         for cached in self._names_by_catalog.values():
             if cached:
@@ -95,13 +95,13 @@ class CommandLineEdit(HintingLineEdit):
         return names
 
     def set_relevant_domains(self, domains):
-        """Which domains the visible tab is about, for ranking the menu."""
+        """Record which domains the visible tab is about, for ranking the menu."""
         self.relevant_domains = tuple(domains)
         self.menu_index = 0
         self._render_hints()
 
     def set_default_command(self, cmd):
-        """Offer the visible tab's own command, unless the user has typed."""
+        """Offer the visible tab's own command, unless something has been typed."""
         if self.default_command and self.text() == self.default_command + " ":
             self.clear()
 
@@ -181,7 +181,7 @@ class CommandLineEdit(HintingLineEdit):
             self.hint_text = tail
 
     def move_selection(self, step: int):
-        """Move through the menu's candidates, wrapping at both ends."""
+        """Move through the menu candidates, wrapping at both ends."""
         count = len(candidates_for(self.text(), self.relevant_domains))
         if count <= 1:
             return
@@ -189,7 +189,7 @@ class CommandLineEdit(HintingLineEdit):
         self._render_hints()
 
     def keyPressEvent(self, event):
-        """Escape leaves, and Ctrl-N/Ctrl-P and the arrows move through the menu."""
+        """Handle Escape, and Ctrl-N, Ctrl-P and the arrows through the menu."""
         if event.key() == Qt.Key.Key_Escape:
             self.clear()
             self.clearFocus()

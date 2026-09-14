@@ -14,7 +14,7 @@ class BadValue(BadRequest):
 
 
 def read_payload(*required: str) -> dict:
-    """This request's JSON object, once it is one and carries required."""
+    """Return this request's JSON object, once it carries every required field."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         raise BadPayload("Expected a JSON object as the request body.")

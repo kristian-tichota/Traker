@@ -8,7 +8,7 @@ def stop_timers(widget) -> None:
 
 
 def _shutdown_super(instance, owner):
-    """The next shutdown() up the MRO, or None."""
+    """Return the next shutdown() up the MRO, or None."""
     return getattr(super(owner, instance), "shutdown", None)
 
 
@@ -18,7 +18,7 @@ class LatchesShutdown:
     _shut_down = False
 
     def is_shut_down(self) -> bool:
-        """Latched by shutdown(), so teardown cannot restart anything."""
+        """Report whether shutdown() has latched, so teardown restarts nothing."""
         return self._shut_down
 
 

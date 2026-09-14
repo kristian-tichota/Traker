@@ -62,7 +62,6 @@ class PlanCalendar(QWidget):
         self._cursor = (0, 0)
 
     def show_plan(self, weeks, sessions, logged_dates, today, selected):
-        """Replace everything drawn."""
         self._weeks = max(1, int(weeks or 1))
         self._logged = set(logged_dates)
         self._today = today
@@ -99,7 +98,7 @@ class PlanCalendar(QWidget):
         return self._cursor if self._cursor[0] < self._weeks else (0, 0)
 
     def _cell_rect(self, row, column) -> QRectF:
-        """The square drawn for one day, inset inside its pitch."""
+        """Return the square drawn for one day, inset inside its pitch."""
         inset = (PITCH_PX - CELL_PX) / 2.0
         return QRectF(WEEK_LABEL_PX + column * PITCH_PX + inset,
                       HEADER_PX + row * PITCH_PX + inset, CELL_PX, CELL_PX)
@@ -172,7 +171,7 @@ class PlanCalendar(QWidget):
 
     @staticmethod
     def _paint_status(painter, rect, state):
-        """One day's mark."""
+        """Paint one day's mark."""
         colour = QColor(PALETTE[STATUS_COLOURS[state]])
         if state == plans.AHEAD:
             painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -287,11 +286,11 @@ class PlanView(BaseManagedView):
         layout.addLayout(right, 1)
 
     def refresh(self):
-        """One worker for the whole tab."""
+        """Refresh the whole tab on one worker."""
         self.fetch(self._read_plan, self._apply_plan)
 
     def _read_plan(self):
-        """Everything the tab draws, off the interface thread."""
+        """Read everything the tab draws, off the interface thread."""
         catalogue = self.db.get_training_plans()
         if not catalogue:
             return None, [], [], []
@@ -329,7 +328,7 @@ class PlanView(BaseManagedView):
         return {row.date for row in self.logs if row.date}
 
     def _date_to_show(self) -> str:
-        """Which day the detail pane opens on, preserving the member's choice."""
+        """Return the day the detail pane opens on, preserving any selection."""
         dates = [session.date for session in self.sessions]
         if self.selected_date in dates:
             return self.selected_date
@@ -340,7 +339,7 @@ class PlanView(BaseManagedView):
         return ahead[0] if ahead else (max(dates) if dates else "")
 
     def on_day_selected(self, date_iso: str):
-        """The calendar cursor moved."""
+        """Handle the calendar cursor moving."""
         self.selected_date = date_iso
         self._show_session()
 
@@ -371,5 +370,5 @@ class PlanView(BaseManagedView):
         self.session_note.setText(session.notes or "")
 
     def on_log_requested(self, date_iso: str):
-        """Enter on a planned day: offer the command, do not run it."""
+        """Offer the command for a planned day without running it."""
         self.command_requested.emit(f"planlog {as_displayed_date(date_iso)}")

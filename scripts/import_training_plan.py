@@ -24,7 +24,7 @@ ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def call(url, path, token, payload=None, method=None):
-    """One request, answering (status, body)."""
+    """Send one request and return (status, body)."""
     request = urllib.request.Request(
         url.rstrip("/") + path,
         data=json.dumps(payload).encode() if payload is not None else None,
@@ -43,7 +43,7 @@ def call(url, path, token, payload=None, method=None):
 
 
 def complaints(document):
-    """Everything wrong with the document's shape, as a list of sentences."""
+    """List everything wrong with the document shape, as sentences."""
     found = []
     for field in ("name", "start_date", "weeks"):
         if document.get(field) in (None, ""):
@@ -85,7 +85,7 @@ def complaints(document):
 
 
 def _whole(value):
-    """value as an integer, or None if it is not one."""
+    """Return value as an integer, or None where it is not one."""
     try:
         return int(value or 0)
     except (TypeError, ValueError):

@@ -12,19 +12,19 @@ PLUGIN_NAME = "traker-strict-break"
 
 
 def _default_script_path():
-    """A real on-disk path for the script, outliving the call."""
+    """Return a real on-disk path for the script, outliving the call."""
     cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
     return os.path.join(cache, "traker", "strict-break.js")
 
 
 def _home_script_path():
-    """Beside the break's, for the same reason: KWin reads a script off disk."""
+    """Return a path beside the break's, because KWin reads a script off disk."""
     cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
     return os.path.join(cache, "traker", "window-home.js")
 
 
 def _release_path(script_path):
-    """The undo script's path, beside the script it undoes."""
+    """Return the undo script's path, beside the script it undoes."""
     root, extension = os.path.splitext(script_path)
     return f"{root}-release{extension or '.js'}"
 
@@ -506,7 +506,7 @@ _HOME_SCRIPT = """// Traker: keep the application's own window on one output.
 
 
 def default_app_id():
-    """What KWin will have called this application's windows."""
+    """Return what KWin will have called this application's windows."""
     from PyQt6.QtCore import QCoreApplication
     from PyQt6.QtGui import QGuiApplication
 
@@ -518,7 +518,7 @@ def default_app_id():
 
 def _fill(template, app_id, focus_caption="", wall_prefix="",
           wall_outputs=None, refuse_switch=False, output="", standing=False):
-    """One substitution for every script here, so they name one application."""
+    """Substitute the session names into one script source."""
     return (template
             .replace("__APP_ID__", str(app_id).lower())
             .replace("__CAPTION__", json.dumps(str(focus_caption or "")))
@@ -531,18 +531,18 @@ def _fill(template, app_id, focus_caption="", wall_prefix="",
 
 def script_source(app_id, focus_caption="", wall_prefix="", wall_outputs=None,
                   refuse_switch=False):
-    """The script KWin is asked to run, with this session's names in it."""
+    """Build the script KWin is asked to run, carrying this session's names."""
     return _fill(_SCRIPT, app_id, focus_caption, wall_prefix, wall_outputs,
                  refuse_switch)
 
 
 def home_source(app_id, caption, output):
-    """The script that keeps the application's own window on one output."""
+    """Build the script that keeps the application's own window on one output."""
     return _fill(_HOME_SCRIPT, app_id, focus_caption=caption, output=output)
 
 
 def release_source(app_id, wall_prefix="", standing=False):
-    """The undo, naming the same application; a wall still up stays in front."""
+    """Build the undo, naming the same application, leaving a standing wall in front."""
     return _fill(_RELEASE_SCRIPT, app_id, wall_prefix=wall_prefix,
                  standing=standing)
 
@@ -550,7 +550,6 @@ CALL_TIMEOUT_MS = 1000
 
 
 def _session_caller(method, *args):
-    """Call one org.kde.kwin.Scripting method."""
     from PyQt6.QtDBus import QDBus, QDBusConnection, QDBusMessage
 
     bus = QDBusConnection.sessionBus()
@@ -600,7 +599,6 @@ def run_script(source, path, plugin=PLUGIN_NAME, caller=None):
 
 
 def unload_script(plugin=PLUGIN_NAME, caller=None) -> bool:
-    """Drop a loaded script by name."""
     reached, _ = (caller or _session_caller)("unloadScript", plugin)
     return reached
 
@@ -627,7 +625,6 @@ class WindowScreen:
         return self._engaged
 
     def engage(self) -> bool:
-        """Load the script."""
         # A script KWin loaded for a client that has died stays loaded; this also probes for KWin.
         reached, _ = self._call("unloadScript", HOME_PLUGIN_NAME)
         self._engaged = False
@@ -666,7 +663,6 @@ class WindowScreen:
         return True
 
     def release(self) -> bool:
-        """Unload it."""
         reached, _ = self._call("unloadScript", HOME_PLUGIN_NAME)
         self._engaged = False
         return reached
@@ -692,7 +688,6 @@ class KWinPin:
         return self._engaged
 
     def engage(self, focus_caption=None, wall_outputs=None) -> bool:
-        """Load the script."""
         if focus_caption is not None:
             self.focus_caption = str(focus_caption)
         if wall_outputs is not None:
@@ -739,7 +734,7 @@ class KWinPin:
         return answered
 
     def _give_back(self, standing=False) -> bool:
-        """Run the undo once, leaving a wall that is still up in front."""
+        """Run the undo once, leaving a standing wall in front."""
         if not self.app_id:
             return False
 
@@ -760,7 +755,7 @@ class KWinPin:
         return reached
 
     def _unload(self) -> bool:
-        """Whether KWin was reached."""
+        """Report whether KWin was reached."""
         reached, _ = self._call("unloadScript", PLUGIN_NAME)
         return reached
 

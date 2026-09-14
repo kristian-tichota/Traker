@@ -13,7 +13,7 @@ class ColumnError(ValueError):
 
 
 def setting_key(table: str) -> str:
-    """The user_settings key holding one table's layout."""
+    """Return the user_settings key holding one table's layout."""
     return f"columns_{table}"
 
 
@@ -26,12 +26,12 @@ class ColumnLayout:
 
     @classmethod
     def declared(cls, headers) -> "ColumnLayout":
-        """The layout a table has before anyone arranges it."""
+        """Return the layout a table has before it is arranged."""
         return cls(tuple(headers))
 
     @classmethod
     def parse(cls, stored: str, declared) -> "ColumnLayout":
-        """A stored value read against the columns this table actually has."""
+        """Read a stored value against the columns this table has."""
         declared = tuple(declared)
         order, hidden = [], set()
         for token in (stored or "").split(SEPARATOR):
@@ -49,25 +49,25 @@ class ColumnLayout:
 
     @property
     def encoded(self) -> str:
-        """The stored form."""
+        """Return the stored form."""
         return SEPARATOR.join(
             (HIDDEN_MARK + name) if name in self.hidden else name
             for name in self.order)
 
     @property
     def visible(self) -> tuple:
-        """The columns on screen, in the order they are on screen."""
+        """Return the columns on screen, in the order they are on screen."""
         return tuple(name for name in self.order if name not in self.hidden)
 
     def is_default(self, declared) -> bool:
-        """Whether this is what the table declares, so nothing needs storing."""
+        """Report whether this is what the table declares, so nothing needs storing."""
         return self.order == tuple(declared) and not self.hidden
 
     def is_hidden(self, header: str) -> bool:
         return header in self.hidden
 
     def can_hide(self, header: str) -> bool:
-        """Whether hiding header would leave a table to look at."""
+        """Report whether hiding header would leave a table to read."""
         return header in self.order and not self.is_hidden(header) and len(self.visible) > 1
 
     def hide(self, header: str) -> "ColumnLayout":
@@ -84,7 +84,7 @@ class ColumnLayout:
         return replace(self, hidden=self.hidden - {header})
 
     def toggled(self, header: str) -> "ColumnLayout":
-        """This layout with one column's visibility flipped."""
+        """Return this layout with one column's visibility flipped."""
         return self.show(header) if self.is_hidden(header) else self.hide(header)
 
     def move(self, header: str, position: int) -> "ColumnLayout":
@@ -109,7 +109,7 @@ class ColumnLayout:
 
 
 def resolve_column(token: str, layout: ColumnLayout) -> str:
-    """The header a member's word names, or raise ColumnError."""
+    """Return the header a typed word names, or raise ColumnError."""
     try:
         return resolve_field(token, layout.order)
     except FilterError as exc:
@@ -118,7 +118,7 @@ def resolve_column(token: str, layout: ColumnLayout) -> str:
 
 def rearranged(layout: ColumnLayout, declared, action: str, column: str,
                position: int | None):
-    """The layout :cols asks for, and the line that reports it."""
+    """Return the layout :cols asks for, and the line that reports it."""
     if action == RESET:
         return ColumnLayout.declared(declared), "back to the columns it declares"
 
@@ -137,7 +137,7 @@ def rearranged(layout: ColumnLayout, declared, action: str, column: str,
 
 
 def describe(layout: ColumnLayout) -> str:
-    """The layout as one status-bar line: what is shown, then what is not."""
+    """Format the layout as one status-bar line: what is shown, then what is not."""
     shown = ", ".join(layout.visible)
     if not layout.hidden:
         return shown

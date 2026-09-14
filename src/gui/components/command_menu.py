@@ -20,7 +20,7 @@ class MenuRow:
 
 
 def _command_rows(text: str, domains, selected: int) -> list:
-    """One row per command the line could still become."""
+    """Build one row per command the line could still become."""
     candidates = candidates_for(text, domains)
     if not candidates:
         return [MenuRow(command_word(text), "matches no command", accent="red")]
@@ -32,7 +32,7 @@ def _command_rows(text: str, domains, selected: int) -> list:
 
 
 def _argument_rows(command, text: str) -> list:
-    """The command's own line, then one row per argument it takes."""
+    """Build the command's own line, then one row per argument it takes."""
     asked = command.current_argument(text)
     rows = [MenuRow(param.label,
                     param.expects + (" · may be left out" if param.optional else ""),
@@ -43,7 +43,7 @@ def _argument_rows(command, text: str) -> list:
 
 
 def _windowed(rows: list, focus: int) -> list:
-    """At most MAX_ROWS rows around the focused one, plus an overflow line."""
+    """Window to at most MAX_ROWS rows around the focus, plus an overflow line."""
     if len(rows) <= MAX_ROWS:
         return rows
     first = min(max(0, focus - MAX_ROWS + 1), len(rows) - MAX_ROWS)
@@ -55,7 +55,7 @@ def _windowed(rows: list, focus: int) -> list:
 
 
 def rows_for(text: str, domains=(), selected: int = 0) -> list:
-    """The menu's content for what has been typed."""
+    """Build the menu content for what has been typed."""
     command = command_being_typed(text)
     if command is not None:
         return _argument_rows(command, text)
@@ -72,7 +72,7 @@ class CommandMenu(QWidget):
         self._labels = self._build_rows()
 
     def _build_rows(self) -> list:
-        """One row of three labels each, built once and re-used."""
+        """Build one row of three labels each, once, for re-use."""
         grid = QGridLayout(self)
         grid.setContentsMargins(6, 1, 6, 1)
         grid.setHorizontalSpacing(10)
@@ -131,7 +131,7 @@ class CommandMenu(QWidget):
 
     @staticmethod
     def _fitted(label, written: str) -> str:
-        """written cut to the width the label actually has, with an ellipsis."""
+        """Cut written to the width the label has, with an ellipsis."""
         if label.width() <= 1:
             return written
         return label.fontMetrics().elidedText(

@@ -32,5 +32,5 @@ class MobilityView(BaseManagedView):
         self.fetch_table(2, lambda: self.db.get_sets("mobility"))
 
     def _read_logs(self):
-        """The ledger, grouped so a logged routine set reads as one line."""
+        """Read the ledger, grouped so a logged routine set reads as one line."""
         return grouped_by_set(self.db.get_mobility_logs())

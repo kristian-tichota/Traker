@@ -22,7 +22,7 @@ SCROLL_STEP_PX = 160
 
 
 def _failure_label(parent, text) -> QLabel:
-    """Say it on the screen the member is looking at."""
+    """Build the label that reports a failure on screen."""
     label = QLabel(text, parent)
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setStyleSheet(f"color: {PALETTE['red']}; font-size: 16px; "
@@ -48,7 +48,7 @@ class MpvScreen(QOpenGLWidget):
             self.player.event_callback("end-file")(self._file_ended)
 
     def _start_mpv(self):
-        """One player, or None and player_error saying why."""
+        """Return one player, or None with player_error set."""
         try:
             import mpv
         except (ImportError, OSError) as error:
@@ -65,7 +65,7 @@ class MpvScreen(QOpenGLWidget):
             return None
 
     def _build_player(self, mpv):
-        """The player a break's pane drives, with mpv told to keep to itself."""
+        """Build the player a break pane drives, with mpv confined to it."""
         return mpv.MPV(
             vo="libmpv",
             hwdec="auto-safe",
@@ -105,14 +105,14 @@ class MpvScreen(QOpenGLWidget):
         self.player.loadfile(path, "replace", start=start)
 
     def _file_ended(self, event):
-        """mpv's event thread, saying a file stopped and why."""
+        """Handle mpv's event thread reporting that a file stopped."""
         reason = getattr(event.data, "reason", None)
         if str(reason).endswith("ERROR"):
             self.playback_failed.emit(str(getattr(event.data, "error", "")
                                           or "this file could not be played"))
 
     def _mpv_wants_a_frame(self):
-        """mpv's render thread says there is a frame."""
+        """Handle mpv's render thread reporting a frame."""
         self.frame_ready.emit()
 
     def paintGL(self):
@@ -140,13 +140,13 @@ class MpvScreen(QOpenGLWidget):
 
 
 def _gl_proc_address(_ctx, name):
-    """Where a GL function lives, asked by mpv and answered by Qt."""
+    """Return where a GL function lives, asked by mpv and answered by Qt."""
     context = QOpenGLContext.currentContext()
     return int(context.getProcAddress(name)) if context is not None else 0
 
 
 def _say_what_mpv_said(level, prefix, text):
-    """mpv's own complaints, in Traker's log, at the level it gave them."""
+    """Log mpv's own complaints at the level it gave them."""
     said = text.strip()
     if said:
         log.log(logging.ERROR if level in ("error", "fatal") else logging.WARNING,
@@ -176,7 +176,7 @@ class VideoPane(QWidget):
             self.open(path, start_at)
 
     def open(self, path, start_at=0):
-        """Play path from where the member left it."""
+        """Play path from where it was left."""
         self._clear_failure()
         if self.player is None:
             return
@@ -184,14 +184,14 @@ class VideoPane(QWidget):
                                 max(0, int(start_at or 0)) / 1000.0)
 
     def _clear_failure(self):
-        """A file that could not be played does not damn the next one."""
+        """Clear the failure left by a file that could not be played."""
         if self._failed is not None:
             self._failed.deleteLater()
             self._failed = None
         self.screen_widget.show()
 
     def _show_failure(self, message):
-        """Say so where the member is looking, not only in the log."""
+        """Show the failure on screen as well as in the log."""
         log.warning("Could not play: %s", message)
         self.screen_widget.hide()
         self._failed = _failure_label(self, f"COULD NOT PLAY\n{message}")
@@ -203,7 +203,6 @@ class VideoPane(QWidget):
             self.player.pause = not self.player.pause
 
     def step(self, direction):
-        """Seek thirty seconds."""
         if self.player is None:
             return
         try:
@@ -212,34 +211,33 @@ class VideoPane(QWidget):
             log.debug("A seek of %+d s was refused.", int(direction) * SEEK_MS // 1000)
 
     def nudge(self, direction):
-        """Volume, which is the only other thing a voice can usefully ask for."""
+        """Change the volume."""
         if self.player is None:
             return
         wanted = (self.player.volume or 0) + int(direction) * VOLUME_STEP * 100
         self.player.volume = max(0.0, min(100.0, wanted))
 
     def position(self) -> int:
-        """Milliseconds in, or zero before mpv has read the file."""
+        """Return milliseconds in, or zero before mpv has read the file."""
         return self._milliseconds("time_pos")
 
     def duration(self) -> int:
-        """How long the file is, or zero until mpv has read it."""
+        """Return the file length, or zero until mpv has read it."""
         return self._milliseconds("duration")
 
     def _milliseconds(self, name) -> int:
-        """One mpv property as whole milliseconds, and zero for no answer."""
+        """Return one mpv property as whole milliseconds, or zero for no answer."""
         if self.player is None:
             return 0
         seconds = getattr(self.player, name, None)
         return max(0, int((seconds or 0) * 1000))
 
     def stop(self):
-        """Stop playing."""
         if self.player is not None:
             self.player.command("stop")
 
     def shutdown(self):
-        """Let go of libmpv's threads, once, when the break is over."""
+        """Release libmpv's threads, once, at the end of the break."""
         self.screen_widget.shutdown()
         self.player = None
 
@@ -277,7 +275,7 @@ class DocumentPane(QWidget):
             self.open(path, start_at)
 
     def open(self, path, start_at=0):
-        """Read path from the page the member left it on."""
+        """Read path from the page it was left on."""
         from PyQt6.QtPdf import QPdfDocument
 
         self._resume_at = 0
@@ -294,17 +292,16 @@ class DocumentPane(QWidget):
         self._turn_to(self._resume_at)
 
     def _page_changed(self, page):
-        """Put the page back when it was not the member who turned it."""
+        """Put the page back where the turn did not come from the member."""
         if self._resume_at and int(page) != self._resume_at:
             self._turn_to(self._resume_at)
 
     def _room_changed(self, minimum, maximum):
-        """The view has laid the document out, so now a jump can land."""
+        """Handle the document being laid out, after which a jump can land."""
         if self._resume_at:
             self._turn_to(self._resume_at)
 
     def _turn_to(self, page):
-        """Turn to page."""
         navigator = self.view.pageNavigator()
         if navigator is None:
             return
@@ -320,22 +317,22 @@ class DocumentPane(QWidget):
         self.view.show()
 
     def showEvent(self, event):
-        """A view can only scroll to a page once it is on a screen."""
+        """Scroll to the requested page, which needs the view on a screen."""
         super().showEvent(event)
         if self._resume_at:
             QTimer.singleShot(0, self._turn_to_the_page_asked_for)
 
     def _turn_to_the_page_asked_for(self):
-        """The page a break asked for, once the view has finished laying out."""
+        """Turn to the page a break asked for, once layout has finished."""
         if self._resume_at:
             self._turn_to(self._resume_at)
 
     def toggle(self):
-        """There is nothing to pause, so the one big key turns the page."""
+        """Turn the page, there being nothing to pause."""
         self.step(1)
 
     def step(self, direction):
-        """A page forward or back, clamped inside the document."""
+        """Turn a page forward or back, clamped inside the document."""
         navigator = self.view.pageNavigator()
         if navigator is None:
             return
@@ -345,7 +342,7 @@ class DocumentPane(QWidget):
         navigator.jump(wanted, QPointF())
 
     def nudge(self, direction):
-        """Scroll inside the page, for a figure that fell across the fold."""
+        """Scroll inside the page."""
         self._resume_at = 0
         bar = self.view.verticalScrollBar()
         bar.setValue(bar.value() - int(direction) * SCROLL_STEP_PX)
@@ -355,17 +352,17 @@ class DocumentPane(QWidget):
         return int(navigator.currentPage()) if navigator is not None else 0
 
     def duration(self) -> int:
-        """How many pages there are, which is what a page is out of."""
+        """Return how many pages there are."""
         return max(0, int(self.document.pageCount()))
 
     def stop(self):
-        """Let go of the file."""
+        """Release the file."""
         self._resume_at = 0
         self.document.close()
 
 
 def build_pane(activity, start_at=0, parent=None) -> QWidget:
-    """The pane for what this activity is."""
+    """Build the pane for what this activity is."""
     if activity.kind == DOCUMENT:
         return DocumentPane(activity.path, start_at, parent)
     return VideoPane(activity.path, start_at, parent)
@@ -417,13 +414,13 @@ class MediaSurface(QWidget):
 
     @property
     def pane(self):
-        """The pane the keys drive, or None when nothing is showing."""
+        """Return the pane the keys drive, or None where nothing is showing."""
         if self.activity is None:
             return None
         return self.panes.get(self.activity.kind)
 
     def open(self, activity, start_at=0, key_hints=()):
-        """Show activity, from where the member left it."""
+        """Show activity, from where it was left."""
         pane = self.panes.get(activity.kind)
         if pane is None:
             pane = self._build_pane(activity, start_at, parent=self.stack)
@@ -449,7 +446,7 @@ class MediaSurface(QWidget):
         self._place_the_overlays()
 
     def stop(self):
-        """Stop what is showing, and answer the place it had got to."""
+        """Stop what is showing and return the place it reached."""
         pane = self.pane
         self.activity = None
         self.set_keys([])
@@ -463,7 +460,7 @@ class MediaSurface(QWidget):
         return where
 
     def shutdown(self):
-        """Let every pane go, before the wall this is a page of is dropped."""
+        """Release every pane before the wall this is a page of is dropped."""
         for pane in self.panes.values():
             closing = getattr(pane, "shutdown", None)
             if callable(closing):
@@ -475,19 +472,19 @@ class MediaSurface(QWidget):
         self._place_the_overlays()
 
     def _place_the_overlays(self):
-        """The card in its corner, in front."""
+        """Place the card in its corner, in front."""
         self.keys.place_top_right(self.rect())
         self.keys.raise_()
 
     def place(self):
-        """Where what is showing has got to, and which readout says it."""
+        """Return where what is showing has reached, and which readout says it."""
         pane = self.pane
         if pane is None:
             return None
         return Place(pane.position(), pane.duration()), readout_of(self.activity.kind)
 
     def show_progress(self, place=None):
-        """Put the pane's position on the row under it, where there is one."""
+        """Put the pane position on the row under it, where there is one."""
         if self.progress is None:
             return
         place = place or self.place()
@@ -496,7 +493,7 @@ class MediaSurface(QWidget):
         self.progress.show_place(*place)
 
     def update_display(self):
-        """The same two questions every other break surface answers."""
+        """Update the readouts every break surface carries."""
         if self.strip is None:
             return
         fraction, holding = self._hold
@@ -512,6 +509,6 @@ class MediaSurface(QWidget):
             f"REST {mins:02d}:{secs:02d} · {self.timer_ref.wall_hint()}")
 
     def show_hold(self, fraction, visible):
-        """How much of the exit has been paid, in the one line there is."""
+        """Show how much of the exit hold has been paid."""
         self._hold = (fraction, visible)
         self.update_display()

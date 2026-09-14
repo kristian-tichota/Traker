@@ -66,7 +66,7 @@ def run_in_background(pool, fn, on_result, on_error=None, *args, **kwargs) -> Db
 
 
 def discard(_outcome):
-    """A result receiver for a write whose only interesting outcome is failure."""
+    """Discard the result of a write whose only reported outcome is failure."""
 
 
 def _log_worker_error(failure):

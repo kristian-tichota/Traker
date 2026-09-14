@@ -6,13 +6,12 @@ CALL_TIMEOUT_MS = 1000
 
 
 def _unwrap(answer):
-    """What a property read actually answered."""
+    """Return what a property read answered."""
     inner = getattr(answer, "variant", None)
     return inner() if callable(inner) else answer
 
 
 def session_call(service, path, interface, method, *args):
-    """Call one method."""
     from PyQt6.QtDBus import QDBus, QDBusConnection, QDBusMessage
 
     bus = QDBusConnection.sessionBus()

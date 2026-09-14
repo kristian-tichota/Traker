@@ -27,7 +27,7 @@ _BOARD_SQL = """
 
 
 def _chore_by_name(conn, name):
-    """The chore a member typed, or a refusal naming it."""
+    """Return the chore a member typed, or a refusal naming it."""
     if not isinstance(name, str) or not name.strip():
         raise BadValue("Name a chore to mark done.")
     row = conn.execute(
@@ -41,7 +41,7 @@ def _chore_by_name(conn, name):
 @chores_bp.route("", methods=["GET"])
 @require_auth
 def get_chores():
-    """Every chore, with when it was last done."""
+    """Return every chore with its last completion."""
     conn = get_db()
     return jsonify([dict(row) for row in conn.execute(_BOARD_SQL)])
 
@@ -97,7 +97,7 @@ def complete_chore():
 @chores_bp.route("/completions", methods=["GET"])
 @require_auth
 def get_completions():
-    """The shared history, most recent first, optionally bounded."""
+    """Return the shared history, most recent first, optionally bounded."""
     since = request.args.get("since")
     clause, params = "", ()
     if since:

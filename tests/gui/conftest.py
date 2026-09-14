@@ -207,7 +207,7 @@ def no_idle_answer():
 
 @pytest.fixture(autouse=True)
 def idle_unanswered(monkeypatch):
-    """No test asks this machine how long its member has been away from it."""
+    """Refuse to answer how long this session has been idle."""
     monkeypatch.setattr(pomodoro_view, "session_idle_ms", no_idle_answer)
 
 
@@ -228,7 +228,7 @@ TABS_OFF_BY_DEFAULT = ("pomodoro", "supplements", "supplement_graphs",
 
 @pytest.fixture(autouse=True)
 def all_tabs(profile_path):
-    """Every tab on: a window test exercises the whole strip, not the default."""
+    """Switch every tab on, so a window test exercises the whole strip."""
     import src.profile as profile_module
 
     profile_module.UserProfile()
@@ -243,7 +243,7 @@ def all_tabs(profile_path):
 
 @pytest.fixture
 def chores_on_break(profile_path):
-    """A profile that puts the chore board in a break, which the default does not."""
+    """Build a profile that puts the chore board in a break."""
     import src.profile as profile_module
 
     profile_module.UserProfile()
@@ -326,7 +326,7 @@ def strict_window(qapp, strict_timer, recording_db, monkeypatch):
 
 @pytest.fixture
 def window_without_graphs(qapp, profile_path, recording_db, monkeypatch):
-    """A window built as if the graphs extra were not installed."""
+    """Build a window as if the graphs extra were not installed."""
     import src.gui.main_window as main_window
 
     real = main_window.import_module

@@ -29,7 +29,7 @@ DEFAULT_PATH = os.path.join(kde_config.CONFIG_DIR, "kwinrulesrc")
 
 
 def _rule_names(general):
-    """The ordered group names of the rules this file already has."""
+    """Return the ordered group names of the rules this file already has."""
     named = kde_config.read(general, "rules")
     if named is not None:
         return [n for n in (part.strip() for part in named.split(",")) if n]
@@ -57,7 +57,7 @@ def written(text, group, keys):
 
 
 def removed(text, *groups):
-    """text with none of groups in it."""
+    """Return text with none of the groups in it."""
     sections = [(n, lines) for n, lines in kde_config.split(text) if n not in groups]
     for name, lines in sections:
         if name == GENERAL:
@@ -68,7 +68,7 @@ def removed(text, *groups):
 
 
 def rest_keys(title_prefix, everywhere=True):
-    """Every wall, in front, and immune to a rule of the member's own."""
+    """Build the keys that put every wall in front, immune to a member's rule."""
     keys = [
         ("Description", "Traker: a rest break's walls, in front of every screen"),
         ("title", title_prefix),
@@ -92,7 +92,7 @@ def rest_keys(title_prefix, everywhere=True):
 
 
 def window_keys(caption, desktop_id=None, activity_id=None):
-    """Where the application's own window belongs, by whichever of the two resolved."""
+    """Build the keys placing the application's own window, by whichever resolved."""
     keys = [
         ("Description", "Traker: where the application's own window belongs"),
         ("title", caption),
@@ -106,7 +106,7 @@ def window_keys(caption, desktop_id=None, activity_id=None):
 
 
 def desktop_id(which, path=None):
-    """The id of a virtual desktop, named by its position or by its name."""
+    """Return the id of a virtual desktop, named by position or by name."""
     lines = kde_config.group(
         kde_config.text(path or kde_config.KWINRC_PATH) or "", "Desktops")
     try:
@@ -123,7 +123,7 @@ def desktop_id(which, path=None):
 
 
 def activity_id(name, caller=None):
-    """The id of an activity, named by its name or given as its own id."""
+    """Return the id of an activity, named by name or given as its own id."""
     call = caller or session_call
     reached, ids = call(ACTIVITIES_SERVICE, ACTIVITIES_PATH, ACTIVITIES,
                         "ListActivities")
@@ -150,7 +150,7 @@ def _reconfigure() -> bool:
 
 
 def _restore(path, was, existed) -> bool:
-    """Put the file back exactly as it was -- or back to not being there."""
+    """Put the file back exactly as it was, or back to not being there."""
     if existed:
         return kde_config.store(path, was)
     try:
@@ -201,7 +201,7 @@ class TemporaryRule:
         return self._path
 
     def keys(self):
-        """The rule's own keys, or () for a rule there is nothing to say."""
+        """Return the rule's own keys, or () where there is nothing to say."""
         raise NotImplementedError
 
     def hold(self) -> bool:
@@ -226,14 +226,13 @@ class TemporaryRule:
         return True
 
     def release(self) -> bool:
-        """Take it back out."""
         if not self._holding:
             return True
         self._holding = False
         return prune((self.group,), self._path, self._reconfigure)
 
     def say(self, keys):
-        """One line for the journal, naming what was asked for."""
+        """Build one journal line naming what was asked for."""
 
 
 class RestRule(TemporaryRule):
@@ -248,7 +247,7 @@ class RestRule(TemporaryRule):
 
     @property
     def everywhere(self) -> bool:
-        """Whether the rule still puts the walls on every desktop."""
+        """Report whether the rule still puts the walls on every desktop."""
         return self._everywhere
 
     def keys(self):

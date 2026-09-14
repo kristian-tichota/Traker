@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 
 
 def _graph(module: str, view: str):
-    """A graph tab's builder, importing matplotlib only if that tab is wanted."""
+    """Build a graph tab, importing matplotlib only where that tab is wanted."""
     def build(window):
         return getattr(import_module(f"src.gui.graphs.{module}"), view)(window.db)
     return build
@@ -60,7 +60,7 @@ MODES = {
 
 
 def tab_shortcut_keys(also_reserved: str = "") -> str:
-    """The keys that select a tab, in order, with the reserved ones removed."""
+    """Return the keys that select a tab, in order, less the reserved ones."""
     blocked = {character.upper() for character in NUTRIENT_WINDOW_KEYS + also_reserved}
     return "".join(c for c in TAB_SHORTCUT_ALPHABET if c not in blocked)
 
@@ -175,7 +175,7 @@ class MainWindow(QMainWindow):
         return home
 
     def _read_keybinds(self):
-        """The keys NORMAL mode answers to, from [keybinds]."""
+        """Return the keys NORMAL mode answers to, from [keybinds]."""
         keybind = self.profile.get_metric
         self.key_cmd = get_qt_key(keybind("keybinds", "command_mode", "i"), Qt.Key.Key_I)
         self.key_sheet = get_qt_key(keybind("keybinds", "sheet_mode", "s"), Qt.Key.Key_S)
@@ -200,7 +200,7 @@ class MainWindow(QMainWindow):
             self.tray_icon.show()
 
     def _build_tabs(self, main_layout):
-        """Build the tabs the profile enabled, labelled with the key that selects each."""
+        """Build the enabled tabs, each labelled with the key that selects it."""
         self.tabs = QTabWidget()
         self.tabs.setIconSize(QSize(ICON_PX, ICON_PX))
         self.tab_default_commands = {}
@@ -234,7 +234,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.tabs)
 
     def _build_command_menu(self, main_layout):
-        """The menu of what can be typed, above the bar and hidden until COMMAND mode."""
+        """Build the menu of what can be typed, hidden until COMMAND mode."""
         self.command_menu = CommandMenu()
         main_layout.addWidget(self.command_menu)
         self.command_menu.hide()
@@ -250,7 +250,7 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(self.command_layout)
 
     def _build_filter_bar(self, main_layout):
-        """The filter bar, under the command bar and hidden until "/"."""
+        """Build the filter bar, under the command bar and hidden until "/"."""
         self.filter_layout = QHBoxLayout()
         self.filter_prefix = QLabel("/")
         self.filter_prefix.setStyleSheet(
@@ -265,7 +265,7 @@ class MainWindow(QMainWindow):
         self._filtered_view = None
 
     def _build_status_row(self, main_layout):
-        """The status row: the mode on the left, the last message on the right."""
+        """Build the status row: the mode on the left, the last message on the right."""
         self.status_row = QHBoxLayout()
         self.status_row.setContentsMargins(0, 0, 0, 0)
         self.status_row.setSpacing(0)
@@ -309,7 +309,7 @@ class MainWindow(QMainWindow):
             table.sort_requested.connect(self.sort_visible_table)
 
     def _watch_the_connection(self):
-        """Say whether an empty table is no rows or a service that is down."""
+        """Report whether an empty table is no rows or a service that is down."""
         self.connection_changed.connect(self._on_connection_changed)
         connection = getattr(self.db, "connection", None)
         if connection is None:
@@ -319,7 +319,7 @@ class MainWindow(QMainWindow):
             self._on_connection_changed(False, connection.last_error or "")
 
     def _connect_view(self, widget):
-        """Listen to what a view reports, instead of it reaching in here."""
+        """Listen to what a view reports."""
         if hasattr(widget, "data_changed"):
             widget.data_changed.connect(self._on_view_data_changed)
         if hasattr(widget, "status_message"):
@@ -328,7 +328,7 @@ class MainWindow(QMainWindow):
             widget.command_requested.connect(self.offer_command)
 
     def _on_view_data_changed(self, domain):
-        """A view wrote something."""
+        """Handle a view reporting a write."""
         if domain:
             self.mark_domains_stale((domain,))
         else:
@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
             invalidate(domains)
 
     def mark_domains_stale(self, domains):
-        """The tabs reading domains are out of date; redraw the visible one."""
+        """Mark the tabs reading domains out of date and redraw the visible one."""
         keys = tabs_reading(domains)
         indices = {self.tab_indices[key] for key in keys if key in self.tab_indices}
         if not indices:
@@ -350,7 +350,7 @@ class MainWindow(QMainWindow):
         self._refresh_visible_tab()
 
     def mark_all_tabs_stale(self):
-        """Every tab's data is out of date; redraw the visible one now."""
+        """Mark every tab out of date and redraw the visible one now."""
         self.dirty_tabs = set(range(self.tabs.count()))
         self._refresh_visible_tab()
 
@@ -385,7 +385,7 @@ class MainWindow(QMainWindow):
     SHUTDOWN_GRACE_MS = (REQUEST_TIMEOUT_S * 1000) + 500
 
     def closeEvent(self, event):
-        """Shut the client down — unless a strict break is holding the screens."""
+        """Shut the client down, unless a strict break is holding the screens."""
         timer = self.views.get("pomodoro")
         holding = getattr(timer, "holds_the_screens", None)
         if callable(holding) and holding():
@@ -421,11 +421,11 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def _bound_key(self, binding, fallback) -> str:
-        """What the member has binding on, for a readout to name."""
+        """Return the key bound to binding, for a readout to name."""
         return str(self.profile.get_metric("keybinds", binding, fallback)).lower()
 
     def _mode_hint(self, mode_name) -> str:
-        """The keys that work in mode_name, in the member's own bindings."""
+        """Return the keys that work in mode_name, in the configured bindings."""
         key = self._bound_key
         if mode_name == "NORMAL":
             return (f"Hotkeys: Keys->Tabs | {key('sheet_mode', 's')}->Enter Sheet"
@@ -439,7 +439,7 @@ class MainWindow(QMainWindow):
         return "Type to narrow | Tab->Complete | Enter->Sheet | Esc->Clear"
 
     def set_mode(self, mode_name):
-        """Enter mode_name and say so, whatever else the status line holds."""
+        """Enter mode_name and name it, whatever else the status line holds."""
         if mode_name not in MODES:
             log.warning("Refusing to enter unknown mode %r", mode_name)
             return
@@ -461,7 +461,7 @@ class MainWindow(QMainWindow):
         self.set_mode("NORMAL")
 
     def _on_mode_requested(self, mode):
-        """A bar or a table asking for a mode."""
+        """Handle a bar or a table asking for a mode."""
         if mode == "NORMAL":
             self.return_to_normal()
             return
@@ -474,7 +474,7 @@ class MainWindow(QMainWindow):
                                      self.command_line.menu_index)
 
     def _tab_subject(self, index) -> tuple:
-        """The domains the tab at index is about, for ranking the menu."""
+        """Return the domains the tab at index is about, for ranking the menu."""
         default = self.tab_default_commands.get(index)
         if default:
             return COMMANDS[default].domains
@@ -484,7 +484,7 @@ class MainWindow(QMainWindow):
         return ()
 
     def enter_command(self):
-        """Put the keyboard in the command bar, and say so."""
+        """Put the keyboard in the command bar and name the mode."""
         self.command_line.setFocus()
         self.set_mode("COMMAND")
 
@@ -497,7 +497,7 @@ class MainWindow(QMainWindow):
         self.set_mode("COMMAND")
 
     def enter_sheet(self):
-        """Put the keyboard on the visible tab's first table, and say so."""
+        """Put the keyboard on the visible tab's first table and name the mode."""
         widget = self.tabs.currentWidget()
         tables = widget.findChildren(VimTableView) if widget else []
         if not tables:
@@ -506,7 +506,7 @@ class MainWindow(QMainWindow):
         self.set_mode("SHEET")
 
     def filterable_view(self):
-        """The visible tab, if it has a table to filter."""
+        """Return the visible tab, where it has a table to filter."""
         widget = self.tabs.currentWidget()
         return widget if hasattr(widget, "apply_filter") else None
 
@@ -543,7 +543,7 @@ class MainWindow(QMainWindow):
         self._filter_open = False
 
     def _on_filter_mode_requested(self, mode):
-        """Escape from the filter bar: drop the filter and leave the mode."""
+        """Handle Escape from the filter bar: drop the filter and leave the mode."""
         if mode != "FILTER":
             self.close_filter()
         self._on_mode_requested(mode)
@@ -559,7 +559,7 @@ class MainWindow(QMainWindow):
                 f"{view.model_for(0).rowCount():,} rows.")
 
     def _commit_filter(self):
-        """Enter: keep the filter and drop into the sheet on the first match."""
+        """Keep the filter and drop into the sheet on the first match."""
         view = self._filtered_view
         if view is None:
             return
@@ -569,18 +569,18 @@ class MainWindow(QMainWindow):
         self.set_mode("SHEET")
 
     def _remember_sheet_table(self, table):
-        """Which table the member is in, for a command typed after they leave it."""
+        """Record the current table, for a command typed after leaving it."""
         self._sheet_table = table
 
     def _arrangeable_table(self, view) -> int:
-        """Which of a tab's tables :cols acts on."""
+        """Return which of a tab's tables :cols acts on."""
         table = self._sheet_table
         if table is not None and table in view.findChildren(VimTableView):
             return table.table_idx
         return 0
 
     def arrange_columns(self, payload):
-        """Carry out :cols against the table in front of the member."""
+        """Carry out :cols against the visible table."""
         view = self.filterable_view()
         if view is None:
             raise ColumnError("No table to arrange on this tab.")
@@ -598,7 +598,7 @@ class MainWindow(QMainWindow):
         return f" {title}: {said}."
 
     def queue_long_break(self, payload):
-        """Carry out :break: whether the next break is the long one."""
+        """Carry out :break, setting whether the next break is the long one."""
         view = self.views.get("pomodoro")
         if view is None:
             raise CommandError("The Focus Timer is switched off in the profile.")
@@ -607,7 +607,7 @@ class MainWindow(QMainWindow):
         return view.set_long_break_queued(payload["action"] == BREAK_LONG)
 
     def queue_rest(self, payload):
-        """Carry out :rest: what to open on the next break."""
+        """Carry out :rest, setting what to open on the next break."""
         path = rest_queue.path_for(self.profile)
         action, position = payload["action"], payload["position"]
         entry = (payload["entry"] or "").strip()
@@ -657,7 +657,7 @@ class MainWindow(QMainWindow):
         self.status_bar.setText(f" Sorted by {header}, {direction}.")
 
     def _on_tab_changed(self, index):
-        """The member arrived at a tab."""
+        """Handle arrival at a tab."""
         self.command_line.set_relevant_domains(self._tab_subject(index))
         default_cmd = self.tab_default_commands.get(index, None)
         self.command_line.set_default_command(default_cmd)
@@ -673,14 +673,14 @@ class MainWindow(QMainWindow):
         self._refresh_tab(index, veil=True)
 
     def _refresh_visible_tab(self):
-        """The data changed under the member."""
+        """Refresh the visible tab after a data change."""
         index = self.tabs.currentIndex()
         if index not in self.dirty_tabs:
             return
         self._refresh_tab(index, veil=False)
 
     def _refresh_tab(self, index, veil: bool):
-        """Dispatch tab index's refresh, veiled or in place."""
+        """Dispatch the refresh of tab index, veiled or in place."""
         widget = self.tabs.widget(index)
         self.dirty_tabs.discard(index)
         if not hasattr(widget, "refresh"):
@@ -698,7 +698,7 @@ class MainWindow(QMainWindow):
         self._reveal_poll.start(self.REVEAL_POLL_MS)
 
     def _on_reveal_poll(self):
-        """Uncover the visible tab when nothing is still being read for it."""
+        """Uncover the visible tab once nothing is still being read for it."""
         if QThreadPool.globalInstance().activeThreadCount() > 0:
             return
         self._reveal_poll.stop()
@@ -742,7 +742,7 @@ class MainWindow(QMainWindow):
         self.status_pulser.pulse(PALETTE.get('red', '#dc322f'))
 
     def _show_optimistically(self, command, payload):
-        """Put the row the member just wrote on screen, now."""
+        """Put the row just written on screen, at once."""
         row = command.pending_row(payload)
         if row is None:
             return
@@ -753,7 +753,7 @@ class MainWindow(QMainWindow):
         show(row)
 
     def _apply_view_effect(self, command, payload):
-        """The one command whose result a view has to mirror straight away."""
+        """Mirror the result of the one command a view must reflect at once."""
         effect = command.view_effect
         if effect is None:
             return
@@ -789,7 +789,7 @@ class MainWindow(QMainWindow):
                           command, payload)
 
     def _run_window_command(self, command, payload):
-        """A command the window carries out itself, against the visible tab."""
+        """Carry out a window command against the visible tab."""
         try:
             message = getattr(self, command.window_effect)(payload)
         except (CommandError, ColumnError, FilterError) as e:
@@ -802,7 +802,7 @@ class MainWindow(QMainWindow):
         self.status_pulser.pulse(PALETTE.get('blue', '#268bd2'))
 
     def _invoke_command(self, command, payload):
-        """The write itself, on a pool thread."""
+        """Perform the write on a pool thread."""
         success, message = command.invoke(self.db, payload)
         return command, payload, success, message
 
@@ -826,7 +826,7 @@ class MainWindow(QMainWindow):
         self.status_pulser.pulse(PALETTE.get('blue', '#268bd2'))
 
     def _on_command_raised(self, failure):
-        """A client method that raised instead of returning a refusal."""
+        """Handle a client method that raised instead of returning a refusal."""
         error, _formatted = failure
         self._command_in_flight = False
         self._report_failure(error)

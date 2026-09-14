@@ -23,7 +23,7 @@ class SetSpec:
 
     @property
     def amount_column(self) -> str:
-        """The single amount column, for the four domains that have one."""
+        """Return the single amount column, for the four domains that have one."""
         return self.amount_columns[0]
 
     @property
@@ -52,12 +52,12 @@ SET_DOMAINS = tuple(SET_SPECS)
 
 
 def spec_for(domain: str):
-    """The registration for domain, or None if it has no sets."""
+    """Return the registration for domain, or None where it has no sets."""
     return SET_SPECS.get(domain)
 
 
 def spec_of_catalog(catalog_table: str):
-    """The set registration whose components name items in this catalog."""
+    """Return the set registration whose components name items in this catalog."""
     for spec in _SPECS:
         if spec.catalog_table == catalog_table:
             return spec
@@ -65,7 +65,7 @@ def spec_of_catalog(catalog_table: str):
 
 
 def find(conn, domain: str, name: str):
-    """The item_sets row this domain calls name, or None."""
+    """Return the item_sets row this domain calls name, or None."""
     return conn.execute(
         "SELECT id, name, domain FROM item_sets "
         "WHERE domain = ? AND name = ? COLLATE NOCASE", (domain, name)
@@ -73,7 +73,7 @@ def find(conn, domain: str, name: str):
 
 
 def components_of(conn, spec: SetSpec, set_id: int):
-    """One row per component: the item's name, then its amount columns."""
+    """Return one row per component: the item name, then its amount columns."""
     amounts = ", ".join(f"c.{column}" for column in spec.amount_columns)
     return conn.execute(
         f"""SELECT i.name AS item_name, i.id AS item_id, {amounts}
@@ -85,7 +85,7 @@ def components_of(conn, spec: SetSpec, set_id: int):
 
 
 def expansion(conn, spec: SetSpec, set_id: int, multiplier: float):
-    """What logging this set writes: one (item_id, {log column: value}) each."""
+    """Return what logging this set writes: one (item_id, {column: value}) each."""
     scale = float(multiplier) if spec.scaled else 1.0
     expanded = []
     for component in components_of(conn, spec, set_id):
@@ -98,7 +98,7 @@ def expansion(conn, spec: SetSpec, set_id: int, multiplier: float):
 
 
 def sets_using(conn, catalog_table: str, item_name: str):
-    """The names of the sets that would be left with a hole without this item."""
+    """Return the sets that would be left with a hole without this item."""
     spec = spec_of_catalog(catalog_table)
     if spec is None:
         return []
@@ -111,7 +111,7 @@ def sets_using(conn, catalog_table: str, item_name: str):
 
 
 def every_set_using(conn, item_name: str):
-    """(word, [set names]) for every domain a name is a component of."""
+    """Return (word, [set names]) for every domain the name is a component of."""
     found = []
     for spec in _SPECS:
         names = sets_using(conn, spec.catalog_table, item_name)
@@ -121,7 +121,7 @@ def every_set_using(conn, item_name: str):
 
 
 def listing(conn, spec: SetSpec):
-    """Every set of one domain, as one row per component."""
+    """Return every set of one domain, as one row per component."""
     amounts = ", ".join(f"c.{column}" for column in spec.amount_columns)
     return conn.execute(
         f"""SELECT c.id, s.name, i.name, {amounts}

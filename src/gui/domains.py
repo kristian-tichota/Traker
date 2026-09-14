@@ -54,16 +54,16 @@ TAB_DOMAINS = {
 
 
 def domain_of_table(table: str):
-    """The domain a database table belongs to, or None if it has none."""
+    """Return the domain a database table belongs to, or None."""
     return TABLE_DOMAINS.get(table)
 
 
 def domains_for_tab(registry_key: str) -> tuple:
-    """The domains a tab reads."""
+    """Return the domains a tab reads."""
     return TAB_DOMAINS.get(registry_key, EVERY_DOMAIN)
 
 
 def tabs_reading(domains) -> set:
-    """Every registry key that reads any of domains."""
+    """Return every registry key that reads any of domains."""
     wanted = set(domains)
     return {key for key, read in TAB_DOMAINS.items() if wanted & set(read)}

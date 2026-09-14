@@ -52,5 +52,5 @@ class ExerciseView(BaseManagedView):
         self.fetch_table(2, lambda: self.db.get_sets("exercise"))
 
     def _read_logs(self):
-        """The ledger, grouped so a workout reads as one line totalling volume."""
+        """Read the ledger, grouped so a workout reads as one line of volume."""
         return grouped_by_set(self.db.get_exercise_logs())

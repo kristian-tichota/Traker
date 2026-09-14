@@ -12,7 +12,6 @@ DESKTOP_ENTRY = "Traker"
 
 def notify(summary, body, *, timeout_ms=15000,
            sound_name="dialog-warning", sound_file="", icon="clock"):
-    """Post one notification."""
     from PyQt6.QtDBus import QDBusConnection, QDBusMessage
 
     bus = QDBusConnection.sessionBus()
@@ -42,7 +41,7 @@ def notify(summary, body, *, timeout_ms=15000,
 
 
 def _replaces_nothing():
-    """Notify's replaces_id, a u."""
+    """Return Notify's replaces_id, a u."""
     from PyQt6.QtCore import QMetaType
     from PyQt6.QtDBus import QDBusArgument
 
@@ -50,7 +49,7 @@ def _replaces_nothing():
 
 
 def _no_actions():
-    """Notify's actions, an as."""
+    """Return Notify's actions, an as."""
     from PyQt6.QtCore import QMetaType
     from PyQt6.QtDBus import QDBusArgument
 

@@ -27,17 +27,17 @@ def create_app():
 
     @app.errorhandler(sqlite3.IntegrityError)
     def constraint_violated(error):
-        """A CHECK or foreign key the store refused."""
+        """Answer a CHECK or foreign key the store refused."""
         return jsonify({"error": str(error)}), 400
 
     @app.errorhandler(BadRequest)
     def request_refused(error):
-        """Anything the client sent that cannot be honoured."""
+        """Answer a request the service cannot honour."""
         return jsonify({"error": str(error)}), 400
 
     @app.errorhandler(sqlite3.Error)
     def store_failed(error):
-        """Anything the store raised that is not a constraint violation."""
+        """Answer a store failure that is not a constraint violation."""
         log.exception("The store could not complete a request: %s", error)
         return jsonify({"error": "The household store could not complete that request."}), 500
 

@@ -53,7 +53,7 @@ class FoodGraphView(BaseGraphView):
         self.refresh()
 
     def _compute_rolling_avg(self, data: np.ndarray, window: int) -> np.ndarray:
-        """Each point is the mean of that day and the window - 1 before it."""
+        """Average each day with the window - 1 days before it."""
         if window <= 1:
             return data
         if len(data) < window:
@@ -61,7 +61,7 @@ class FoodGraphView(BaseGraphView):
         return np.convolve(data, np.ones(window)/window, mode='valid')
 
     def _hatch_estimated(self, ax, plot_dates, smoothed_estimate):
-        """Hatch the part of the calorie series that was guessed."""
+        """Hatch the part of the calorie series that was estimated."""
         if not len(smoothed_estimate) or not smoothed_estimate.any():
             return
         ax.fill_between(plot_dates, 0, smoothed_estimate,

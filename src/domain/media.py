@@ -13,7 +13,7 @@ class Place(NamedTuple):
 
 
 def away_ms(secs, phase_ms, standard_ms) -> int:
-    """How long this break keeps to itself before it will show anything."""
+    """Return how long this break waits before it will show anything."""
     away = max(0.0, float(secs or 0)) * 1000
     phase, standard = max(0, int(phase_ms or 0)), max(0, int(standard_ms or 0))
     if standard > 0:
@@ -22,13 +22,13 @@ def away_ms(secs, phase_ms, standard_ms) -> int:
 
 
 def opens_in(away, phase_ms, left_ms) -> int:
-    """What is left of that wait; zero once the break will show something."""
+    """Return what is left of that wait, zero once the break will show one."""
     elapsed = max(0, int(phase_ms or 0)) - max(0, int(left_ms or 0))
     return max(0, int(away or 0) - max(0, elapsed))
 
 
 def as_elapsed(ms) -> str:
-    """Milliseconds as a position in a file: "26:33", "1:26:35"."""
+    """Format milliseconds as a position in a file: "26:33", "1:26:35"."""
     total = max(0, int(ms or 0) // 1000)
     hours, rest = divmod(total, 3600)
     mins, secs = divmod(rest, 60)
@@ -38,7 +38,7 @@ def as_elapsed(ms) -> str:
 
 
 def how_far(place, unit=TIME) -> str:
-    """"26:33 / 1:26:35", or "42 / 310"; UNKNOWN if it cannot say."""
+    """Format "26:33 / 1:26:35" or "42 / 310", or UNKNOWN."""
     at, of = _bounded(place, unit)
     if of <= 0:
         return UNKNOWN
@@ -48,13 +48,13 @@ def how_far(place, unit=TIME) -> str:
 
 
 def fraction(place, unit=TIME) -> float:
-    """How much of it is behind the member, between nothing and all of it."""
+    """Return how much is behind the member, between nothing and all of it."""
     at, of = _bounded(place, unit)
     return at / of if of > 0 else 0.0
 
 
 def _bounded(place, unit):
-    """The pair as two numbers inside each other, pages counted from one."""
+    """Return the pair as two bounded numbers, pages counted from one."""
     at, of = (int(place.at or 0), int(place.of or 0)) if place else (0, 0)
     at, of = max(0, at), max(0, of)
     if of <= 0:

@@ -64,7 +64,7 @@ class TestEnabledWindows:
         assert {key for key, on in windows.items() if not on} == self.REST
 
     def test_the_template_names_every_tab_the_window_can_build(self, user_profile):
-        """An unnamed tab would fall back to enabled and undo the default."""
+        """Check every tab the window can build is named in the template."""
         from src.gui.main_window import MainWindow
 
         registry = {key for key, *_ in MainWindow.TAB_REGISTRY}

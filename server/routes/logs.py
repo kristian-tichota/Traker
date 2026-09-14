@@ -22,7 +22,7 @@ _SERVINGS = ("CASE WHEN l.servings IS NOT NULL THEN l.servings "
 
 
 def _since_clause():
-    """The optional ?since= bound, as (sql, params)."""
+    """Return the optional ?since= bound, as (sql, params)."""
     since = request.args.get("since")
     if not since:
         return "", ()
@@ -31,7 +31,7 @@ def _since_clause():
 
 
 def _resolve_item(conn, table: str, name: str, label: str):
-    """The catalog id for name, or a 400 saying it is not in the catalog."""
+    """Return the catalog id for name, or a 400 refusing the name."""
     if not isinstance(name, str):
         return None, (jsonify(
             {"error": f"{label} name must be text, not a {type(name).__name__}."}
@@ -45,7 +45,7 @@ def _resolve_item(conn, table: str, name: str, label: str):
 
 
 def _catalog_id(conn, table: str, name):
-    """The catalog id for name, or None — without deciding anything."""
+    """Return the catalog id for name, or None, deciding nothing."""
     if not isinstance(name, str):
         return None
     row = conn.execute(
@@ -55,7 +55,7 @@ def _catalog_id(conn, table: str, name):
 
 
 def _unknown_name(spec, name):
-    """The refusal for a name that is neither an item nor a set."""
+    """Return the refusal for a name that is neither an item nor a set."""
     return BadValue(
         f"{spec.domain.capitalize()} '{name}' not found in catalog, and there "
         f"is no {spec.word} by that name either.")
@@ -142,7 +142,7 @@ def get_food_logs():
 
 
 def _food_amount(payload) -> str:
-    """Which of servings/grams this write carries."""
+    """Return which of servings or grams this write carries."""
     given = [column for column in FOOD_AMOUNTS if payload.get(column) is not None]
     if len(given) == 1:
         return given[0]

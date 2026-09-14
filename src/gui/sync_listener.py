@@ -77,7 +77,7 @@ class SyncListener:
             time.sleep(0.05)
 
     def stop(self, timeout: float = 1.0):
-        """Stop listening; nothing this listener emits reaches the window after."""
+        """Stop listening, after which nothing this listener emits reaches the window."""
         self._is_running = False
         try:
             self.bridge.catalog_updated.disconnect()

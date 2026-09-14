@@ -10,7 +10,7 @@ KEYS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def chore_key(index) -> str:
-    """The key for the chore at index, or "" past the twenty-sixth."""
+    """Return the key for the chore at index, or "" past the twenty-sixth."""
     return KEYS[index] if 0 <= index < len(KEYS) else ""
 
 STANDING_COLOURS = {
@@ -39,13 +39,13 @@ class ChoreLine(QLabel):
         self._draw()
 
     def mark_done(self):
-        """Struck through, at once, on the member's own keystroke."""
+        """Strike the entry through at once, on the keystroke."""
         self.done = True
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self._draw()
 
     def text_shown(self) -> str:
-        """The line as it reads, for a test and for ChorePanel.lines."""
+        """Return the line as it reads."""
         key = DONE_MARK if self.done else (self.key or " ")
         return f"{key}  {self.entry.name}  ·  {self.entry.said()}"
 
@@ -79,7 +79,6 @@ class ChorePanel(QWidget):
         self.setVisible(False)
 
     def set_entries(self, entries):
-        """Replace what is offered."""
         self.entries = list(entries)
         self._clear()
         if not self.entries:
@@ -94,7 +93,7 @@ class ChorePanel(QWidget):
         self.setVisible(True)
 
     def chore_at(self, index):
-        """The chore a key opens, or None — which is a key left alone."""
+        """Return the chore a key opens, or None for a key left alone."""
         if 0 <= index < len(self.entries):
             return self.entries[index]
         return None
@@ -109,7 +108,7 @@ class ChorePanel(QWidget):
         return any(line.chore_id == chore_id and line.done for line in self._lines)
 
     def lines(self) -> list:
-        """Every line shown, title first, in the order shown."""
+        """Return every line shown, title first, in the order shown."""
         return [TITLE] + [line.text_shown() for line in self._lines]
 
     def _clicked(self, chore_id):

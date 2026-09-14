@@ -35,23 +35,23 @@ _ABSENT = object()
 
 
 def _cell(row, column):
-    """The raw value behind a cell of row, or None where it is short."""
+    """Return the raw value behind a cell of row, or None where it is short."""
     position = column + 1
     return row[position] if position < len(row) else None
 
 
 def numeric_fields(row_type):
-    """Which of a row NamedTuple's fields hold a number, by field index."""
+    """Return which fields of a row NamedTuple hold a number, by index."""
     return _fields_annotated(row_type, (int, float))
 
 
 def boolean_fields(row_type):
-    """Which fields hold a flag, by field index."""
+    """Return which fields hold a flag, by index."""
     return _fields_annotated(row_type, (bool,))
 
 
 def _fields_annotated(row_type, wanted):
-    """Field indices whose annotation is one of wanted, or None."""
+    """Return the field indices whose annotation is one of wanted, or None."""
     hints = next((held for held in
                   (getattr(cls, "__annotations__", None)
                    for cls in getattr(row_type, "__mro__", (row_type,)))
@@ -68,7 +68,7 @@ def _fields_annotated(row_type, wanted):
 
 
 def editable_columns(headers, mapping):
-    """Column indices a member may type into: the ones the mapping names."""
+    """Return the column indices that may be typed into, from the mapping."""
     return [index for index, header in enumerate(headers) if header in mapping]
 
 
@@ -114,21 +114,21 @@ class LogTableModel(QAbstractTableModel):
         return section + 1
 
     def value_at(self, row_index, column):
-        """The raw value behind a cell, for a reader that must not use the text."""
+        """Return the raw value behind a cell, for a reader that cannot use the text."""
         return self._value_at(row_index, column)
 
     def values_by_header(self, row_index) -> dict:
-        """One row as {header: typed value}, which is what a filter reads."""
+        """Return one row as {header: typed value}, as a filter reads it."""
         return {self._headers[column]: self._value_at(row_index, column)
                 for column in range(len(self._headers))}
 
     def fold_all(self, rows=None):
-        """Every row's folded form, computed without touching Qt."""
+        """Fold every row, without touching Qt."""
         rows = self._rows if rows is None else rows
         return {index: self._fold_row(index, rows) for index in range(len(rows))}
 
     def adopt_fold(self, prebuilt, rows):
-        """Take a fold computed off-thread, if it still describes these rows."""
+        """Take a fold computed off-thread, where it still describes these rows."""
         if rows is not self._rows:
             return False
         self._folded = prebuilt
@@ -144,12 +144,12 @@ class LogTableModel(QAbstractTableModel):
         return whole, by_header
 
     def values_of(self, row_index, headers):
-        """Just these columns of a row, typed."""
+        """Return only these columns of a row, typed."""
         return {header: self._value_at(row_index, self._headers.index(header))
                 for header in headers if header in self._headers}
 
     def folded(self, row_index):
-        """(whole-row text, {header: folded cell}) for matching, cached."""
+        """Return (row text, {header: folded cell}) for matching, cached."""
         cached = self._folded.get(row_index)
         if cached is None:
             cached = self._fold_row(row_index)
@@ -157,15 +157,15 @@ class LogTableModel(QAbstractTableModel):
         return cached
 
     def _value_at(self, row_index, column):
-        """The raw value behind a cell of the rows currently held."""
+        """Return the raw value behind a cell of the rows currently held."""
         return _cell(self._rows[row_index], column)
 
     def _references_an_item(self, column):
-        """Whether this column names the catalog item rather than a value."""
+        """Report whether this column names the catalog item rather than a value."""
         return column in self._item_columns
 
     def display_text(self, row_index, column):
-        """What the cell shows."""
+        """Return what the cell shows."""
         value = self._value_at(row_index, column)
         if value is None:
             if row_index in self._pending_rows:
@@ -184,13 +184,13 @@ class LogTableModel(QAbstractTableModel):
         return str(value)
 
     def _is_flag_column(self, column):
-        """Whether this column holds a flag, so an empty cell reads as blank."""
+        """Report whether this column holds a flag, so an empty cell reads blank."""
         if self._flag_fields is None:
             return False
         return (column + 1) in self._flag_fields
 
     def _is_numeric_column(self, column):
-        """Whether this column holds numbers, so an empty cell reads as zero."""
+        """Report whether this column holds numbers, so an empty cell reads zero."""
         if self._numeric_fields is None:
             return not self._references_an_item(column)
         return (column + 1) in self._numeric_fields
@@ -232,7 +232,7 @@ class LogTableModel(QAbstractTableModel):
         return EDITABLE_FLAGS if index.column() in self._editable else BASE_FLAGS
 
     def is_heading(self, row_index) -> bool:
-        """Whether this row heads a group rather than describing a stored row."""
+        """Report whether this row heads a group rather than describing a stored row."""
         return row_index in self._headings
 
     def editable_columns(self):
@@ -243,13 +243,13 @@ class LogTableModel(QAbstractTableModel):
         return row[0] if len(row) else None
 
     def row_id(self, index):
-        """The database id behind an index, or None for a pending row."""
+        """Return the database id behind an index, or None for a pending row."""
         if not index.isValid() or index.row() >= len(self._rows):
             return None
         return self._row_id_at(index.row())
 
     def row_at(self, index):
-        """The whole NamedTuple behind an index, for a reader that wants it typed."""
+        """Return the whole NamedTuple behind an index, typed."""
         if not index.isValid() or index.row() >= len(self._rows):
             return None
         return self._rows[index.row()]
@@ -271,7 +271,6 @@ class LogTableModel(QAbstractTableModel):
         return True
 
     def set_rows(self, rows):
-        """Replace every row."""
         incoming = list(rows)
         changed = self._changes_in(incoming)
         self.beginResetModel()
@@ -292,7 +291,7 @@ class LogTableModel(QAbstractTableModel):
         self.endResetModel()
 
     def _changes_in(self, incoming):
-        """Positions in incoming that are new here, or hold a new value."""
+        """Return the positions in incoming that are new here or hold a new value."""
         if not self._populated:
             return frozenset()
         known = {row[0]: row for row in self._rows
@@ -303,7 +302,7 @@ class LogTableModel(QAbstractTableModel):
             and (not len(row) or known.get(row[0], _ABSENT) != row))
 
     def changed_rows(self):
-        """Positions the last refresh brought in or altered."""
+        """Return the positions the last refresh brought in or altered."""
         return self._changed_rows
 
     def highlight_changes(self, strength: float):
@@ -325,7 +324,7 @@ class LogTableModel(QAbstractTableModel):
                     [Qt.ItemDataRole.BackgroundRole])
 
     def insert_pending_row(self, row):
-        """Show a row the server has confirmed but not yet described."""
+        """Show a row the service has confirmed but not yet described."""
         position = len(self._rows)
         self.beginInsertRows(QModelIndex(), position, position)
         self._rows.append(row)

@@ -8,7 +8,7 @@ LOCAL_SERVER_URL = "http://127.0.0.1:6035"
 
 
 def _load_server_creds():
-    """Environment, then the profile file, then the built-in local address."""
+    """Resolve credentials from the environment, then the profile, then the default."""
     from src.profile import PROFILE_PATH
 
     url = os.environ.get("TRAKER_SERVER_URL")

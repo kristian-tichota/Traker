@@ -9,7 +9,7 @@ from src.config import PALETTE
 
 
 def blend(ground: QColor, accent: QColor, amount: float) -> QColor:
-    """ground moved amount of the way towards accent, clamped."""
+    """Move ground amount of the way towards accent, clamped."""
     amount = max(0.0, min(1.0, amount))
     keep = 1.0 - amount
     return QColor(
@@ -42,14 +42,14 @@ class LoadingSpinner(QObject):
         self._timer.timeout.connect(self.advance)
 
     def waited_ms(self):
-        """Milliseconds since the wait began, or None if none is on."""
+        """Return milliseconds since the wait began, or None where none is on."""
         if self.started_at is None:
             return None
         return (time.monotonic() - self.started_at) * 1000.0
 
     @property
     def phase(self):
-        """0..1 through the revolution, or None while there is nothing to say."""
+        """Return 0..1 through the revolution, or None where there is nothing to show."""
         waited = self.waited_ms()
         if waited is None or waited < SPINNER_GRACE_MS:
             return None
@@ -60,7 +60,6 @@ class LoadingSpinner(QObject):
         return self.phase is not None
 
     def start(self):
-        """Begin waiting."""
         if self._timer.isActive():
             return
         self.started_at = time.monotonic()
@@ -75,7 +74,7 @@ class LoadingSpinner(QObject):
             self._widget.update()
 
     def advance(self):
-        """One frame: repaint if there is anything to show."""
+        """Advance one frame, repainting where there is anything to show."""
         if self.started_at is None:
             return
         if self.showing:

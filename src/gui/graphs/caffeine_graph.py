@@ -153,7 +153,7 @@ class CaffeineGraphView(BaseGraphView):
         self._last_hovered = current_hover
 
     def hover_text(self, date_str, data) -> str:
-        """What one day of the window says when the cursor is on it."""
+        """Return what one day of the window says under the cursor."""
         threshold = float(self.profile.get_metric("goals", "max_sleep_caffeine", 20.0))
         breach = data['residual'] - threshold
 
