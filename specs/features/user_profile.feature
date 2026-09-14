@@ -155,7 +155,7 @@ Feature: Personal profile
       When I close Traker
       Then they stay that way
       # Unlike the window rule above, which exists only while the window does.
-      # I asked for grey evenings, not for grey evenings while a tracker runs.
+      # The request is for grey evenings, not for grey evenings while Traker runs.
 
   Rule: The timer's split is declared per member
 
@@ -192,15 +192,15 @@ Feature: Personal profile
       Then its window is put on that desktop and that activity
       And it cannot be dragged off either of them
       And my screen does not move, and the log says where the window went
-      # Being taken to another desktop by a launch is worse than a window I
-      # have to go and find, and the log is what makes the second one
+      # Being taken to another desktop by a launch is worse than a window the
+      # member has to go and find, and the log is what makes the second one
       # explicable rather than a launch that seems to do nothing.
 
     Scenario: Forcing nothing is the default
       Given a generated profile
-      Then nothing of Traker's is written to my compositor's configuration
-      # It is my session. A member who has not asked for this should not find
-      # Traker in the list of their own window rules.
+      Then nothing of Traker's is written to the compositor's configuration
+      # A member who has not asked for this should not find Traker in the list
+      # of their own window rules.
 
     Scenario: And a monitor, which has to be asked for differently
       Given a [window] section naming a screen by its connector name
@@ -209,20 +209,19 @@ Feature: Personal profile
       And it is put back there when I let go of it somewhere else
       And it is not snatched back while I am still dragging it
       And the log says which monitor it went to, and what prompted the move
-      # My compositor's own setting for this is a *number*: an index into a
-      # list it rebuilds every boot, so it means a different monitor each time,
-      # and an index past the end of the list does nothing and says nothing.
-      # Asking for the output by name is the one form of this request my
-      # session has always honoured.
+      # KWin's own setting for this is a *number*: an index into a list it
+      # rebuilds every boot, so it means a different monitor each time, and an
+      # index past the end of the list does nothing and says nothing. Asking
+      # for the output by name is the form of the request KWin honours.
 
-    Scenario: Named the way I read them
+    Scenario: Named the way they are shown
       Given a [window] section
       Then a desktop may be named as it appears on the pager, or as its position
       And an activity may be named as it appears in the switcher
       And a screen is named as its connector, never as "primary"
       And all of them are resolved afresh on every launch
       # So renaming or rebuilding one does not leave something stale behind in
-      # my own configuration, which is what a stored uuid does.
+      # the member's configuration, which is what a stored uuid does.
 
     Scenario: A name this session does not have
       Given a [window] section naming a desktop or activity that is not there
@@ -234,7 +233,7 @@ Feature: Personal profile
       Given a [window] section naming a screen that is not there
       When I start Traker
       Then the window is left where the compositor put it, and nothing is moved
-      # A monitor I unplugged should not send my window somewhere arbitrary.
+      # An unplugged monitor must not send the window somewhere arbitrary.
 
     Scenario: A compositor that will not move the window
       Given a [window] section naming a screen
@@ -265,9 +264,9 @@ Feature: Personal profile
       When a break shows me a file
       Then it goes to the monitor the window was forced onto
       And naming one for the break still overrides it
-      # The window is on that monitor because that is where I look. Falling
-      # back to "primary" instead means the first output the compositor
-      # announced, which on my session is the screen at my far left.
+      # The window is on that monitor because that is where the member looks.
+      # Falling back to "primary" instead means the first output the compositor
+      # announced, which is not necessarily the one in front of them.
 
     Scenario: It cannot take a break with it
       Given a [window] section naming a desktop and an activity

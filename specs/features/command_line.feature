@@ -84,7 +84,7 @@ Feature: Command line logging
       When I submit ":cols", ":rest" or ":break" with no argument
       Then the status bar reports what it would otherwise have changed
       # The cheapest thing to type is the commonest thing meant, and with
-      # nothing to change there is nothing left to mean but "tell me".
+      # nothing to change there is nothing left to mean but a readout.
 
     Scenario: It reports through the same line as every other command
       When such a command is refused

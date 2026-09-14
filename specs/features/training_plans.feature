@@ -193,8 +193,8 @@ Feature: Training plans
       Given a movement prescribing three sets of eight to twelve at 16.5 kg
       When I log that session from the plan
       Then the row holds 8, 8, 8 at 16.5 kg with the prescribed effort
-      # The number I have to beat, not one I would edit downwards on every
-      # session that went to plan.
+      # The number to beat, not one edited downwards on every session that
+      # went to plan.
 
     Scenario: A hold is written in seconds
       Given a movement measured in seconds, prescribing three holds of thirty
@@ -208,7 +208,7 @@ Feature: Training plans
     Scenario: A movement whose exercise was deleted refuses the whole session
       When one movement's catalog item is no longer there
       Then the session is refused rather than logged short
-      # A session missing two movements reads as one I cut short.
+      # A session missing two movements reads as one cut short.
 
     Scenario: A logged session marks its day done
       When I log a planned session

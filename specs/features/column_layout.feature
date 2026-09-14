@@ -204,7 +204,7 @@ Feature: Arranging the columns of a table
       Given the service is unreachable
       When I arrange a table
       Then the columns move anyway and the status bar says it was not saved
-      # The columns are already where I put them; what failed is remembering.
+      # The columns are already where they were put; what failed is remembering.
 
   Rule: A stored layout outlives the code that wrote it
 
