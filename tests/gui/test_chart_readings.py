@@ -67,8 +67,24 @@ class TestANutrientIsMatchedByItsKey:
 
 
 class TestSaturationIsMeasuredAgainstToday:
+    B12_TARGET = 500.0
+
     @pytest.fixture
-    def rendered(self, make_view, recording_db):
+    def b12_target(self, profile_path):
+        """A declared B12 target, which a generated profile leaves at zero."""
+        import src.profile as profile_module
+
+        profile_module.UserProfile()
+        written = profile_path.read_text(encoding="utf-8")
+        declared = '[supplement_targets.b12]\nname = "B12 (mcg)"\ntarget = '
+        assert f"{declared}0.0" in written, "the [supplement_targets] template has moved"
+        profile_path.write_text(
+            written.replace(f"{declared}0.0", f"{declared}{self.B12_TARGET}"),
+            encoding="utf-8")
+        profile_module.reload_profile()
+
+    @pytest.fixture
+    def rendered(self, b12_target, make_view, recording_db):
         def _render(rows):
             view = make_view(SupplementGraphView)
             view.draw_chart(rows)
@@ -79,7 +95,7 @@ class TestSaturationIsMeasuredAgainstToday:
     def test_a_full_dose_today_reads_as_reached(self, rendered):
         today = datetime.date.today().isoformat()
 
-        view = rendered([supplement_row(today, b12_mcg=500.0)])
+        view = rendered([supplement_row(today, b12_mcg=self.B12_TARGET)])
 
         b12 = next(entry for entry in view.hover_data.values()
                    if entry["name"].startswith("B12"))
@@ -88,17 +104,17 @@ class TestSaturationIsMeasuredAgainstToday:
     def test_it_is_not_diluted_by_the_days_before_it(self, rendered):
         today = datetime.date.today().isoformat()
 
-        view = rendered([supplement_row(today, b12_mcg=500.0)])
+        view = rendered([supplement_row(today, b12_mcg=self.B12_TARGET)])
 
         b12 = next(entry for entry in view.hover_data.values()
                    if entry["name"].startswith("B12"))
-        assert b12["avg"] == pytest.approx(500.0 / SupplementGraphView.WINDOW_DAYS)
+        assert b12["avg"] == pytest.approx(self.B12_TARGET / SupplementGraphView.WINDOW_DAYS)
         assert b12["pct"] > b12["avg"] / b12["target"] * 100.0
 
     def test_nothing_today_reads_as_not_reached_however_good_the_week_was(self, rendered):
         yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 
-        view = rendered([supplement_row(yesterday, b12_mcg=500.0)])
+        view = rendered([supplement_row(yesterday, b12_mcg=self.B12_TARGET)])
 
         b12 = next(entry for entry in view.hover_data.values()
                    if entry["name"].startswith("B12"))
