@@ -234,11 +234,11 @@ class TestSchedule:
 
     def test_a_time_inside_a_block_reports_that_regime(self, user_profile, monkeypatch):
         self._at(monkeypatch, "10:00")
-        assert user_profile.get_current_regime() == "Academic Work"
+        assert user_profile.get_current_regime() == "Work"
 
     def test_the_end_of_a_block_belongs_to_the_next_one(self, user_profile, monkeypatch):
         self._at(monkeypatch, "14:00")
-        assert user_profile.get_current_regime() == "Job & Admin"
+        assert user_profile.get_current_regime() == "Admin"
 
     def test_time_outside_every_block_is_unscheduled(self, user_profile, monkeypatch):
         self._at(monkeypatch, "03:00")
@@ -253,23 +253,23 @@ class TestSchedule:
 
     def test_a_named_day_overrides_the_default_schedule(self, write_profile, monkeypatch):
         profile = write_profile(
-            '[schedule.default]\n"06:00-14:00" = "Academic Work"\n'
-            '[schedule.saturday]\n"06:00-14:00" = "Free Time"\n'
+            '[schedule.default]\n"06:00-14:00" = "Work"\n'
+            '[schedule.saturday]\n"06:00-14:00" = "Personal"\n'
         )
         self._at(monkeypatch, "10:00", weekday="Saturday")
-        assert profile.get_current_regime() == "Free Time"
+        assert profile.get_current_regime() == "Personal"
         self._at(monkeypatch, "10:00", weekday="Monday")
-        assert profile.get_current_regime() == "Academic Work"
+        assert profile.get_current_regime() == "Work"
 
     def test_a_malformed_time_range_is_skipped_rather_than_fatal(self, write_profile, monkeypatch):
         profile = write_profile(
-            '[schedule.default]\n"garbage" = "Nonsense"\n"06:00-14:00" = "Academic Work"\n'
+            '[schedule.default]\n"garbage" = "Nonsense"\n"06:00-14:00" = "Work"\n'
         )
         self._at(monkeypatch, "10:00")
-        assert profile.get_current_regime() == "Academic Work"
+        assert profile.get_current_regime() == "Work"
 
     def test_regime_colours_come_from_the_profile(self, user_profile):
-        assert user_profile.get_regime_color("Free Time", "#000000") == "#859900"
+        assert user_profile.get_regime_color("Personal", "#000000") == "#859900"
 
     def test_an_unknown_regime_uses_the_supplied_fallback(self, user_profile):
         assert user_profile.get_regime_color("Napping", "#123456") == "#123456"

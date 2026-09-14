@@ -30,18 +30,18 @@ DEFAULT_IDLE_PAUSE_SECS = 300
 DEFAULT_STOP_HOLD_SECS = 10
 
 DEFAULT_SUPPLEMENT_TARGETS = [
-    {"key": "b12", "name": "B12 (mcg)", "target": 500.0},
-    {"key": "iodine", "name": "Iodine (mcg)", "target": 150.0},
-    {"key": "creatine", "name": "Creatine (g)", "target": 5.0},
-    {"key": "d3", "name": "D3 (IU)", "target": 4000.0},
-    {"key": "k2", "name": "K2 (mcg)", "target": 100.0},
-    {"key": "dha", "name": "DHA (mg)", "target": 500.0},
-    {"key": "epa", "name": "EPA (mg)", "target": 500.0},
-    {"key": "calcium", "name": "Calcium (mg)", "target": 800.0},
-    {"key": "magnesium", "name": "Magnesium (mg)", "target": 400.0},
-    {"key": "zinc", "name": "Zinc (mg)", "target": 15.0},
-    {"key": "c", "name": "C (mg)", "target": 500.0},
-    {"key": "l_theanine", "name": "L-Theanine (mg)", "target": 200.0},
+    {"key": "b12", "name": "B12 (mcg)", "target": 0.0},
+    {"key": "iodine", "name": "Iodine (mcg)", "target": 0.0},
+    {"key": "creatine", "name": "Creatine (g)", "target": 0.0},
+    {"key": "d3", "name": "D3 (IU)", "target": 0.0},
+    {"key": "k2", "name": "K2 (mcg)", "target": 0.0},
+    {"key": "dha", "name": "DHA (mg)", "target": 0.0},
+    {"key": "epa", "name": "EPA (mg)", "target": 0.0},
+    {"key": "calcium", "name": "Calcium (mg)", "target": 0.0},
+    {"key": "magnesium", "name": "Magnesium (mg)", "target": 0.0},
+    {"key": "zinc", "name": "Zinc (mg)", "target": 0.0},
+    {"key": "c", "name": "C (mg)", "target": 0.0},
+    {"key": "l_theanine", "name": "L-Theanine (mg)", "target": 0.0},
 ]
 
 
@@ -310,28 +310,32 @@ sheet_mode = "s"
 filter = "/"
 sort = "o"
 
+# Which regime each part of the day belongs to. The names are yours; a time
+# outside every block reports "Unscheduled". A [schedule.<weekday>] table,
+# lower case, replaces this one for that day.
 [schedule.default]
-"06:00-14:00" = "Academic Work"
-"14:00-18:00" = "Job & Admin"
-"18:00-20:00" = "Free Time"
-"20:00-22:00" = "Strict Recovery"
+"09:00-13:00" = "Work"
+"13:00-14:00" = "Break"
+"14:00-18:00" = "Admin"
+"18:00-22:00" = "Personal"
 
-# Solarized, like everything else the member sees. Written out of PALETTE
-# rather than as five literals, which is the same rule widget code follows.
+# One colour per regime name above, plus "Unscheduled". A name with no entry
+# here falls back to the colour the view asks for.
 [regime_colors]
-"Academic Work" = "{PALETTE['magenta']}"
-"Job & Admin" = "{PALETTE['blue']}"
-"Free Time" = "{PALETTE['green']}"
-"Strict Recovery" = "{PALETTE['violet']}"
+"Work" = "{PALETTE['magenta']}"
+"Break" = "{PALETTE['blue']}"
+"Admin" = "{PALETTE['violet']}"
+"Personal" = "{PALETTE['green']}"
 "Unscheduled" = "{PALETTE['base01']}"
 
-[exercise_goals.db_overhead_press]
-target_weight = 30.0
-target_reps = "10,10,12"
-
-[exercise_goals.db_skull_crushers]
-target_weight = 12.5
-target_reps = "10,10,10"
+# A target per exercise, drawn on the Exercise graph beside what the ledger
+# holds. The key is the exercise's catalog name in lower case, spaces or
+# underscores. Both fields are required for a goal to be drawn.
+#
+# [exercise_goals.overhead_press]
+# target_weight = 30.0
+# target_reps = "10,10,12"
+[exercise_goals]
 
 {_supplement_targets_toml()}"""
     with open(PROFILE_PATH, "w", encoding="utf-8") as f:
