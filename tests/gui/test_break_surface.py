@@ -129,14 +129,17 @@ class TestWhatItSays:
 
         assert timer.upcoming.lines() == []
 
-    def test_the_break_running_out_takes_it_away(self, timer, settled):
+    def test_the_break_running_out_leaves_it_up_until_focus_starts(
+            self, timer, settled):
         enter_strict_break(timer)
         settled()
+        listed = timer.upcoming.lines()
+        assert listed
 
         advance(timer, timer.break_ms + 1000)
 
         assert timer.overlays
-        assert timer.upcoming.lines() == []
+        assert timer.upcoming.lines() == listed
 
         timer._toggle_timer()
 

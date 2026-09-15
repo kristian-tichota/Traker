@@ -25,14 +25,14 @@ stays where it was, behind them. The keyboard starts on the wall covering the sc
 is on.
 
 A wall refuses `Alt+F4` and the application refuses to quit, though terminating the process still
-works. Switching a monitor off is not an exit, because the walls are rebuilt shortly after the screens
-settle and an untouched wall is left alone, so a film on it is undisturbed. Pause and skip are
-refused, and the screen states why. Holding `Esc` for `release_hold_secs` abandons the break rather
-than postponing it, and the remaining time is recorded as `overridden_break`. When the break ends the
-walls stay and stop holding anything: they display `BREAK OVER` and the key to press, they remain in
-front of every screen while they do, the desktops are restored, the switch is not reversed, and the
-focus is released. A wall shows the current session, the chores that are due and, after `away_secs`,
-a configured activity; the chore tick is the one break surface that writes.
+works. Switching a monitor off is not an exit: the walls are rebuilt once the screens settle, and an
+untouched wall is left alone. Pause and skip are refused, and the screen states why. Holding `Esc`
+for `release_hold_secs` abandons the break rather than postponing it, and the remaining time is
+recorded as `overridden_break`. When the break ends the walls stay and give up the desktops, the
+switch and the focus: the countdown alone becomes `BREAK OVER` and a count up from that end, every
+other readout stands, a file goes on playing under the keys that drive it, and the press that starts
+focus takes the walls away. A wall shows the current session, the chores that are due and, after
+`away_secs`, a configured activity; the chore tick is the one break surface that writes.
 
 ## Break activities
 

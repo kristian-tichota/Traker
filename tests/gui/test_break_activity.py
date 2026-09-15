@@ -689,17 +689,41 @@ class TestTheBreakGoesOnBeingABreak:
 
         assert timer.waiting_for_work_start is True
 
-    def test_and_what_was_on_for_it_stops(self, timer):
+    def test_and_what_was_on_for_it_goes_on_playing(self, timer):
         enter_strict_break(timer)
         send_key(timer, Qt.Key.Key_Return)
         pane = timer.media_pane_factory.last
 
         advance(timer, timer.break_ms + 1000)
 
-        assert "stop" in pane.calls
-        assert timer._showing is None
-        assert timer._media_host.is_showing_media() is False
+        assert "stop" not in pane.calls
+        assert timer._showing is not None
+        assert timer._media_host.is_showing_media() is True
         assert timer._strict_engaged is True
+
+    def test_its_keys_go_on_driving_it(self, timer):
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_Return)
+        pane = timer.media_pane_factory.last
+        advance(timer, timer.break_ms + 1000)
+
+        send_key(timer, Qt.Key.Key_Space)
+
+        assert "toggle" in pane.calls
+
+    def test_starting_focus_takes_it_away_and_keeps_the_place(self, timer):
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_2)
+        pane = timer.media_pane_factory.last
+        pane.at = 754_000
+        advance(timer, timer.break_ms + 1000)
+
+        send_key(timer, RELEASE_KEY)
+
+        assert "stop" in pane.calls
+        assert timer.overlays == []
+        assert rest_positions.read(timer._positions_path) == {
+            "/x/rest.mp4": Place(754_000, 0)}
 
     def test_the_engine_slows_down_while_the_walls_are_up(self, timer, qapp):
         timer.parent().show()
@@ -735,12 +759,13 @@ class TestWhereItStopped:
     def positions(self, timer):
         return rest_positions.read(timer._positions_path)
 
-    def test_the_break_ending_remembers_it(self, timer):
+    def test_the_walls_going_remembers_it(self, timer):
         enter_strict_break(timer)
         send_key(timer, Qt.Key.Key_2)
         timer.media_pane_factory.last.at = 754_000
 
         advance(timer, timer.break_ms + 1000)
+        timer._clear_overlays()
 
         assert self.positions(timer) == {"/x/rest.mp4": Place(754_000, 0)}
 
@@ -866,8 +891,8 @@ class TestWhatTheScreenShows:
 
         advance(timer, timer.break_ms + 1000)
 
-        assert timer._showing is None
-        assert "BREAK OVER" in surface.strip.text()
+        assert timer._showing is not None
+        assert "BREAK OVER +0:00" in surface.strip.text()
 
 
 class TestTheQueue:
@@ -1261,11 +1286,11 @@ class TestTheReadoutIsOnTheWallBesideTheFilm:
         for wall in watching.overlays:
             assert wall.playing.isVisibleTo(wall.readouts) is False
 
-    def test_the_break_running_out_takes_it_off(self, watching):
+    def test_the_break_running_out_leaves_it_on(self, watching):
         advance(watching, watching.break_ms + 1000)
 
         for wall in watching.overlays:
-            assert wall.playing.isVisibleTo(wall.readouts) is False
+            assert wall.playing.isVisibleTo(wall.readouts) is True
 
     def test_the_player_is_asked_once_a_frame_and_not_once_a_wall(self, watching):
         pane = watching.media_pane_factory.last
@@ -1305,14 +1330,14 @@ class TestTheCardOnEveryWall:
         assert overlay.keys.hints == ()
         assert overlay.keys.isHidden() is True
 
-    def test_the_break_running_out_takes_them_off_too(self, timer):
+    def test_the_break_running_out_renames_the_key_it_prices(self, timer):
         enter_strict_break(timer)
         overlay = covered_screen(timer)
         send_key(timer, Qt.Key.Key_Return)
 
         advance(timer, timer.break_ms + 1000)
 
-        assert overlay.keys.hints == ()
+        assert dict(overlay.keys.hints)[pomodoro_view.RELEASE_KEY_NAME] == "start focus"
 
     def test_a_second_offer_renames_them_everywhere(self, timer):
         enter_strict_break(timer)

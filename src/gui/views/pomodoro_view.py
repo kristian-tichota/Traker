@@ -296,10 +296,10 @@ class StrictOverlay(QWidget):
         self.texture_page = QOpenGLWidget(self)
         self.texture_page.hide()
 
-        frame = QVBoxLayout(self)
-        frame.setContentsMargins(0, 0, 0, 0)
+        self.frame = QVBoxLayout(self)
+        self.frame.setContentsMargins(0, 0, 0, 0)
         self.stack = QStackedWidget(self)
-        frame.addWidget(self.stack)
+        self.frame.addWidget(self.stack)
         self.readouts = QWidget(self.stack)
         self.stack.addWidget(self.readouts)
         self.media = None
@@ -439,7 +439,8 @@ class StrictOverlay(QWidget):
     def update_display(self):
         """Update the countdown and the way on, both on every tick."""
         if self.timer_ref.waiting_for_work_start:
-            self.label.setText("BREAK OVER")
+            self.label.setText(
+                f"BREAK OVER\n+{media.as_elapsed(self.timer_ref.over_by_ms())}")
         else:
             mins, secs = divmod(int(self.timer_ref.time_left_ms // 1000), 60)
             self.label.setText(f"REST INTERVAL\n{mins:02d}:{secs:02d}")
@@ -455,9 +456,12 @@ class StrictOverlay(QWidget):
         self._dressed = dressed
         self._prompting = prompting
 
+        inset = PROMPT_BORDER_PX if prompting else 0
+        self.frame.setContentsMargins(inset, inset, inset, inset)
+
         if prompting:
-            headline = max(28, self.height() // 7)
-            instruction = max(11, self.height() // 22)
+            headline = max(28, self.height() // 16)
+            instruction = max(11, self.height() // 48)
             self.label.setStyleSheet(f"color: {PALETTE['blue']};"
                                      f" font-size: {headline}px;"
                                      f" font-family: 'Fira Code';")
@@ -790,6 +794,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self.waiting_for_work_start = True
         self.waiting_for_break_start = False
+        self._over_since_ms = 0
 
         self._handing_over = False
 
@@ -1468,8 +1473,6 @@ class PomodoroView(ShutdownMixin, QWidget):
             if self.strict_mode:
                 self._enforce_strict_mode()
         else:
-            self._stop_showing()
-
             self.current_phase = "work"
             self.time_left_ms = self.work_ms
             self.lbl_phase.setText("REST OVER - PRESS PLAY")
@@ -1477,17 +1480,25 @@ class PomodoroView(ShutdownMixin, QWidget):
 
             self.waiting_for_work_start = True
             self.waiting_for_break_start = False
+            self._over_since_ms = QDateTime.currentMSecsSinceEpoch()
             self.is_running = False
             self.btn_play.set_playing(False)
 
             if self._strict_engaged:
                 self._stand_down_enforcement()
+                self._say_which_keys_drive_it()
 
         self.lbl_timer.setText(self._format_high_precision(self.time_left_ms))
         self._update_tray()
         self._apply_exit_controls()
         self._redraw_break_surfaces()
         self.refresh()
+
+    def over_by_ms(self) -> int:
+        """Return how long the wall has stood past the end of its break."""
+        if not self.waiting_for_work_start or not self._over_since_ms:
+            return 0
+        return max(0, QDateTime.currentMSecsSinceEpoch() - self._over_since_ms)
 
     def release_hint(self) -> str:
         """Return what to hold, and for how long."""
@@ -1510,8 +1521,11 @@ class PomodoroView(ShutdownMixin, QWidget):
         ]
         if len(self._offers) > 1:
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
-        hints.append((f"{RELEASE_KEY_NAME} {self.release_hold_secs:.0f}s",
-                      "leave the break"))
+        if self.prompts_for_focus():
+            hints.append((RELEASE_KEY_NAME, "start focus"))
+        else:
+            hints.append((f"{RELEASE_KEY_NAME} {self.release_hold_secs:.0f}s",
+                          "leave the break"))
         return hints
 
     def take_offers(self) -> list:
@@ -1664,13 +1678,15 @@ class PomodoroView(ShutdownMixin, QWidget):
                 self._toggle_timer()
                 return True
 
-        if self._strict_break_is_holding():
-            if event.key() == RELEASE_KEY and not event.isAutoRepeat():
-                if event.type() == QEvent.Type.KeyPress:
-                    self.begin_hold()
-                else:
-                    self.cancel_hold()
-                return True
+        if self._strict_break_is_holding() \
+                and event.key() == RELEASE_KEY and not event.isAutoRepeat():
+            if event.type() == QEvent.Type.KeyPress:
+                self.begin_hold()
+            else:
+                self.cancel_hold()
+            return True
+
+        if self._strict_engaged:
             if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat() \
                     and not is_typing_into(watched):
                 activity = self._activity_for(event.key())
@@ -1793,7 +1809,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _show_activity(self, activity) -> bool:
         """Show activity on the primary screen's wall."""
-        if not self._strict_break_is_holding():
+        if not self._strict_engaged:
             return False
 
         if self.opens_in_ms() > 0:
@@ -1812,22 +1828,28 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self._remember_where_it_stopped()
 
-        hints = self.media_key_hints(activity.kind)
         surface.open(
             activity,
             start_at=rest_positions.position_for(activity.path, self._positions_path),
-            key_hints=hints)
+            key_hints=self.media_key_hints(activity.kind))
         self._showing = activity
         self._media_host.show_media()
         self._media_host.raise_()
         self._media_host.activateWindow()
+        self._say_which_keys_drive_it()
+        self._redraw_break_surfaces()
+        return True
 
+    def _say_which_keys_drive_it(self):
+        """Name the keys that drive what is showing, on every surface showing it."""
+        if self._showing is None:
+            return
+        hints = self.media_key_hints(self._showing.kind)
+        if self.media_surface is not None:
+            self.media_surface.set_keys(hints)
         for wall in self.overlays:
             if wall is not self._media_host:
                 wall.set_keys(hints)
-
-        self._redraw_break_surfaces()
-        return True
 
     def _remember_where_it_stopped(self):
         """Stop what is showing and keep the position."""
@@ -1887,7 +1909,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _show_chores(self):
         """Hand what is due to every surface with room for it."""
-        entries = self._chores if self._strict_break_is_holding() else []
+        entries = self._chores if self._strict_engaged else []
         self.chores_panel.set_entries(entries)
         for overlay in self.overlays:
             overlay.set_chores(entries)
@@ -1926,7 +1948,7 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _show_upcoming(self):
         """Hand what is coming to every surface with room for it."""
         sections = (self._upcoming + self.offer_section()
-                    if self._strict_break_is_holding() else [])
+                    if self._strict_engaged else [])
         self.upcoming.set_sections(sections)
         for overlay in self.overlays:
             overlay.set_upcoming(sections)

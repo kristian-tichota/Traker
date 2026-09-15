@@ -900,10 +900,20 @@ class TestWhenTheBreakRunsOut:
 
         wall = timer.overlays[0]
         assert wall.isVisible() is True
-        assert wall.label.text() == "BREAK OVER"
+        assert wall.label.text().startswith("BREAK OVER\n+")
         assert wall.lbl_hint.text() == f"PRESS {pomodoro_view.RELEASE_KEY_NAME} TO START FOCUS"
 
-    def test_the_sign_is_sized_off_the_screen_it_is_on(self, timer):
+    def test_it_counts_the_seconds_since_the_break_ran_out(self, timer):
+        enter_strict_break(timer)
+        advance(timer, timer.break_ms + 1000)
+        wall = timer.overlays[0]
+
+        timer._over_since_ms -= 83_000
+        wall.update_display()
+
+        assert wall.label.text() == "BREAK OVER\n+1:23"
+
+    def test_the_sign_is_sized_off_the_screen_but_leaves_the_wall_its_room(self, timer):
         enter_strict_break(timer)
         wall = timer.overlays[0]
         wall.resize(1000, 700)
@@ -913,7 +923,8 @@ class TestWhenTheBreakRunsOut:
         sign = font_size_of(wall.label)
         wall.resize(2000, 1400)
 
-        assert sign > quiet * 2
+        assert sign > quiet
+        assert wall.label.sizeHint().height() < wall.height() // 3
         assert font_size_of(wall.label) > sign
 
     def test_the_wall_takes_a_frame_that_carries_across_a_room(self, timer):

@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QFrame, QLabel, QStackedWidget, QVBoxLayout,
 
 from src.config import PALETTE
 from src.desktop.activities import DOCUMENT, readout_of
-from src.domain.media import Place
+from src.domain.media import Place, as_elapsed
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
 
@@ -502,7 +502,9 @@ class MediaSurface(QWidget):
             self.strip.setText(f"LEAVING IN {left}s")
             return
         if self.timer_ref.waiting_for_work_start:
-            self.strip.setText(f"BREAK OVER · {self.timer_ref.wall_hint()}")
+            self.strip.setText(
+                f"BREAK OVER +{as_elapsed(self.timer_ref.over_by_ms())}"
+                f" · {self.timer_ref.wall_hint()}")
             return
         mins, secs = divmod(int(self.timer_ref.time_left_ms // 1000), 60)
         self.strip.setText(

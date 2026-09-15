@@ -360,14 +360,15 @@ Feature: Focus timer
       When the break reaches zero
       Then the walls stay in place while the timer waits for me
       And each one is still in front of the screen it covers, every screen
-      And each one says the break is over and to press the release key once
+      And the countdown alone becomes the break being over, counting up from its end
       And it says it at the scale of the screen it is on, inside a frame
-      And that one press starts focus and takes them away
+      And the rest of the wall stands: what is coming, what is due, what is playing
+      And the keys that drive what is playing go on driving it
+      And that one press starts focus, takes the walls away and keeps the place
       And the controls that start focus are mine to use again
       But nothing is held any longer: the compositor has its desktops back
       And a switch is no longer put straight back
       And no wall takes the focus off what I reach for any more
-      And what is coming and what is due go off them, with their keys
 
   Rule: A strict break has one exit, and it costs seconds
 

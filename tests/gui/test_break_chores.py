@@ -165,15 +165,17 @@ class TestWhatABreakLists:
         settled()
         assert timer.chores_panel.lines() == before
 
-    def test_it_is_gone_once_the_break_has_run_out(self, timer, settled):
+    def test_it_stays_until_focus_starts(self, timer, settled):
         enter_strict_break(timer)
         settled()
+        listed = timer.chores_panel.lines()
+        assert listed
 
         advance(timer, timer.break_ms + 1000)
 
         assert timer.overlays
-        assert not timer.chores_panel.isVisible()
-        assert all(not wall.chores.isVisible() for wall in timer.overlays)
+        assert timer.chores_panel.lines() == listed
+        assert all(wall.chores.lines() == listed for wall in timer.overlays)
 
     def test_it_is_gone_once_the_screens_are_given_back(self, timer, settled):
         enter_strict_break(timer)

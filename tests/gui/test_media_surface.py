@@ -37,6 +37,7 @@ def timer_double():
         time_left_ms = 125_000
         release_hold_secs = 10
         waiting_for_work_start = False
+        over_by_ms = staticmethod(lambda: 83_000)
 
         def wall_hint(self):
             return ("PRESS ESC TO START FOCUS" if self.waiting_for_work_start
@@ -408,7 +409,7 @@ class TestTheSurfaceAroundThem:
         surface = MediaSurface(timer_double, pane_factory=Recorder,
                                only_screen=True)
 
-        assert "BREAK OVER" in surface.strip.text()
+        assert "BREAK OVER +1:23" in surface.strip.text()
         assert "PRESS ESC TO START FOCUS" in surface.strip.text()
 
     def test_and_how_much_of_the_exit_has_been_paid(self, qapp, activity,
