@@ -1830,8 +1830,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         surface.open(
             activity,
-            start_at=rest_positions.position_for(activity.path, self._positions_path),
-            key_hints=self.media_key_hints(activity.kind))
+            start_at=rest_positions.position_for(activity.path, self._positions_path))
         self._showing = activity
         self._media_host.show_media()
         self._media_host.raise_()
