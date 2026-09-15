@@ -225,6 +225,16 @@ Feature: Filtering and sorting what a table shows
       When I sort by that column
       Then that row is last, ascending or descending
 
+    Scenario: Clicking a column heading sorts it the same way
+      When I click a column heading
+      Then the table is sorted by that column, ascending
+      And a second click reverses it, and a third restores the stored order
+
+    Scenario: The heading carries an arrow for the sort in force
+      When a column is sorted
+      Then its heading shows an arrow for the direction
+      And restoring the stored order takes the arrow away
+
     Scenario: A filter and a sort hold together
       Given a filter is in force
       When I sort by a column

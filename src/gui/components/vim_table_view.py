@@ -25,6 +25,8 @@ class VimTableView(QTableView):
 
     sort_requested = pyqtSignal(object)
 
+    sort_column_requested = pyqtSignal(object, int)
+
     header_menu_requested = pyqtSignal(int, QPoint)
 
     columns_rearranged = pyqtSignal(int)
@@ -43,6 +45,9 @@ class VimTableView(QTableView):
         self._measured = False
 
         self.horizontalHeader().setSectionsMovable(True)
+        self.horizontalHeader().setSectionsClickable(True)
+        self.horizontalHeader().setSortIndicatorShown(True)
+        self.horizontalHeader().sectionClicked.connect(self._on_section_clicked)
         self.horizontalHeader().setContextMenuPolicy(
             Qt.ContextMenuPolicy.CustomContextMenu)
         self.horizontalHeader().customContextMenuRequested.connect(
@@ -64,6 +69,10 @@ class VimTableView(QTableView):
             return
         self.resizeColumnsToContents()
         self._measured = True
+
+    def show_sort_indicator(self, column, order):
+        """Point the header arrow at column, clearing it where column is -1."""
+        self.horizontalHeader().setSortIndicator(column, order)
 
     def column_layout(self, declared) -> ColumnLayout:
         """Return what this header is showing, as a ColumnLayout."""
@@ -135,6 +144,9 @@ class VimTableView(QTableView):
         header = self.horizontalHeader()
         self.header_menu_requested.emit(
             self.table_idx, self.mapFromGlobal(header.mapToGlobal(pos)))
+
+    def _on_section_clicked(self, logical):
+        self.sort_column_requested.emit(self, logical)
 
     def _on_section_moved(self, _logical, _from_visual, _to_visual):
         if self._rearranging:

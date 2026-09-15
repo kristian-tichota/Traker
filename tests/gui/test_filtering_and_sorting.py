@@ -1,5 +1,6 @@
 import pytest
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtTest import QTest
 
 from src.database.rows import DailyTotals, FoodLogRow, MatchedTotals
 from src.gui.filtering import parse
@@ -23,6 +24,20 @@ LEDGER = [
     food(4, "2026-03-14", "Dinner", "Řízek s bramborem", 1.0, 800.0),
     food(5, "2026-09-06", "Breakfast", None, 1.0, None),
 ]
+
+
+@pytest.fixture
+def window(qapp, profile_path, recording_db, settled):
+    from src.gui.main_window import MainWindow
+
+    recording_db.food_logs = LEDGER
+    built = MainWindow(recording_db)
+    built.tabs.setCurrentIndex(built.tab_indices["food"])
+    built.show()
+    settled()
+    yield built
+    built.close()
+    built.deleteLater()
 
 
 @pytest.fixture
@@ -309,3 +324,88 @@ class TestTheBarsKeepMeaningToday:
 
         assert view.matched_totals().energy_kcal == pytest.approx(812.4)
         assert view.cal_bar.actual_value == pytest.approx(1234.0)
+
+
+def click_header(view, header, table_idx=0):
+    """Click the section named header, as a member reaching for the arrow."""
+    table = view._table_widgets[table_idx]
+    column = view.headers[table_idx].index(header)
+    table.resizeColumnsToContents()
+    table.scrollTo(table.model().index(0, column))
+    bar = table.horizontalHeader()
+    x = bar.sectionViewportPosition(column) + bar.sectionSize(column) // 2
+    QTest.mouseClick(bar.viewport(), Qt.MouseButton.LeftButton,
+                     Qt.KeyboardModifier.NoModifier, QPoint(x, bar.height() // 2))
+
+
+class TestCyclingOneColumn:
+    def test_the_first_turn_is_ascending(self, view):
+        assert view.cycle_sort(self._column(view)) == "ascending"
+        assert visible_names(view)[0] == "Grilled Salmon"
+
+    def test_the_second_turn_reverses_it(self, view):
+        view.cycle_sort(self._column(view))
+
+        assert view.cycle_sort(self._column(view)) == "descending"
+        assert visible_names(view)[0] == "Řízek s bramborem"
+
+    def test_the_third_turn_restores_the_stored_order(self, view):
+        for _ in range(2):
+            view.cycle_sort(self._column(view))
+
+        view.cycle_sort(self._column(view))
+
+        assert visible_names(view) == [row.name if row.name else "—" for row in LEDGER]
+
+    def test_another_column_starts_ascending_again(self, view):
+        view.cycle_sort(self._column(view))
+
+        assert view.cycle_sort(view.headers[0].index("Food Name")) == "ascending"
+
+    def _column(self, view):
+        return view.headers[0].index("Calories")
+
+
+class TestTheHeaderArrow:
+    def test_it_points_at_the_column_sorted(self, view):
+        view.sort_by(view.headers[0].index("Calories"), Qt.SortOrder.DescendingOrder)
+
+        bar = view._table_widgets[0].horizontalHeader()
+        assert bar.sortIndicatorSection() == view.headers[0].index("Calories")
+        assert bar.sortIndicatorOrder() == Qt.SortOrder.DescendingOrder
+
+    def test_clearing_the_sort_takes_it_away(self, view):
+        view.sort_by(view.headers[0].index("Calories"), Qt.SortOrder.AscendingOrder)
+
+        view.clear_sort()
+
+        assert view._table_widgets[0].horizontalHeader().sortIndicatorSection() == -1
+
+
+class TestClickingTheHeader:
+    def test_a_click_sorts_the_column_clicked(self, window, settled):
+        view = window.views["food"]
+
+        click_header(view, "Calories")
+        settled()
+
+        assert view.proxy_for(0).sortColumn() == view.headers[0].index("Calories")
+        assert "Sorted by Calories, ascending" in window.status_bar.text()
+
+    def test_a_second_click_reverses_it(self, window, settled):
+        view = window.views["food"]
+
+        click_header(view, "Calories")
+        click_header(view, "Calories")
+        settled()
+
+        assert view.proxy_for(0).sortOrder() == Qt.SortOrder.DescendingOrder
+
+    def test_a_click_sorts_the_catalog_too(self, window, settled):
+        view = window.views["food"]
+
+        click_header(view, "Energy (kcal)", table_idx=1)
+        settled()
+
+        assert view.proxy_for(1).sortColumn() == view.headers[1].index("Energy (kcal)")
+        assert view.proxy_for(0).sortColumn() == -1

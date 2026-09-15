@@ -307,6 +307,7 @@ class MainWindow(QMainWindow):
             table.mode_requested.connect(self._on_mode_requested)
             table.filter_requested.connect(self.open_filter)
             table.sort_requested.connect(self.sort_visible_table)
+            table.sort_column_requested.connect(self.sort_table_column)
 
     def _watch_the_connection(self):
         """Report whether an empty table is no rows or a service that is down."""
@@ -632,27 +633,17 @@ class MainWindow(QMainWindow):
         return f" Queued for a break: {rest_queue.label(entry)} ({len(queued)} waiting)."
 
     def sort_visible_table(self, table):
-        """Cycle the column under the cursor: ascending, descending, as stored."""
-        column = table.currentIndex().column()
+        """Sort on the column under the cursor."""
+        self.sort_table_column(table, table.currentIndex().column())
+
+    def sort_table_column(self, table, column):
+        """Cycle one column: ascending, descending, as stored."""
         if column < 0:
             return
         view = self.filterable_view()
         if view is None:
             return
-        proxy = view.proxy_for(table.table_idx)
-        current_column = proxy.sortColumn()
-        order = proxy.sortOrder()
-
-        if current_column != column:
-            proxy.sort(column, Qt.SortOrder.AscendingOrder)
-            direction = "ascending"
-        elif order == Qt.SortOrder.AscendingOrder:
-            proxy.sort(column, Qt.SortOrder.DescendingOrder)
-            direction = "descending"
-        else:
-            proxy.sort(-1, Qt.SortOrder.AscendingOrder)
-            direction = "the order the ledger is stored in"
-
+        direction = view.cycle_sort(column, table.table_idx)
         header = view.headers[table.table_idx][column]
         self.status_bar.setText(f" Sorted by {header}, {direction}.")
 

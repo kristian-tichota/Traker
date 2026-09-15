@@ -17,7 +17,9 @@ per table, in the store. Contract: `specs/features/column_layout.feature`.
 Names match as filter fields do, so `kcal`, `cal`, `Calories` or any unique prefix resolves. `:cols`
 acts on the table last entered on the tab, and on the ledger until one has been entered. With a
 pointer, a heading may be dragged, or the header right-clicked for a ticked list of every column,
-which is also how a hidden column returns.
+which is also how a hidden column returns. A left click on a heading sorts by that column and cycles
+ascending, descending, then the stored order, as the sort key does; an arrow on the heading names the
+sort in force.
 
 ## Implementation
 

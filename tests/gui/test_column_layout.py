@@ -3,6 +3,7 @@ from collections import namedtuple
 import pytest
 from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtTest import QTest
 
 from src.gui.columns import (
     ColumnError, ColumnLayout, describe, rearranged, resolve_column, setting_key)
@@ -320,6 +321,30 @@ class TestItIsRemembered:
         assert shown(food)[0] == "Calories"
         assert ColumnLayout.parse(food.db.last("set_setting")[1],
                                   food.headers[0]) == food.column_layout(0)
+
+    def test_dragging_a_heading_does_not_also_sort_it(self, food, settled):
+        table = food.table
+        table.resize(1200, 400)
+        table.show()
+        table.resizeColumnsToContents()
+        header = table.horizontalHeader()
+        sorted_columns = []
+        table.sort_column_requested.connect(
+            lambda _table, column: sorted_columns.append(column))
+
+        y = header.height() // 2
+        start = QPoint(header.sectionViewportPosition(0) + header.sectionSize(0) // 2, y)
+        QTest.mousePress(header.viewport(), Qt.MouseButton.LeftButton,
+                         Qt.KeyboardModifier.NoModifier, start)
+        for step in range(1, 6):
+            QTest.mouseMove(header.viewport(), QPoint(start.x() + step * 30, y))
+        QTest.mouseRelease(header.viewport(), Qt.MouseButton.LeftButton,
+                           Qt.KeyboardModifier.NoModifier, QPoint(start.x() + 150, y))
+        settled()
+
+        assert shown(food)[0] != "Est", "the drag must have moved something"
+        assert sorted_columns == []
+        assert food.proxy_for(0).sortColumn() == -1
 
     def test_a_rearrangement_the_view_asked_for_is_not_reported_as_a_drag(
             self, food, settled):

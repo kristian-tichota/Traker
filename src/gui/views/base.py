@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QMenu
-from PyQt6.QtCore import QThreadPool, pyqtSignal
+from PyQt6.QtCore import Qt, QThreadPool, pyqtSignal
 from src.config import PALETTE
 from src.domain.clock import as_displayed_date, as_stored_date
 from src.gui.animations import ChangeGlow
@@ -334,12 +334,23 @@ class BaseManagedView(ShutdownMixin, QWidget):
 
     def sort_by(self, column, order, table_idx=0):
         self._table_proxies[table_idx].sort(column, order)
+        self._table_widgets[table_idx].show_sort_indicator(column, order)
 
     def clear_sort(self, table_idx=0):
         """Return to the order the service answered in."""
-        from PyQt6.QtCore import Qt as _Qt
+        self.sort_by(-1, Qt.SortOrder.AscendingOrder, table_idx)
 
-        self._table_proxies[table_idx].sort(-1, _Qt.SortOrder.AscendingOrder)
+    def cycle_sort(self, column, table_idx=0) -> str:
+        """Take column to its next order and name where it left the table."""
+        proxy = self._table_proxies[table_idx]
+        if proxy.sortColumn() != column:
+            self.sort_by(column, Qt.SortOrder.AscendingOrder, table_idx)
+            return "ascending"
+        if proxy.sortOrder() == Qt.SortOrder.AscendingOrder:
+            self.sort_by(column, Qt.SortOrder.DescendingOrder, table_idx)
+            return "descending"
+        self.clear_sort(table_idx)
+        return "the order the ledger is stored in"
 
     def matched_totals(self, table_idx=0):
         return MatchedTotals.of(self._table_proxies[table_idx].matched_rows())
