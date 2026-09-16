@@ -39,8 +39,10 @@ focus takes the walls away. A wall shows the current session, the chores that ar
 A standing entry is a `[[strict_break.activities]]` table carrying a `name` and a `path`. One-off
 entries go in the queue instead, at `rest-queue.m3u` under the dotted key `[strict_break.queue]`, one
 path per line, so any process can append to it. `:rest <path>` queues an entry, `:rest` reads the
-queue back, `:rest rm 2` drops one and `:rest clear` empties it. An entry stays queued until it is
-removed, and the queue is read once when a break begins. Playback position is held in
+queue back, `:rest rm 2` drops one and `:rest clear` empties it. While the path is typed, the menu
+names the folder it leads to and lists the entries that start with it, and Tab completes the selected
+one the way a shell does. An entry stays queued until it is removed, and the queue is read once when
+a break begins. Playback position is held in
 `rest-positions.json`, as a position for a video, a page for a PDF, and the length, so a long film can
 span several breaks. A film requires both the `video` extra (`uv sync --extra video`) and `libmpv`, a
 system library (`media-video/mpv` with `USE="libmpv"`) that no lockfile carries. Without either, a

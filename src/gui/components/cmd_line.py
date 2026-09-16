@@ -3,9 +3,9 @@ import logging
 from PyQt6.QtCore import Qt, QThreadPool, pyqtSignal
 
 from src.gui.commands import (COMMANDS, EVERY_CATALOG, candidates_for,
-                              catalog_names, command_word, commands_for,
-                              naming_a_command, token_position)
-from src.gui.completion import best_match, completion_tail
+                              catalog_names, command_being_typed, command_word,
+                              commands_for, naming_a_command, token_position)
+from src.gui.completion import best_match, completion_tail, list_paths
 from src.gui.components.hint_line import HintingLineEdit
 from src.gui.workers import run_in_background
 
@@ -28,6 +28,7 @@ class CommandLineEdit(HintingLineEdit):
         self._threadpool = QThreadPool.globalInstance()
         self.is_fuzzy_replacement = False
         self.completing_command = False
+        self.completing_path = False
         self.default_command = None
         self.relevant_domains = ()
         self.menu_index = 0
@@ -145,6 +146,11 @@ class CommandLineEdit(HintingLineEdit):
         if command is None:
             return
 
+        if self.completing_path:
+            fragment = command.path_fragment(text)
+            self.setText(text[:len(text) - len(fragment)] + self.completion_text)
+            return
+
         if command.separator == ";":
             head, _, field = text.rpartition(";")
             leading = field[:len(field) - len(field.lstrip())]
@@ -180,9 +186,40 @@ class CommandLineEdit(HintingLineEdit):
             self.completion_text = tail
             self.hint_text = tail
 
+    def _suggest_path(self, fragment, words):
+        """Offer a file system entry, or a word, for the path being typed."""
+        listing = list_paths(fragment, words)
+        if listing.problem:
+            self.hint_text = f" [{listing.problem.capitalize()}]"
+            return
+        if not listing.choices:
+            self.hint_text = self.NO_MATCH_HINT
+            return
+
+        choice = listing.choices[min(self.menu_index, len(listing.choices) - 1)]
+        if choice.written.startswith(fragment):
+            self.completion_text = choice.written[len(fragment):]
+            self.hint_text = self.completion_text
+            return
+        self.completing_path = True
+        self.is_fuzzy_replacement = True
+        self.completion_text = choice.written
+        self.hint_text = f" -> ({choice.name})"
+
+    def _choice_count(self) -> int:
+        """Return how many candidates the menu offers for the current text."""
+        text = self.text()
+        command = command_being_typed(text)
+        if command is None:
+            return len(candidates_for(text, self.relevant_domains))
+        fragment = command.path_fragment(text)
+        if not fragment:
+            return 0
+        return len(list_paths(fragment, command.open_words(text)).choices)
+
     def move_selection(self, step: int):
         """Move through the menu candidates, wrapping at both ends."""
-        count = len(candidates_for(self.text(), self.relevant_domains))
+        count = self._choice_count()
         if count <= 1:
             return
         self.menu_index = (self.menu_index + step) % count
@@ -215,6 +252,7 @@ class CommandLineEdit(HintingLineEdit):
         self.completion_text = ""
         self.is_fuzzy_replacement = False
         self.completing_command = False
+        self.completing_path = False
 
         if text:
             self._compute_hint(text)
@@ -258,6 +296,11 @@ class CommandLineEdit(HintingLineEdit):
                     self._suggest_name(fragment, self._catalog_names(field.catalogs))
                     return
             self.hint_text = command.hint_for_fields(remainder)
+            return
+
+        fragment = command.path_fragment(text)
+        if fragment:
+            self._suggest_path(fragment, command.open_words(text))
             return
 
         position = token_position(text)

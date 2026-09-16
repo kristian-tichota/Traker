@@ -340,3 +340,69 @@ class TestTheMenuBelongsToCommandMode:
             window.tab_indices["pomodoro"]) == (POMODORO, CHORE)
         assert window._tab_subject(
             window.tab_indices["caffeine_graph"]) == (BEVERAGE,)
+
+
+@pytest.fixture
+def home(tmp_path, monkeypatch):
+    videos = tmp_path / "Videos"
+    (videos / "rest").mkdir(parents=True)
+    for name in ("Lecture_1.mkv", "Lecture_2.mkv", "talk.mkv", ".hidden.mkv"):
+        (videos / name).write_bytes(b"x" * 2048)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+class TestBrowsingForAFile:
+    def test_the_folder_is_named_and_its_entries_listed_in_order(self, home):
+        rows = rows_for("rest ~/Videos/")
+
+        assert rows[0].left == "rest"
+        assert (rows[1].left, rows[1].right) == ("~/Videos/", "4 entries")
+        assert names(rows[2:]) == ["Lecture_1.mkv", "Lecture_2.mkv", "rest/", "talk.mkv"]
+
+    def test_a_file_shows_its_size_and_a_folder_says_what_it_is(self, home):
+        rows = {row.left: row.right for row in rows_for("rest ~/Videos/")}
+
+        assert rows["talk.mkv"] == "2 KB"
+        assert rows["rest/"] == "directory"
+
+    def test_typing_narrows_the_entries_and_says_how_many_are_left(self, home):
+        rows = rows_for("rest ~/Videos/L")
+
+        assert rows[1].right == "2 of 4"
+        assert names(rows[2:]) == ["Lecture_1.mkv", "Lecture_2.mkv"]
+
+    def test_the_selection_marks_an_entry(self, home):
+        assert marked(rows_for("rest ~/Videos/", (), 2)).left == "rest/"
+
+    def test_a_relative_path_names_the_working_directory(self, home):
+        assert rows_for("rest Vid")[1].left == "~/"
+
+    def test_a_folder_that_is_not_there_is_the_only_line(self, home):
+        rows = rows_for("rest ~/Nope/")
+
+        assert len(rows) == 2
+        assert (rows[1].left, rows[1].right) == ("~/Nope/", "no such directory")
+
+    def test_an_action_word_is_listed_with_its_argument(self, home):
+        rows = {row.left: row.right for row in rows_for("rest c")}
+
+        assert rows["clear"] == "[rm/clear]"
+
+    def test_a_long_folder_is_windowed_like_the_commands(self, home):
+        for index in range(MAX_ROWS + 3):
+            (home / "Documents").mkdir(exist_ok=True)
+            (home / "Documents" / f"paper_{index:02}.pdf").write_bytes(b"x")
+
+        rows = rows_for("rest ~/Documents/")
+
+        assert len([row for row in rows[2:] if row.left]) == MAX_ROWS
+        assert rows[-1].right == "+3 more"
+
+    def test_the_widget_has_a_row_for_every_line(self, qapp, home):
+        menu = CommandMenu()
+        menu.render_for("rest ~/Videos/")
+
+        assert len(menu._labels) >= len(menu.rows)
+        menu.deleteLater()

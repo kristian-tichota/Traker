@@ -80,6 +80,8 @@ class Param:
     catalogs: tuple = ()
     default: Callable[[], dict] = None
     looks_like: Callable[[str], bool] = None
+    path: bool = False
+    choices: tuple = ()
 
     def parse(self, token: str) -> dict:
         token = token.strip()
@@ -376,7 +378,7 @@ def _read_one_of(name: str, allowed, refusal: str):
 
 def one_of(name: str, label: str, allowed, refusal: str) -> Param:
     return Param(label, _read_one_of(name, allowed, refusal),
-                 "one of " + ", ".join(allowed))
+                 "one of " + ", ".join(allowed), choices=tuple(allowed))
 
 
 def optional_one_of(name: str, label: str, allowed, refusal: str,
@@ -385,7 +387,7 @@ def optional_one_of(name: str, label: str, allowed, refusal: str,
     return Param(label, _read_one_of(name, allowed, refusal),
                  "one of " + ", ".join(allowed),
                  default=lambda: {name: fallback},
-                 looks_like=lambda token: token in allowed)
+                 looks_like=lambda token: token in allowed, choices=tuple(allowed))
 
 
 def optional_position(name: str, label: str) -> Param:
@@ -405,6 +407,12 @@ def optional_text(name: str, label: str) -> Param:
     """Declare a trailing name that may be left out altogether."""
     return Param(label, lambda value: {name: value}, "some text", rest=True,
                  default=lambda: {name: ""})
+
+
+def optional_path(name: str, label: str) -> Param:
+    """Declare a trailing file path that may be left out, completed from disk."""
+    return Param(label, lambda value: {name: value}, "a file or folder path",
+                 rest=True, default=lambda: {name: ""}, path=True)
 
 
 def dsi_value(name: str, label: str) -> Param:
@@ -532,6 +540,30 @@ class Command:
             return ""
         tokens = text.split(maxsplit=index)
         return tokens[index] if len(tokens) > index else ""
+
+    def _remainder(self, text: str) -> str:
+        tokens = text.split(maxsplit=1)
+        return tokens[1] if len(tokens) > 1 else ""
+
+    def trailing_text(self, text: str) -> str:
+        """Return what has been typed into the trailing argument, spaces kept."""
+        remainder = self._remainder(text)
+        used = self._leading_tokens(remainder.split())
+        parts = remainder.split(None, used)
+        return parts[used] if len(parts) > used else ""
+
+    def path_fragment(self, text: str) -> str:
+        """Return the path being typed, or "" where this command takes none."""
+        if self.separator != " " or not (self.params and self.params[-1].path):
+            return ""
+        return self.trailing_text(text)
+
+    def open_words(self, text: str) -> dict:
+        """Return the fixed words a leading argument still accepts, by label."""
+        if self._leading_tokens(self._remainder(text).split()):
+            return {}
+        return {word: param.label for param in self.params if not param.rest
+                for word in param.choices}
 
     def hint_for_position(self, position: int, text: str = "") -> str:
         """Return the arguments still owed, given what has been typed."""
@@ -914,7 +946,7 @@ _COMMAND_LIST = [
                             "Say rm with a number, or clear — or name a file "
                             "on its own to queue it.", QUEUE_ADD),
             optional_position("position", "[n]"),
-            optional_text("entry", "[path]"),
+            optional_path("entry", "[path]"),
         ),
         invoke=_carried_out_by_the_window,
         confirm=lambda payload: " Break queue changed.",

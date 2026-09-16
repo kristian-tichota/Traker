@@ -161,6 +161,21 @@ Feature: Command line logging
       Then the command bar keeps keyboard focus
       And it keeps it whether or not a suggestion was showing
 
+  Rule: A path argument completes from the file system
+
+    Scenario: Browsing for a file to queue
+      When I type part of a path where ":rest" expects one
+      Then the menu names the folder the path leads to and lists its entries
+      And only entries starting with what I typed are listed, hidden ones only when asked for
+      And Tab writes the selected entry, a folder with its trailing slash
+
+    Scenario: The action words stay reachable
+      When I have typed only the opening letters of "rm" or "clear"
+      Then those words are offered alongside the entries until a folder is entered
+
+    Scenario: A folder that is not there
+      Then the hint and the menu say so rather than listing nothing
+
   Rule: The bar lists what could be typed here, before anything is typed
 
     @accessibility

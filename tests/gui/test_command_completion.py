@@ -377,3 +377,113 @@ class TestMatchRanking:
     def test_an_appended_tail_must_reconstruct_the_catalog_name(self):
         assert "rol" + completion_tail("rol", "Rolled Oats") == "rolled Oats"
         assert completion_tail("rizek", "Řízek s bramborem") is None
+
+
+@pytest.fixture
+def home(tmp_path, monkeypatch):
+    videos = tmp_path / "Videos"
+    (videos / "rest").mkdir(parents=True)
+    for name in ("Lecture_1.mkv", "Lecture_2.mkv", "talk.mkv", "a talk.mkv", ".hidden.mkv"):
+        (videos / name).write_bytes(b"x" * 2048)
+    (tmp_path / "Documents").mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+class TestBrowsingForAFile:
+    def test_a_folder_completes_with_its_trailing_slash(self, bar, home):
+        bar.setText("rest ~/Vid")
+
+        assert bar.hint_text == "eos/"
+        press_tab(bar)
+        assert bar.text() == "rest ~/Videos/"
+
+    def test_a_folder_offers_its_first_entry(self, bar, home):
+        bar.setText("rest ~/Videos/")
+
+        assert bar.hint_text == "a talk.mkv"
+        press_tab(bar)
+        assert bar.text() == "rest ~/Videos/a talk.mkv"
+
+    def test_a_name_completes_to_the_one_entry_starting_with_it(self, bar, home):
+        bar.setText("rest ~/Videos/t")
+        press_tab(bar)
+
+        assert bar.text() == "rest ~/Videos/talk.mkv"
+
+    def test_a_name_with_a_space_in_it_completes_whole(self, bar, home):
+        bar.setText("rest ~/Videos/a ta")
+        press_tab(bar)
+
+        assert bar.text() == "rest ~/Videos/a talk.mkv"
+
+    def test_letter_case_is_corrected_to_the_disks_spelling(self, bar, home):
+        bar.setText("rest ~/videos")
+
+        assert bar.is_fuzzy_replacement is True
+        assert bar.hint_text == " -> (Videos/)"
+        press_tab(bar)
+        assert bar.text() == "rest ~/Videos/"
+
+    def test_a_bare_tilde_completes_to_the_home_folder(self, bar, home):
+        bar.setText("rest ~")
+        press_tab(bar)
+
+        assert bar.text() == "rest ~/"
+
+    def test_a_relative_path_is_read_against_the_working_directory(self, bar, home):
+        bar.setText("rest Vid")
+        press_tab(bar)
+
+        assert bar.text() == "rest Videos/"
+
+    def test_hidden_entries_are_offered_only_when_asked_for(self, bar, home):
+        bar.setText("rest ~/Videos/.h")
+        press_tab(bar)
+
+        assert bar.text() == "rest ~/Videos/.hidden.mkv"
+
+    def test_a_folder_that_is_not_there_says_so(self, bar, home):
+        bar.setText("rest ~/Nope/x")
+
+        assert bar.hint_text == " [No such directory]"
+        press_tab(bar)
+        assert bar.text() == "rest ~/Nope/x"
+
+    def test_nothing_starting_with_the_name_says_so(self, bar, home):
+        bar.setText("rest ~/Videos/zzz")
+
+        assert bar.hint_text == bar.NO_MATCH_HINT
+
+    def test_a_name_that_is_complete_offers_nothing_more(self, bar, home):
+        bar.setText("rest ~/Videos/talk.mkv")
+
+        assert bar.completion_text == ""
+        assert bar.hint_text == ""
+
+    def test_an_action_word_is_offered_before_a_folder_is_entered(self, bar, home):
+        bar.setText("rest c")
+        press_tab(bar)
+
+        assert bar.text() == "rest clear"
+
+    def test_an_action_word_is_not_offered_inside_a_folder(self, bar, home):
+        bar.setText("rest ~/Videos/r")
+        press_tab(bar)
+
+        assert bar.text() == "rest ~/Videos/rest/"
+
+    def test_ctrl_n_picks_the_next_entry_and_tab_writes_it(self, bar, home):
+        bar.setText("rest ~/Videos/")
+        bar.event(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_N,
+                            Qt.KeyboardModifier.ControlModifier))
+
+        assert bar.hint_text == "Lecture_1.mkv"
+        press_tab(bar)
+        assert bar.text() == "rest ~/Videos/Lecture_1.mkv"
+
+    def test_a_queue_position_is_not_browsed_for(self, bar, home):
+        bar.setText("rest rm 2 ")
+
+        assert bar.hint_text == " [path]"

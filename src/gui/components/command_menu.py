@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QGridLayout, QLabel, QSizePolicy, QWidget
 from src.config import PALETTE
 from src.gui.commands import (belongs_to, candidates_for, command_being_typed,
                               command_word)
+from src.gui.completion import DIRECTORY, FILE, describe_path, list_paths
 
 MAX_ROWS = 7
 
@@ -42,24 +43,54 @@ def _argument_rows(command, text: str) -> list:
     return [heading] + _windowed(rows, 0 if asked is None else asked)
 
 
+def _counted(listing) -> str:
+    """Say how much of the directory the rows show: 12 entries, or 3 of 12."""
+    matching = sum(1 for choice in listing.choices if choice.kind in (DIRECTORY, FILE))
+    if matching == listing.total:
+        return f"{listing.total} {'entry' if listing.total == 1 else 'entries'}"
+    return f"{matching} of {listing.total}"
+
+
+def _path_rows(command, text: str, fragment: str, selected: int) -> list:
+    """Build the command's line, the directory the path leads to, then its entries."""
+    listing = list_paths(fragment, command.open_words(text))
+    heading = MenuRow(command.name, command.usage, accent="green")
+    if listing.problem:
+        return [heading, MenuRow(listing.directory, listing.problem, accent="red")]
+    shown, hidden = _window(list(enumerate(listing.choices)), selected)
+    rows = [MenuRow(choice.name, describe_path(choice), selected=(position == selected))
+            for position, choice in shown]
+    where = MenuRow(listing.directory, _counted(listing), accent="blue")
+    return [heading, where] + rows + _more(hidden)
+
+
+def _window(items: list, focus: int) -> tuple:
+    """Return at most MAX_ROWS items around the focus, and how many were left out."""
+    if len(items) <= MAX_ROWS:
+        return items, 0
+    first = min(max(0, focus - MAX_ROWS + 1), len(items) - MAX_ROWS)
+    return items[first:first + MAX_ROWS], len(items) - (first + MAX_ROWS)
+
+
+def _more(hidden: int) -> list:
+    return [MenuRow("", f"+{hidden} more", accent="base1")] if hidden else []
+
+
 def _windowed(rows: list, focus: int) -> list:
     """Window to at most MAX_ROWS rows around the focus, plus an overflow line."""
-    if len(rows) <= MAX_ROWS:
-        return rows
-    first = min(max(0, focus - MAX_ROWS + 1), len(rows) - MAX_ROWS)
-    hidden = len(rows) - (first + MAX_ROWS)
-    shown = rows[first:first + MAX_ROWS]
-    if hidden:
-        shown = shown + [MenuRow("", f"+{hidden} more", accent="base1")]
-    return shown
+    shown, hidden = _window(rows, focus)
+    return shown + _more(hidden)
 
 
 def rows_for(text: str, domains=(), selected: int = 0) -> list:
     """Build the menu content for what has been typed."""
     command = command_being_typed(text)
-    if command is not None:
-        return _argument_rows(command, text)
-    return _command_rows(text, domains, selected)
+    if command is None:
+        return _command_rows(text, domains, selected)
+    fragment = command.path_fragment(text)
+    if fragment:
+        return _path_rows(command, text, fragment, selected)
+    return _argument_rows(command, text)
 
 
 class CommandMenu(QWidget):
@@ -80,7 +111,7 @@ class CommandMenu(QWidget):
         grid.setColumnStretch(2, 1)
 
         labels = []
-        for row in range(MAX_ROWS + 2):
+        for row in range(MAX_ROWS + 3):
             marker, left, right = QLabel(self), QLabel(self), QLabel(self)
             marker.setFixedWidth(10)
             left.setAlignment(Qt.AlignmentFlag.AlignLeft)
