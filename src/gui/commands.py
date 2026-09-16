@@ -915,6 +915,15 @@ _COMMAND_LIST = [
         view_effect=ViewEffect("exercise_graphs", "set_grid_dims", "dims"),
     ),
     Command(
+        name="calseries",
+        params=(one_of("series", "[eaten / net]", ("eaten", "net"),
+                       "Say eaten for what was logged, or net for that less "
+                       "the training burn."),),
+        invoke=lambda db, p: db.set_setting("food_graph_calorie_series", p["series"]),
+        confirm=lambda p: f" Calorie chart now plots '{p['series']}'.",
+        view_effect=ViewEffect("food_graphs", "set_calorie_series", "series"),
+    ),
+    Command(
         name="cols",
         params=(
             optional_one_of("action", "[hide/show/move/reset]", COLUMN_ACTIONS,

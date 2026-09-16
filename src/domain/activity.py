@@ -58,3 +58,8 @@ def _above_baseline(met: float, activity_level: float) -> float:
 def kcal_from_met_hours(met_hours: float, weight_kg: float) -> float:
     """Convert MET-hours to calories for a member of this weight."""
     return met_hours * weight_kg
+
+
+def burn_kcal(breakdown: dict, weight_kg: float) -> float:
+    """Return what one day's MET-hour breakdown burns at this body weight."""
+    return kcal_from_met_hours(sum(breakdown.values()), weight_kg)

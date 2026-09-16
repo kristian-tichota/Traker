@@ -3,7 +3,6 @@ from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from src.config import PALETTE
 from src.database.analytics import daily_totals
 from src.database.rows import grouped_by_set
-from src.domain.activity import kcal_from_met_hours
 from src.gui.views.base import BaseManagedView, lay_out_tables
 from src.gui.components.calorie_bar import AnimatedProgressBar
 
@@ -61,30 +60,24 @@ class FoodView(BaseManagedView):
         def fetch_data():
             today = datetime.date.today().isoformat()
             rows = self.db.get_food_logs()
-            return rows, grouped_by_set(rows), self.db.get_activity_heatmap_data(since=today)
+            return rows, grouped_by_set(rows), self.db.get_daily_burn(since=today)
 
         self.fetch(fetch_data, self._on_data_fetched)
         self.fetch_table(1, self.db.get_all_foods)
         self.fetch_table(2, lambda: self.db.get_sets("food"))
 
     def _on_data_fetched(self, result):
-        data, grouped, heatmap_data = result
+        data, grouped, burn_by_date = result
         self.populate_table(self.table, grouped, table_idx=0)
 
         today_str = datetime.date.today().isoformat()
 
-        today = daily_totals(data).get(today_str)
+        today = daily_totals(data, burn_by_date).get(today_str)
 
         for bar in (self.cal_bar, self.prot_bar, self.salt_bar):
             bar.reload_targets()
 
-        breakdown = heatmap_data.get(today_str, {}).get("breakdown", {})
-        weight = float(self.cal_bar.profile.get_metric("biometrics", "weight_kg", 75.0))
-
-        today_burned = kcal_from_met_hours(
-            breakdown.get("Mobility", 0.0) + breakdown.get("Exercise_MET_hrs", 0.0), weight)
-
-        self.cal_bar.set_burned_value(today_burned)
+        self.cal_bar.set_burned_value(burn_by_date.get(today_str, 0.0))
         self.cal_bar.set_value(today.energy_kcal if today else 0.0)
         self.prot_bar.set_value(today.protein_g if today else 0.0)
         self.salt_bar.set_value(today.salt_g if today else 0.0)

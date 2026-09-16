@@ -55,10 +55,12 @@ class TestWhichTabsAWriteReaches:
 
     def test_an_exercise_write_reaches_the_tabs_deriving_from_it(self):
         assert tabs_reading((EXERCISE,)) == {
-            "exercise", "exercise_graphs", "heatmap", "food", "plans"}
+            "exercise", "exercise_graphs", "heatmap", "food", "food_graphs",
+            "plans"}
 
     def test_a_mobility_write_reaches_the_calendar_and_the_burn_deduction(self):
-        assert tabs_reading((MOBILITY,)) == {"mobility", "heatmap", "food"}
+        assert tabs_reading((MOBILITY,)) == {
+            "mobility", "heatmap", "food", "food_graphs"}
 
     def test_a_beverage_write_reaches_the_caffeine_chart(self):
         assert tabs_reading((BEVERAGE,)) == {"beverages", "caffeine_graph"}

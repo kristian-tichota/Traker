@@ -201,7 +201,7 @@ class TestTheFoodTabsBars:
         view.refresh()
         settled()
 
-        assert ("heatmap_points", datetime.date.today().isoformat()) \
+        assert ("daily_burn", datetime.date.today().isoformat()) \
             in recording_db.since_asked
 
 

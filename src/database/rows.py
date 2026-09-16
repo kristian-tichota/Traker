@@ -115,18 +115,24 @@ class DailyTotals(NamedTuple):
     sugars_g: float
     estimated_kcal: float
     estimated_rows: int
+    burn_kcal: float = 0.0
 
     @classmethod
-    def of(cls, date: str, rows) -> "DailyTotals":
-        """Sum one day's food rows."""
+    def of(cls, date: str, rows, burn_kcal: float = 0.0) -> "DailyTotals":
+        """Sum one day's food rows, against what that day's training burnt."""
         estimates = [row for row in rows if getattr(row, "estimated", False)]
         return cls(date, *(total(rows, field) for field in NUTRIENT_FIELDS),
-                   total(estimates, "energy_kcal"), len(estimates))
+                   total(estimates, "energy_kcal"), len(estimates), burn_kcal)
 
     @property
     def estimated_share(self) -> float:
         """Return what fraction of the day's energy was estimated."""
         return self.estimated_kcal / self.energy_kcal if self.energy_kcal else 0.0
+
+    @property
+    def net_kcal(self) -> float:
+        """Return the day's energy with the training burn taken off."""
+        return self.energy_kcal - self.burn_kcal
 
 NUTRIENT_FIELDS = ("energy_kcal", "protein_g", "carbs_g", "fat_g", "salt_g",
                    "fibre_g", "sugars_g")

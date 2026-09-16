@@ -397,6 +397,7 @@ Feature: Command line logging
         | rm          |
         | track       |
         | graphlayout |
+        | calseries   |
         | setdsi      |
 
     Scenario: An unknown command

@@ -49,9 +49,13 @@ class FakeTabs:
 class FakeGraphs:
     def __init__(self):
         self.dims = None
+        self.series = None
 
     def set_grid_dims(self, value):
         self.dims = value
+
+    def set_calorie_series(self, value):
+        self.series = value
 
 
 class FakePulser:
@@ -550,7 +554,8 @@ class TestSuccessfulOutcome:
 
         stale = {key for key, index in bar.tab_indices.items()
                  if index in bar.dirty_tabs}
-        assert stale == {"exercise", "exercise_graphs", "heatmap", "food", "plans"}
+        assert stale == {"exercise", "exercise_graphs", "heatmap", "food",
+                         "food_graphs", "plans"}
 
     def test_a_catalog_definition_dirties_that_subjects_log_tabs_too(self, bar):
         bar.submit("define Oats;Carbs;380;7;1.2;60;1;10;13;0;50")
@@ -618,6 +623,26 @@ class TestViewCommands:
 
         assert "Supported layouts" in bar.status_bar.message
         assert bar.db.calls == []
+
+    @pytest.mark.parametrize("series", ["eaten", "net"])
+    def test_a_calorie_series_choice_is_persisted(self, bar, series):
+        bar.submit(f"calseries {series}")
+
+        assert bar.db.last("set_setting") == ("food_graph_calorie_series", series)
+        assert "Execution Fail" not in bar.status_bar.message
+
+    def test_an_unsupported_calorie_series_is_refused(self, bar):
+        bar.submit("calseries gross")
+
+        assert "eaten" in bar.status_bar.message
+        assert bar.db.calls == []
+
+    def test_a_calorie_series_change_is_mirrored_by_the_graph_tab(self, bar):
+        bar.views["food_graphs"] = FakeGraphs()
+
+        bar.submit("calseries net")
+
+        assert bar.views["food_graphs"].series == "net"
 
 
 class TestStressOverrideCommand:

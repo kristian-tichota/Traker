@@ -88,6 +88,47 @@ Feature: Progress graphs
       When I press the single-day or weekly key in NORMAL mode
       Then the graphs switch window and the status bar confirms it
 
+  Rule: The calorie chart states whether training has been netted off
+
+    Scenario: What was eaten is the default
+      Then the calorie chart plots the energy the ledger holds
+      And the panel is titled for that series
+
+    Scenario: Netting the training burn off
+      When I choose the net series
+      Then each day is what was eaten less that day's estimated training burn
+      And the panel is retitled, so the two series cannot be confused
+      And the chart says how much energy per day it took off
+
+    Scenario: A day with no training reads the same under either series
+      Then netting takes nothing off a day that recorded no training
+
+    Scenario: Only the calorie panel is netted
+      Then the protein, fat, salt, fibre and sugar charts plot what was eaten
+
+    Scenario: A day trained but not eaten is not invented
+      Given training recorded on a day with no food logged
+      Then no day is added to the series for it
+
+    Scenario: The burn is the one the activity calendar estimates
+      Then it is the same model, at my own body weight
+      And it is the figure the Food tab already deducts on the calorie bar
+
+    Scenario: The choice is remembered
+      Given I chose a calorie series
+      When I reopen the app
+      Then my choice is still in force
+      And the other member's choice is unaffected
+
+    Scenario: The series can be set from the command line
+      When I submit a calorie series command with a supported series
+      Then the chart changes and the control reflects it
+      And an unsupported series is rejected with the supported ones named
+
+    Scenario: Logging a workout reaches the nutrient graphs
+      When I log training or mobility work
+      Then the nutrient graphs are marked stale, because the burn is theirs too
+
   Rule: A day that was guessed rather than logged says so on the chart
 
     Scenario: The estimated share of each day is hatched

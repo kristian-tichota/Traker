@@ -4,19 +4,27 @@ from src.profile import (DEFAULT_ACTIVITY_LEVEL, DEFAULT_NEAT_TAX_PERCENT,
                          UserProfile)
 
 
-def daily_totals(food_rows) -> dict:
+def daily_totals(food_rows, burn_by_date=None) -> dict:
     """Return each day's nutrient totals, keyed by date."""
+    burnt = burn_by_date or {}
     by_date = {}
     for row in food_rows:
         by_date.setdefault(row.date, []).append(row)
-    return {date: DailyTotals.of(date, rows) for date, rows in by_date.items()}
+    return {date: DailyTotals.of(date, rows, burnt.get(date, 0.0))
+            for date, rows in by_date.items()}
 
 
 class DBAnalyticsMixin:
     def get_daily_aggregates(self):
         """Return each day's nutrient totals, oldest first, as DailyTotals."""
-        totals = daily_totals(self.get_food_logs())
+        totals = daily_totals(self.get_food_logs(), self.get_daily_burn())
         return [totals[date] for date in sorted(totals)]
+
+    def get_daily_burn(self, since: str = None) -> dict:
+        """Return each day's estimated training burn in calories, keyed by date."""
+        weight = UserProfile().weight_kg()
+        return {date: activity.burn_kcal(point["breakdown"], weight)
+                for date, point in self.get_activity_heatmap_data(since).items()}
 
     def get_exercise_history_by_name(self, exercise_name: str):
         """Return one point per logged session of this movement, oldest first."""

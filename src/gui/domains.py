@@ -43,7 +43,7 @@ TAB_DOMAINS = {
     "exercise": (EXERCISE,),
     "supplements": (SUPPLEMENT,),
     "mobility": (MOBILITY,),
-    "food_graphs": (FOOD,),
+    "food_graphs": (FOOD, EXERCISE, MOBILITY),
     "exercise_graphs": (EXERCISE,),
     "heatmap": (EXERCISE, MOBILITY),
     "caffeine_graph": (BEVERAGE,),

@@ -168,6 +168,14 @@ class RecordingDb:
     def get_exercise_history_by_name(self, name):
         return self._rows("exercise_history")
 
+    def get_daily_burn(self, since=None):
+        if since is not None:
+            self.since_asked.append(("daily_burn", since))
+        burn = dict(getattr(self, "daily_burn", {}))
+        if since is None:
+            return burn
+        return {date: kcal for date, kcal in burn.items() if date >= since}
+
     def get_activity_heatmap_data(self, since=None):
         if since is not None:
             self.since_asked.append(("heatmap_points", since))

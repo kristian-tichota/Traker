@@ -75,7 +75,7 @@ class TestDailyAggregates:
         (day,) = source.get_daily_aggregates()
 
         assert day == ("2026-09-05", 700.0, 30.0, 80.0, 25.0, 2.0, 9.0, 12.0,
-                       0.0, 0)
+                       0.0, 0, 0.0)
 
     def test_an_orphaned_row_contributes_zero_rather_than_failing(self):
         orphan = FoodLogRow.from_server(
@@ -281,6 +281,58 @@ class TestTheMixinThroughTheRealClient:
         points = db_client.get_activity_heatmap_data()
 
         assert points["2026-09-05"]["breakdown"]["Exercise_MET_hrs"] > 0.0
+
+
+class TestTheTrainingBurnBesideTheDay:
+    def test_a_training_day_carries_what_it_burnt(self):
+        source = StubLogSource(food=[food_row("2026-09-05", cal=2400.0)],
+                               mobility=[mobility_row("2026-09-05")])
+
+        (day,) = source.get_daily_aggregates()
+
+        assert day.burn_kcal > 0.0
+        assert day.net_kcal == pytest.approx(day.energy_kcal - day.burn_kcal)
+
+    def test_a_day_without_training_nets_what_was_eaten(self):
+        source = StubLogSource(food=[food_row("2026-09-05", cal=2400.0)])
+
+        (day,) = source.get_daily_aggregates()
+
+        assert day.burn_kcal == 0.0
+        assert day.net_kcal == pytest.approx(2400.0)
+
+    def test_the_burn_is_the_calendars_estimate_at_my_own_weight(self, write_profile):
+        from src.domain.activity import kcal_from_met_hours
+
+        write_profile("[biometrics]\nweight_kg = 80.0\n")
+        source = StubLogSource(mobility=[mobility_row("2026-09-05")])
+        met_hours = source.get_activity_heatmap_data()["2026-09-05"]["breakdown"]["Mobility"]
+
+        assert source.get_daily_burn()["2026-09-05"] == pytest.approx(
+            kcal_from_met_hours(met_hours, 80.0))
+
+    def test_strength_and_mobility_work_are_both_counted(self):
+        source = StubLogSource(exercise=[exercise_row("2026-09-05")],
+                               mobility=[mobility_row("2026-09-05")])
+
+        strength_only = StubLogSource(exercise=[exercise_row("2026-09-05")])
+
+        assert (source.get_daily_burn()["2026-09-05"]
+                > strength_only.get_daily_burn()["2026-09-05"] > 0.0)
+
+    def test_a_day_trained_but_not_eaten_is_not_invented(self):
+        source = StubLogSource(mobility=[mobility_row("2026-09-05")])
+
+        assert source.get_daily_aggregates() == []
+
+    def test_the_read_can_be_bounded(self):
+        source = StubLogSource(mobility=[mobility_row("2026-09-01"),
+                                         mobility_row("2026-09-05")])
+
+        assert list(source.get_daily_burn(since="2026-09-05")) == ["2026-09-05"]
+
+    def test_no_logs_produce_no_burn(self):
+        assert StubLogSource().get_daily_burn() == {}
 
 
 class TestHowMuchOfADayWasGuessed:

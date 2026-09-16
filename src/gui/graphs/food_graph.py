@@ -1,9 +1,28 @@
+import logging
+
 import numpy as np
 from PyQt6.QtWidgets import QHBoxLayout, QComboBox, QLabel
 
 from src.config import PALETTE
 from src.gui.graphs.base import BaseGraphView
 from src.gui.workers import discard
+
+log = logging.getLogger(__name__)
+
+
+EATEN, NET_OF_TRAINING = "eaten", "net"
+
+CALORIE_SERIES = {
+    EATEN: "Eaten",
+    NET_OF_TRAINING: "Net of Training",
+}
+
+CALORIE_TITLES = {
+    EATEN: "Calories",
+    NET_OF_TRAINING: "Net Calories",
+}
+
+SERIES_BY_LABEL = {label: key for key, label in CALORIE_SERIES.items()}
 
 
 class FoodGraphView(BaseGraphView):
@@ -17,21 +36,48 @@ class FoodGraphView(BaseGraphView):
 
         self.rolling_period = 1
         self.period_select.currentTextChanged.connect(self.on_period_changed)
-        self.fetch(lambda: self.db.get_setting("food_graph_period", "1 Day (Raw)"),
-                   self._apply_saved_period)
         self.controls_layout.addWidget(self.period_select)
+
+        self.controls_layout.addWidget(QLabel("<b>Calorie Series:</b>"))
+        self.series_select = QComboBox()
+        self.series_select.addItems(list(CALORIE_SERIES.values()))
+        self.calorie_series = EATEN
+        self.series_select.currentTextChanged.connect(self.on_series_changed)
+        self.controls_layout.addWidget(self.series_select)
+
         self.controls_layout.addStretch()
         self.main_layout.addLayout(self.controls_layout)
+
+        self.fetch(self._read_preferences, self._apply_preferences)
 
         self.install_canvas()
         self.axes = self.fig.subplots(2, 3)
 
-    def _apply_saved_period(self, saved_period):
+    def _read_preferences(self):
+        return self.db.get_settings(
+            ["food_graph_period", "food_graph_calorie_series"],
+            {"food_graph_period": "1 Day (Raw)",
+             "food_graph_calorie_series": EATEN})
+
+    def _apply_preferences(self, saved):
+        self._adopt_period(saved["food_graph_period"])
+        self._adopt_series(saved["food_graph_calorie_series"])
+        self.refresh()
+
+    def _adopt_period(self, saved_period):
+        """Show a stored window on the control without writing it back."""
         self.period_select.blockSignals(True)
-        self.period_select.setCurrentText(saved_period)
+        self.period_select.setCurrentText(str(saved_period))
         self.period_select.blockSignals(False)
         self.rolling_period = 7 if "7" in str(saved_period) else 1
-        self.refresh()
+
+    def _adopt_series(self, saved_series):
+        """Show a stored calorie series on the control without writing it back."""
+        self.calorie_series = (NET_OF_TRAINING
+                               if str(saved_series) == NET_OF_TRAINING else EATEN)
+        self.series_select.blockSignals(True)
+        self.series_select.setCurrentText(CALORIE_SERIES[self.calorie_series])
+        self.series_select.blockSignals(False)
 
     def _remember_period(self, text):
         self.fetch(lambda: self.db.set_setting("food_graph_period", text), discard)
@@ -40,6 +86,27 @@ class FoodGraphView(BaseGraphView):
         self.rolling_period = 7 if "7" in text else 1
         self._remember_period(text)
         self.refresh()
+
+    def on_series_changed(self, text):
+        """Store the series picked from the combo, then draw it."""
+        self.calorie_series = SERIES_BY_LABEL.get(text, EATEN)
+        self.fetch(lambda: self.db.set_setting("food_graph_calorie_series",
+                                               self.calorie_series), discard)
+        self.refresh()
+
+    def set_calorie_series(self, series: str):
+        """Adopt a calorie series chosen elsewhere and redraw at it."""
+        if series not in CALORIE_SERIES:
+            log.warning("Ignoring an unsupported calorie series %r; supported: %s",
+                        series, ", ".join(CALORIE_SERIES))
+            return
+        self._adopt_series(series)
+        self.refresh()
+
+    @property
+    def nets_training(self) -> bool:
+        """Report whether the calorie chart takes the training burn off."""
+        return self.calorie_series == NET_OF_TRAINING
 
     def set_rolling_period(self, days: int):
         self.rolling_period = days
@@ -88,12 +155,24 @@ class FoodGraphView(BaseGraphView):
     def read_chart_data(self):
         return self.db.get_daily_aggregates()
 
+    def _note_training_burn(self, ax, smoothed_burn):
+        """Say what training energy the calorie series has taken off."""
+        if not len(smoothed_burn) or not smoothed_burn.any():
+            return
+        ax.text(0.02, 0.68, f"\u2212{smoothed_burn.mean():.0f} kcal/day trained off",
+                transform=ax.transAxes, color=PALETTE['cyan'], fontsize=7.0,
+                fontname='Fira Code', alpha=0.85,
+                bbox=dict(facecolor=PALETTE['base3'], edgecolor='none',
+                          pad=1.0, alpha=0.8))
+
     def draw_chart(self, raw_data):
         if not raw_data:
             return
 
         dates = [r.date for r in raw_data]
-        calories = np.array([r.energy_kcal for r in raw_data])
+        burnt = np.array([r.burn_kcal for r in raw_data])
+        calories = np.array([r.net_kcal if self.nets_training else r.energy_kcal
+                             for r in raw_data])
         protein = np.array([r.protein_g for r in raw_data])
         fats = np.array([r.fat_g for r in raw_data])
         salt = np.array([r.salt_g for r in raw_data])
@@ -117,7 +196,8 @@ class FoodGraphView(BaseGraphView):
         fibre_target = 38.0
 
         metrics = [
-            (self.axes[0, 0], calories, PALETTE['magenta'], f"Calories ({w}D Avg)", cal_target, "Goal"),
+            (self.axes[0, 0], calories, PALETTE['magenta'],
+             f"{CALORIE_TITLES[self.calorie_series]} ({w}D Avg)", cal_target, "Goal"),
             (self.axes[0, 1], protein, PALETTE['blue'], f"Protein ({w}D Avg)", prot_target, "Floor"),
             (self.axes[0, 2], fats, PALETTE['orange'], f"Fats ({w}D Avg)", None, None),
             (self.axes[1, 0], salt, PALETTE['red'], f"Salt ({w}D Avg)", salt_target, "Ceiling"),
@@ -136,6 +216,9 @@ class FoodGraphView(BaseGraphView):
             if ax is self.axes[0, 0]:
                 self._hatch_estimated(ax, plot_dates,
                                       self._compute_rolling_avg(estimated, w))
+                if self.nets_training:
+                    self._note_training_burn(
+                        ax, self._compute_rolling_avg(burnt, w))
 
             if goal_val is not None and len(plot_dates) > 0:
                 ax.axhline(goal_val, color=color, linestyle=':', linewidth=1.2, alpha=0.6, zorder=2)
