@@ -3,6 +3,7 @@ import datetime
 import pytest
 
 from src.database.rows import PomodoroDailyRow
+from src.domain import formulas
 from PyQt6.QtWidgets import QWidget
 
 from src.gui.views.pomodoro_view import StressCalendar, read_day
@@ -33,7 +34,7 @@ def summary_row(date, focus=0, rest=0, focus_ot=0, rest_ot=0):
 
 class TestFormula:
     @pytest.mark.exact
-    def test_the_index_is_penalty_over_recovery(self, calendar_factory):
+    def test_the_index_is_weighted_penalty_over_weighted_recovery(self, calendar_factory):
         calendar = calendar_factory()
 
         calendar.apply_summary_data(
@@ -41,10 +42,10 @@ class TestFormula:
         )
 
         assert calendar.data_map["2026-09-05"]["dsi"] == pytest.approx(
-            (60 + 10) / (30 + 20))
+            (60 + 10 * 2) / (30 + 20 * 0.5))
 
     @pytest.mark.exact
-    def test_a_second_of_overtime_costs_a_second_of_focus(self, calendar_factory):
+    def test_a_minute_of_overtime_weighs_four_times_a_minute_of_focus(self, calendar_factory):
         calendar = calendar_factory()
 
         calendar.apply_summary_data((
@@ -54,7 +55,7 @@ class TestFormula:
         ))
 
         assert calendar.data_map["2026-09-05"]["dsi"] == pytest.approx(2.0)
-        assert calendar.data_map["2026-09-06"]["dsi"] == pytest.approx(2.0)
+        assert calendar.data_map["2026-09-06"]["dsi"] == pytest.approx(8.0)
 
     @pytest.mark.exact
     def test_the_prescribed_split_lands_on_the_sustainable_boundary(self, calendar_factory):
@@ -257,8 +258,8 @@ class TestLiveIndex:
             focus_ot=focus_ot_ms // 60000, rest_ot=rest_ot_ms // 60000,
         )], {}))
 
-        penalty = (focus_ms + focus_ot_ms) / 1000.0
-        recovery = (rest_ms + rest_ot_ms) / 1000.0
-        live = penalty / recovery if recovery > 0 else penalty
+        live = formulas.daily_stress_index(
+            focus_ms / 1000.0, focus_ot_ms / 1000.0,
+            rest_ms / 1000.0, rest_ot_ms / 1000.0)
 
         assert calendar.data_map[today]["dsi"] == pytest.approx(live)

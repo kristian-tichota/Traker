@@ -27,11 +27,15 @@ def training_volume(total_reps: float, weight: float) -> float:
     return total_reps * weight
 
 
+FOCUS_OVERTIME_WEIGHT = 2.0
+REST_OVERTIME_WEIGHT = 0.5
+
+
 def daily_stress_index(focus_s: float, focus_ot_s: float,
                        rest_s: float, rest_ot_s: float) -> float:
-    """Return penalty over recovery, both in seconds."""
-    penalty = focus_s + focus_ot_s
-    recovery = rest_s + rest_ot_s
+    """Return weighted penalty over weighted recovery, both in seconds."""
+    penalty = focus_s + (focus_ot_s * FOCUS_OVERTIME_WEIGHT)
+    recovery = rest_s + (rest_ot_s * REST_OVERTIME_WEIGHT)
     if recovery > 0:
         return penalty / recovery
     return penalty if penalty > 0 else 0.0

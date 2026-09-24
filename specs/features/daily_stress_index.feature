@@ -12,17 +12,18 @@ Feature: Daily Stress Index
   Background:
     Given the day's seconds are accumulated into the four states
 
-  Rule: The index is an unweighted ratio of accumulated seconds
+  Rule: The index is a weighted ratio of accumulated seconds
 
     @exact
     Scenario: The formula
-      Then penalty is focus seconds plus focus overtime seconds
-      And recovery is rest seconds plus rest overtime seconds
+      Then penalty is focus seconds plus twice the focus overtime seconds
+      And recovery is rest seconds plus half the rest overtime seconds
       And the index is penalty divided by recovery
 
     @exact
-    Scenario: A second of one state costs a second of any other
-      Then no state is worth more or less than the seconds it holds
+    Scenario: Overtime is not worth the seconds it holds
+      Then a second of focus overtime costs twice a second of focus
+      And a second of rest overtime gives back half a second of rest
 
     @exact
     Scenario: A day of the prescribed split

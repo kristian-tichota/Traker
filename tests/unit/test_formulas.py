@@ -42,16 +42,21 @@ class TestTrainingVolume:
 
 class TestDailyStressIndex:
     @pytest.mark.exact
-    def test_the_index_is_penalty_over_recovery(self):
+    def test_the_index_is_weighted_penalty_over_weighted_recovery(self):
         index = formulas.daily_stress_index(
             focus_s=3600, focus_ot_s=600, rest_s=1200, rest_ot_s=400)
 
-        assert index == pytest.approx((3600 + 600) / (1200 + 400))
+        assert index == pytest.approx((3600 + 600 * 2) / (1200 + 400 * 0.5))
 
     @pytest.mark.exact
-    def test_every_second_of_a_state_counts_the_same_as_any_other(self):
-        assert formulas.daily_stress_index(600, 0, 0, 600) == pytest.approx(
-            formulas.daily_stress_index(0, 600, 600, 0))
+    def test_focus_overtime_costs_twice_what_focus_costs(self):
+        assert formulas.daily_stress_index(0, 600, 1200, 0) == pytest.approx(
+            formulas.daily_stress_index(1200, 0, 1200, 0))
+
+    @pytest.mark.exact
+    def test_rest_overtime_gives_back_half_what_rest_gives(self):
+        assert formulas.daily_stress_index(1200, 0, 0, 600) == pytest.approx(
+            formulas.daily_stress_index(1200, 0, 300, 0))
 
     @pytest.mark.exact
     def test_a_day_of_the_prescribed_split_comes_out_at_one(self):
