@@ -39,6 +39,9 @@ MS_PER_MINUTE = 60_000
 RELEASE_KEY = Qt.Key.Key_Escape
 RELEASE_KEY_NAME = "ESC"
 
+UNDO_KEY = Qt.Key.Key_Backspace
+UNDO_KEY_NAME = "BACKSPACE"
+
 LONG_BREAK_EVENT = "long_break_started"
 
 HOLD_TICK_MS = 50
@@ -1512,13 +1515,22 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def media_key_hints(self, kind) -> list:
         """Return every key that drives what is showing, in reading order."""
-        paging = kind == break_activities.DOCUMENT
-        hints = [
-            ("SPACE", "turn the page" if paging else "pause"),
-            ("\u2190 \u2192", "page" if paging else "seek 30 s"),
-            ("\u2191 \u2193", "scroll" if paging else "volume"),
-            ("0", "back to Traker"),
-        ]
+        if kind == break_activities.DECK:
+            hints = [
+                ("SPACE", "show, then good"),
+                ("\u2190 \u2192", "again, good"),
+                ("\u2191 \u2193", "scroll"),
+                (UNDO_KEY_NAME, "undo"),
+                ("0", "back to Traker"),
+            ]
+        else:
+            paging = kind == break_activities.DOCUMENT
+            hints = [
+                ("SPACE", "turn the page" if paging else "pause"),
+                ("\u2190 \u2192", "page" if paging else "seek 30 s"),
+                ("\u2191 \u2193", "scroll" if paging else "volume"),
+                ("0", "back to Traker"),
+            ]
         if len(self._offers) > 1:
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
         if self.prompts_for_focus():
@@ -1731,6 +1743,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             pane.nudge(-1)
         elif key == Qt.Key.Key_0:
             self._stop_showing()
+        elif key == UNDO_KEY and callable(getattr(pane, "undo", None)):
+            pane.undo()
         else:
             return False
         return True
@@ -1855,8 +1869,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self._showing is None or self.media_surface is None:
             return
         where = self.media_surface.stop()
-        rest_positions.remember(self._showing.path, where.at,
-                                self._positions_path, where.of)
+        if self._showing.kind != break_activities.DECK:
+            rest_positions.remember(self._showing.path, where.at,
+                                    self._positions_path, where.of)
         self._showing = None
         self._show_upcoming()
 

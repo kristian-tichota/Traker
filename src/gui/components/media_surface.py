@@ -1,17 +1,21 @@
 import logging
 import os
+import re
 
-from PyQt6.QtCore import QPointF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPointF, QThreadPool, QUrl, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QOpenGLContext, QPalette
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtWidgets import (QFrame, QLabel, QStackedWidget, QVBoxLayout,
                              QWidget)
 
 from src.config import PALETTE
-from src.desktop.activities import DOCUMENT, readout_of
+from src.desktop import anki
+from src.desktop.activities import DECK, DOCUMENT, readout_of
 from src.domain.media import Place, as_elapsed
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
+from src.gui.workers import run_in_background
+from src.profile import UserProfile
 
 log = logging.getLogger(__name__)
 
@@ -20,12 +24,29 @@ SEEK_MS = 30_000
 VOLUME_STEP = 0.1
 SCROLL_STEP_PX = 160
 
+QUESTION, ANSWER = "question", "answer"
 
-def _failure_label(parent, text) -> QLabel:
-    """Build the label that reports a failure on screen."""
+CARD_MARKERS = re.compile(r"\[anki:play:[qa]:\d+\]|\[\[type:[^\]]*\]\]")
+
+CARD_CSS = f"""
+:root {{ color-scheme: dark; --canvas: {PALETTE['base03']}; --fg: {PALETTE['base0']}; }}
+body {{ margin: 20px; overflow-wrap: break-word; }}
+body.nightMode {{ background-color: var(--canvas); color: var(--fg); }}
+img {{ max-width: 100%; max-height: 95vh; }}
+hr {{ background-color: {PALETTE['base01']}; margin: 1em 0; border: none; height: 1px; }}
+.nightMode .latex {{ filter: invert(100%); }}
+.nightMode img.drawing {{ filter: invert(1) hue-rotate(180deg); }}
+"""
+
+TO_THE_ANSWER = ("<script>addEventListener('load', () => "
+                 "document.getElementById('answer')?.scrollIntoView());</script>")
+
+
+def _failure_label(parent, text, colour='red') -> QLabel:
+    """Build the label that says on screen why nothing is shown."""
     label = QLabel(text, parent)
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    label.setStyleSheet(f"color: {PALETTE['red']}; font-size: 16px; "
+    label.setStyleSheet(f"color: {PALETTE[colour]}; font-size: 16px; "
                         f"font-family: 'Fira Code'; letter-spacing: 2px;")
     return label
 
@@ -361,10 +382,213 @@ class DocumentPane(QWidget):
         self.document.close()
 
 
+def card_page(side, ordinal, answer=False) -> str:
+    """Wrap one side of a card as Anki's reviewer does, in night mode."""
+    body = CARD_MARKERS.sub("", side)
+    return ('<!doctype html><html><head><meta charset="utf-8">'
+            f"<style>{CARD_CSS}</style></head>"
+            f'<body class="card card{int(ordinal) + 1} isLin nightMode night_mode">'
+            f"{body}{TO_THE_ANSWER if answer else ''}</body></html>")
+
+
+def _attempt(generation, step, *args) -> tuple:
+    """Run one review step: (the opening that asked, what it gave, what went wrong)."""
+    try:
+        return generation, step(*args), None
+    except anki.EXPECTED as error:
+        return generation, None, error
+
+
+def _why_not(error, url, deck) -> str:
+    """Say why a review step failed, in the words the wall shows."""
+    if isinstance(error, anki.AnkiUnreachable):
+        return f"Anki is not answering at {url}"
+    if isinstance(error, anki.NoSuchDeck):
+        return f"Anki has no deck called “{deck}”"
+    if isinstance(error, anki.AnkiStalled):
+        return "Anki took the answer and did not move on; a dialog may be open in it"
+    return str(error)
+
+
+class DeckPane(QWidget):
+    """One Anki deck, a card at a time, chosen and scheduled by Anki's reviewer."""
+
+    def __init__(self, deck=None, start_at=0, parent=None, client=None):
+        super().__init__(parent)
+        self.client = client or anki.AnkiConnect(UserProfile().get_metric(
+            "strict_break", "anki_url", anki.DEFAULT_URL))
+        self.deck = ""
+        self.card = None
+        self.side = None
+        self.answered = 0
+        self.busy = False
+        self._generation = 0
+        self._media = ""
+        self._message = None
+        self.view = None
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        try:
+            from PyQt6.QtWebEngineWidgets import QWebEngineView
+        except ImportError as error:
+            log.warning("No Anki deck in a break: %s", error)
+            self._show_message(f"COULD NOT REVIEW\n{error}")
+            return
+
+        self.view = QWebEngineView(self)
+        self.view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        self.view.page().setBackgroundColor(QColor(PALETTE['base03']))
+        self.view.page().setAudioMuted(True)
+        layout.addWidget(self.view)
+        if deck:
+            self.open(deck, start_at)
+
+    def open(self, deck, start_at=0):
+        """Open Anki's reviewer on deck and show the card it chooses."""
+        self._generation += 1
+        self.deck = str(deck)
+        self.card, self.side, self.answered, self.busy = None, None, 0, False
+        if self.view is None:
+            return
+        self._clear_message()
+        self._run(anki.begin, self._began, self.client, self.deck)
+
+    def toggle(self):
+        """Show the answer, or answer Good once it shows."""
+        self.step(1)
+
+    def step(self, direction):
+        """Show the answer, or once it shows, answer Good forward and Again back."""
+        if self.busy or self.card is None:
+            return
+        if self.side == QUESTION:
+            self._run(anki.reveal, self._revealed, self.client)
+            return
+        ease = anki.GOOD if int(direction) > 0 else anki.AGAIN
+        self._run(anki.grade, self._graded, self.client, self.deck,
+                  self.card.card_id, ease)
+
+    def undo(self):
+        """Take this opening's last answer back and show that card again."""
+        if self.busy or self.answered <= 0 or self.view is None:
+            return
+        self._run(anki.take_back, self._taken_back, self.client, self.deck)
+
+    def nudge(self, direction):
+        """Scroll the card."""
+        if self.view is not None:
+            self.view.page().runJavaScript(
+                f"window.scrollBy(0, {-int(direction) * SCROLL_STEP_PX})")
+
+    def position(self) -> int:
+        """Return how many cards this opening has answered."""
+        return self.answered
+
+    def duration(self) -> int:
+        """Return those answered, and the cards the deck still owes."""
+        return self.answered + (self.card.due if self.card is not None else 0)
+
+    def stop(self):
+        """Let go of the card, which stays where it is in Anki's reviewer."""
+        self._generation += 1
+        self.card, self.side, self.busy = None, None, False
+        if self.view is not None:
+            self.view.setHtml("")
+
+    def _run(self, step, receiver, *args):
+        """Run one step off the interface thread, taking no key until it lands."""
+        self.busy = True
+        run_in_background(QThreadPool.globalInstance(), _attempt, receiver,
+                          self._crashed, self._generation, step, *args)
+
+    def _settles(self, outcome) -> bool:
+        """Report whether outcome is this opening's and went through, showing why not."""
+        generation, _given, error = outcome
+        if generation != self._generation:
+            return False
+        self.busy = False
+        if error is not None:
+            log.warning("Could not review %r: %s", self.deck, error)
+            self.card, self.side = None, None
+            self._show_message(
+                f"COULD NOT REVIEW\n{_why_not(error, self.client.url, self.deck)}")
+            return False
+        return True
+
+    def _began(self, outcome):
+        if self._settles(outcome):
+            self._media, shown = outcome[1]
+            self._present(shown)
+
+    def _revealed(self, outcome):
+        if not self._settles(outcome):
+            return
+        if outcome[1] and self.card is not None:
+            self.side = ANSWER
+            self._render(self.card.answer, answer=True)
+        else:
+            self._run(anki.current, self._reread, self.client, self.deck)
+
+    def _graded(self, outcome):
+        if self._settles(outcome):
+            landed, shown = outcome[1]
+            self.answered += int(bool(landed))
+            self._present(shown)
+
+    def _taken_back(self, outcome):
+        if self._settles(outcome):
+            self.answered = max(0, self.answered - 1)
+            self._present(outcome[1])
+
+    def _reread(self, outcome):
+        if self._settles(outcome):
+            self._present(outcome[1])
+
+    def _crashed(self, failure):
+        """Show a step that failed in a way nothing expected."""
+        error, _formatted = failure
+        self.busy = False
+        self.card, self.side = None, None
+        self._show_message(f"COULD NOT REVIEW\n{error}")
+
+    def _present(self, shown):
+        """Show the question of the card Anki holds, or that the deck owes nothing."""
+        self.card = shown
+        if shown is None:
+            self.side = None
+            self._show_message(f"NOTHING DUE IN {self.deck}", colour='base1')
+            return
+        self.side = QUESTION
+        self._render(shown.question)
+
+    def _render(self, side, answer=False):
+        self._clear_message()
+        self.view.setHtml(card_page(side, self.card.ordinal, answer),
+                          QUrl.fromLocalFile(self._media.rstrip("/") + "/"))
+
+    def _show_message(self, text, colour='red'):
+        self._clear_message()
+        if self.view is not None:
+            self.view.hide()
+        self._message = _failure_label(self, text, colour)
+        self.layout().addWidget(self._message)
+
+    def _clear_message(self):
+        if self._message is not None:
+            self._message.deleteLater()
+            self._message = None
+        if self.view is not None:
+            self.view.show()
+
+
 def build_pane(activity, start_at=0, parent=None) -> QWidget:
     """Build the pane for what this activity is."""
     if activity.kind == DOCUMENT:
         return DocumentPane(activity.path, start_at, parent)
+    if activity.kind == DECK:
+        return DeckPane(activity.path, start_at, parent)
     return VideoPane(activity.path, start_at, parent)
 
 

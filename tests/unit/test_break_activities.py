@@ -1,7 +1,7 @@
 import pytest
 
 from src.desktop import activities as break_activities
-from src.desktop.activities import DOCUMENT, VIDEO
+from src.desktop.activities import DECK, DOCUMENT, VIDEO
 
 pytestmark = pytest.mark.exact
 
@@ -25,6 +25,15 @@ class TestTheStandingEntries:
         assert read == [break_activities.BreakActivity(
             "Reading", "/home/x/Documents/reading.pdf", DOCUMENT)]
 
+    def test_a_deck_is_named_rather_than_found(self):
+        read = break_activities.read([{"name": "Japanese", "deck": "Japanese"}])
+
+        assert read == [break_activities.BreakActivity("Japanese", "Japanese", DECK)]
+
+    def test_one_naming_both_a_file_and_a_deck_is_skipped(self):
+        assert break_activities.read([{"name": "R", "path": "/x/a.pdf",
+                                       "deck": "Japanese"}]) == []
+
     def test_the_order_is_the_members(self):
         read = break_activities.read([{"name": "B", "path": "/x/b.mkv"},
                                       {"name": "A", "path": "/x/a.mkv"}])
@@ -40,6 +49,7 @@ class TestTheStandingEntries:
         {"path": "/x/a.mkv"},
         {"name": "R"},
         {"name": "R", "path": "   "},
+        {"name": "R", "deck": "   "},
         ["not", "a", "table"],
     ])
     def test_an_entry_written_wrong_is_skipped(self, entry):

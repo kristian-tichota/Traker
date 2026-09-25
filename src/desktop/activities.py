@@ -9,10 +9,11 @@ log = logging.getLogger(__name__)
 
 VIDEO = "video"
 DOCUMENT = "document"
+DECK = "deck"
 
 
 class BreakActivity(NamedTuple):
-    """One thing a break may show."""
+    """One thing a break may show: a file by path, or an Anki deck by name."""
 
     name: str
     path: str
@@ -26,7 +27,7 @@ def kind_of(path) -> str:
 
 def readout_of(kind) -> str:
     """Return the readout that says how far through this kind the member is."""
-    return media.PAGES if kind == DOCUMENT else media.TIME
+    return {DOCUMENT: media.PAGES, DECK: media.CARDS}.get(kind, media.TIME)
 
 
 def offer_key(index) -> str:
@@ -65,13 +66,19 @@ def _one(entry, position):
         return None
 
     path = str(entry.get("path") or "").strip()
+    deck = str(entry.get("deck") or "").strip()
+    if path and deck:
+        log.warning("Break activity %r names both a path and a deck: skipped.", name)
+        return None
+    if deck:
+        return BreakActivity(name, deck, DECK)
     if not path:
         if entry.get("command") is not None or entry.get("app_id") is not None:
             log.warning("Break activity %r still names a command and an app "
                         "id; a break shows the file itself now. Replace both "
                         "with path = \"<the file>\": skipped.", name)
         else:
-            log.warning("Break activity %r has no path: skipped.", name)
+            log.warning("Break activity %r has no path and no deck: skipped.", name)
         return None
 
     return BreakActivity(name, os.path.expanduser(path), kind_of(path))

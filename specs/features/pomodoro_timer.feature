@@ -595,6 +595,41 @@ Feature: Focus timer
       Then that screen says so instead of showing me a black rectangle
       And the break goes on, and the other screens are unchanged
 
+  Rule: A held break reviews an Anki deck I named
+
+    Scenario: Anki chooses and schedules every card
+      Given my profile names an activity with a deck instead of a file
+      And Anki is running with AnkiConnect, its window minimized
+      When I press that offer's key
+      Then the wall shows the card Anki's own reviewer holds, drawn as Anki draws it
+      And each answer is Anki's to record, and the next card is Anki's to choose
+      And no window of Anki's comes in front of the wall, and the sound is Anki's own
+
+    Scenario: The keys on a card
+      Given a break is showing me a card
+      Then SPACE, left and right first show the answer
+      And once it shows, SPACE and right answer Good and left answers Again
+      And BACKSPACE takes back the last answer I gave and shows that card again
+      And up and down scroll the card, and 0 puts the wall back
+
+    Scenario: A press while Anki moves on is not a second answer
+      Given I answered a card and Anki has not yet shown the next one
+      When I press another key
+      Then nothing is answered until the next card is on the screen
+
+    Scenario: A deck with nothing due
+      Then the screen says that nothing is due, and the break goes on
+
+    Scenario: Anki is not running, or has no such deck
+      When I press that offer's key
+      Then that screen says why it cannot review
+      And the break goes on, and the other screens are unchanged
+
+    Scenario: How far into the deck I am
+      Given a break is showing me a deck
+      Then the wall beside it counts the cards answered out of those still owed today
+      And nothing about a deck is kept where the positions of files are
+
   Rule: What to open on a break is queued, not configured
 
     Scenario: Queuing something

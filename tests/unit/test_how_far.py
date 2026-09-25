@@ -1,7 +1,7 @@
 import pytest
 
-from src.desktop.activities import DOCUMENT, VIDEO, readout_of
-from src.domain.media import (PAGES, Place, TIME, UNKNOWN, as_elapsed,
+from src.desktop.activities import DECK, DOCUMENT, VIDEO, readout_of
+from src.domain.media import (CARDS, PAGES, Place, TIME, UNKNOWN, as_elapsed,
                               away_ms, fraction, how_far, opens_in)
 
 pytestmark = pytest.mark.exact
@@ -57,12 +57,23 @@ class TestHowFarIntoADocument:
         assert how_far(Place(4, 0), PAGES) == UNKNOWN
 
 
+class TestHowFarIntoADeck:
+    def test_the_cards_answered_are_counted_from_none(self):
+        assert how_far(Place(12, 49), CARDS) == "12 / 49"
+
+    def test_nothing_answered_yet_is_none_of_it(self):
+        assert fraction(Place(0, 49), CARDS) == 0.0
+
+
 class TestWhichReadoutAKindGets:
     def test_a_video_is_a_clock(self):
         assert readout_of(VIDEO) == TIME
 
     def test_a_document_is_a_count_of_pages(self):
         assert readout_of(DOCUMENT) == PAGES
+
+    def test_a_deck_is_a_count_of_cards(self):
+        assert readout_of(DECK) == CARDS
 
 BREAK_MS, LONG_MS = 30 * 60_000, 60 * 60_000
 

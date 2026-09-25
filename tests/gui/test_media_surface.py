@@ -1,16 +1,21 @@
+import sys
+
 import pytest
 from PyQt6.QtGui import QPageSize, QPainter, QPdfWriter
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtWidgets import QLabel, QWidget
 
-from src.desktop.activities import BreakActivity, DOCUMENT, VIDEO
+from src.desktop import anki
+from src.desktop.activities import BreakActivity, DECK, DOCUMENT, VIDEO
 from src.config import PALETTE
 from src.domain import media
 from src.domain.media import Place
 from src.gui.components import media_progress
-from src.gui.components.media_surface import (DocumentPane, MediaSurface,
+from src.gui.components.media_surface import (ANSWER, QUESTION, DeckPane,
+                                              DocumentPane, MediaSurface,
                                               MpvScreen,
-                                              VideoPane, build_pane)
+                                              VideoPane, build_pane, card_page)
+from tests.anki_double import FakeAnki
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact, pytest.mark.accessibility]
 
@@ -299,7 +304,141 @@ class TestPlayingAVideo:
         assert pane.screen_widget.player is None
 
 
+@pytest.fixture
+def reviewing(qapp, settled):
+    def _open(fake=None, deck="Japanese"):
+        fake = fake or FakeAnki()
+        pane = DeckPane(deck, client=fake)
+        settled()
+        return pane, fake
+
+    return _open
+
+
+def answered(pane, settled, direction=1):
+    pane.step(direction)
+    settled()
+    pane.step(direction)
+    settled()
+
+
+class TestReviewingADeck:
+    def test_the_card_anki_chose_is_on_the_screen(self, reviewing):
+        pane, _ = reviewing()
+
+        assert (pane.card.card_id, pane.side) == (100, QUESTION)
+
+    def test_space_shows_the_answer_and_then_answers_good(self, reviewing, settled):
+        pane, fake = reviewing()
+
+        pane.toggle()
+        settled()
+        assert (pane.side, fake.answers) == (ANSWER, [])
+
+        pane.toggle()
+        settled()
+        assert fake.answers == [(100, anki.GOOD)]
+        assert (pane.card.card_id, pane.side) == (101, QUESTION)
+
+    def test_back_answers_again_once_the_answer_shows(self, reviewing, settled):
+        pane, fake = reviewing()
+
+        answered(pane, settled, direction=-1)
+
+        assert fake.answers == [(100, anki.AGAIN)]
+
+    def test_a_press_while_anki_moves_on_is_not_a_second_answer(self, reviewing,
+                                                                settled):
+        pane, fake = reviewing(FakeAnki(lag=3))
+        pane.toggle()
+        settled()
+
+        pane.toggle()
+        pane.toggle()
+        pane.step(-1)
+        settled()
+
+        assert fake.calls.count("guiAnswerCard") == 1
+        assert (pane.card.card_id, pane.side) == (101, QUESTION)
+
+    def test_backspace_takes_the_answer_back(self, reviewing, settled):
+        pane, fake = reviewing()
+        answered(pane, settled)
+
+        pane.undo()
+        settled()
+
+        assert (pane.card.card_id, pane.answered, fake.reps[100]) == (100, 0, 0)
+
+    def test_nothing_is_taken_back_before_an_answer(self, reviewing, settled):
+        pane, fake = reviewing()
+
+        pane.undo()
+        settled()
+
+        assert "guiUndo" not in fake.calls
+
+    def test_how_far_is_the_cards_answered_out_of_those_owed(self, reviewing,
+                                                            settled):
+        pane, _ = reviewing()
+
+        answered(pane, settled)
+
+        assert (pane.position(), pane.duration()) == (1, 3)
+
+    def test_a_deck_with_nothing_due_says_so(self, reviewing):
+        pane, _ = reviewing(FakeAnki(cards=()))
+
+        assert "NOTHING DUE IN Japanese" in failure_of(pane)
+
+    def test_a_deck_anki_does_not_have_says_so(self, reviewing):
+        pane, _ = reviewing(deck="Nope")
+
+        assert "no deck called \u201cNope\u201d" in failure_of(pane)
+
+    def test_anki_not_running_says_so_on_the_screen(self, qapp, settled,
+                                                    offline_requests):
+        pane = DeckPane("Japanese", client=anki.AnkiConnect())
+        settled()
+
+        assert "not answering" in failure_of(pane)
+
+    def test_what_anki_says_after_it_was_let_go_is_dropped(self, qapp, settled):
+        pane = DeckPane("Japanese", client=FakeAnki())
+
+        pane.stop()
+        settled()
+
+        assert pane.card is None and pane.busy is False
+
+    def test_a_machine_without_the_web_engine_says_so(self, qapp, monkeypatch):
+        monkeypatch.setitem(sys.modules, "PyQt6.QtWebEngineWidgets", None)
+
+        pane = DeckPane("Japanese", client=FakeAnki())
+
+        assert pane.view is None and "COULD NOT REVIEW" in failure_of(pane)
+
+
+class TestACardPage:
+    def test_the_sound_is_left_to_anki(self):
+        assert "[anki:play" not in card_page("x[anki:play:q:0]", 0)
+
+    def test_the_body_carries_the_classes_anki_gives_it_at_night(self):
+        assert 'class="card card2 isLin nightMode night_mode"' in card_page("x", 1)
+
+    def test_the_answer_is_scrolled_to_and_the_question_is_not(self):
+        assert "scrollIntoView" in card_page("x", 0, answer=True)
+        assert "scrollIntoView" not in card_page("x", 0)
+
+
 class TestWhichPaneIsBuilt:
+    def test_a_deck_is_reviewed(self, qapp, monkeypatch):
+        monkeypatch.setattr(anki.AnkiConnect, "call", FakeAnki().call)
+
+        pane = build_pane(BreakActivity("Japanese", "Japanese", DECK))
+
+        assert isinstance(pane, DeckPane) and pane.deck == "Japanese"
+
     def test_a_document_is_read(self, paper):
         pane = build_pane(BreakActivity("Reading", paper, DOCUMENT))
 

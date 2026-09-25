@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette, QColor
-from PyQt6.QtCore import QLoggingCategory
+from PyQt6.QtCore import QLoggingCategory, Qt
 from src.database import DatabaseClient
 from src.desktop.kwin import release_stale_hold
 from src.gui.main_window import MainWindow
@@ -64,6 +64,7 @@ def main():
 
     execute_safe_backup()
 
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setPalette(create_solarized_palette())

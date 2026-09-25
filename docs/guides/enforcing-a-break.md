@@ -11,9 +11,7 @@ the interval stops itself and the window that proved the absence is stored again
 which is the one case that rewrites a minute already stored. Any input carries the interval on from
 where it stopped, together with the break behind it, and nothing is recorded in between. Stopping a
 running interval by hand requires `stop_hold_secs` (10) held on the play button rather than clicked,
-and that time is focus overtime like any other pause. Every `[strict_break]` key, its default and its
-effect are documented in the profile the application generates on first run, and a value that cannot
-be read as a number costs a warning in the log and the default, not the tab.
+and that time is focus overtime like any other pause. The generated profile documents every key.
 
 ## Strict break behaviour
 
@@ -32,21 +30,24 @@ recorded as `overridden_break`. When the break ends the walls stay and give up t
 switch and the focus: the countdown alone becomes `BREAK OVER` and a count up from that end, every
 other readout stands, a file goes on playing under the keys that drive it, and the press that starts
 focus takes the walls away. A wall shows the current session, the chores that are due and, after
-`away_secs`, a configured activity; the chore tick is the one break surface that writes.
+`away_secs`, a configured activity; the chore tick is the one surface that writes to the service.
 
 ## Break activities
 
-A standing entry is a `[[strict_break.activities]]` table carrying a `name` and a `path`. One-off
-entries go in the queue instead, at `rest-queue.m3u` under the dotted key `[strict_break.queue]`, one
-path per line, so any process can append to it. `:rest <path>` queues an entry, `:rest` reads the
-queue back, `:rest rm 2` drops one and `:rest clear` empties it. While the path is typed, the menu
-names the folder it leads to and lists the entries that start with it, and Tab completes the selected
-one the way a shell does. An entry stays queued until it is removed, and the queue is read once when
-a break begins. Playback position is held in
-`rest-positions.json`, as a position for a video, a page for a PDF, and the length, so a long film can
-span several breaks. A film requires both the `video` extra (`uv sync --extra video`) and `libmpv`, a
-system library (`media-video/mpv` with `USE="libmpv"`) that no lockfile carries. Without either, a
-break still holds the screens and the screen that would show a film displays `COULD NOT PLAY`.
+A standing entry is a `[[strict_break.activities]]` table carrying a `name` and either a `path` or a
+`deck`. One-off entries go in the queue instead, at `rest-queue.m3u` under the dotted key
+`[strict_break.queue]`, one path per line, so any process can append to it. `:rest <path>` queues an
+entry, `:rest` reads the queue back, `:rest rm 2` drops one and `:rest clear` empties it. Playback
+position is held in `rest-positions.json`, as a position for a video, a page for a PDF, and the
+length, so a long film can span several breaks. A film requires both the `video` extra
+(`uv sync --extra video`) and `libmpv`, a system library (`media-video/mpv` with `USE="libmpv"`) that
+no lockfile carries. Without either, a break still holds the screens and the screen that would show a
+film displays `COULD NOT PLAY`.
+
+A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`: Anki chooses, schedules
+and sounds every card, and the wall draws the card and forwards the keys. Anki MUST be running, its
+window MAY stay minimized, and its timebox MUST be 0. QtWebEngine draws the card and is the `anki`
+extra. Without it, or without Anki, the screen displays `COULD NOT REVIEW`. A deck keeps no position.
 
 ## Session verification
 

@@ -229,8 +229,10 @@ def db_client_b(bridge_requests, profile_path):
 
 @pytest.fixture(scope="session")
 def qapp():
+    from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QApplication
 
-    app = QApplication.instance() or QApplication([])
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+    app = QApplication.instance() or QApplication(["traker-tests"])
     yield app
     app.processEvents()

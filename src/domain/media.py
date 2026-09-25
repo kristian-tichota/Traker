@@ -1,6 +1,6 @@
 from typing import NamedTuple
 
-TIME, PAGES = "time", "pages"
+TIME, PAGES, CARDS = "time", "pages", "cards"
 
 UNKNOWN = "—"
 
@@ -38,11 +38,11 @@ def as_elapsed(ms) -> str:
 
 
 def how_far(place, unit=TIME) -> str:
-    """Format "26:33 / 1:26:35" or "42 / 310", or UNKNOWN."""
+    """Format "26:33 / 1:26:35", "42 / 310" or "12 / 49", or UNKNOWN."""
     at, of = _bounded(place, unit)
     if of <= 0:
         return UNKNOWN
-    if unit == PAGES:
+    if unit in (PAGES, CARDS):
         return f"{at} / {of}"
     return f"{as_elapsed(at)} / {as_elapsed(of)}"
 

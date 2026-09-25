@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
 
 import src.profile as profile_module
 from src.desktop import rest_positions, rest_queue
-from src.desktop.activities import DOCUMENT, VIDEO
+from src.desktop.activities import DECK, DOCUMENT, VIDEO, BreakActivity
 from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
@@ -22,6 +22,12 @@ path = "/x/reading.pdf"
 [[strict_break.activities]]
 name = "Something to watch"
 path = "/x/rest.mp4"
+"""
+
+DECK_TOML = """
+[[strict_break.activities]]
+name = "Japanese"
+deck = "Japanese"
 """
 
 
@@ -59,12 +65,18 @@ class FakePane(QWidget):
         self.calls.append("stop")
 
 
+class FakeDeckPane(FakePane):
+    def undo(self):
+        self.calls.append("undo")
+
+
 class Panes:
     def __init__(self):
         self.built = []
 
     def __call__(self, activity, start_at=0, parent=None):
-        pane = FakePane(activity, start_at, parent)
+        kind = FakeDeckPane if activity.kind == DECK else FakePane
+        pane = kind(activity, start_at, parent)
         self.built.append(pane)
         return pane
 
@@ -130,7 +142,20 @@ def a_view(db):
 
 
 @pytest.fixture
+def with_a_deck(with_no_wait):
+    with_no_wait.write_text(with_no_wait.read_text(encoding="utf-8") + DECK_TOML,
+                            encoding="utf-8")
+    profile_module.reload_profile()
+    return with_no_wait
+
+
+@pytest.fixture
 def timer(qapp, app_id, with_activities, recording_db):
+    yield from a_view(recording_db)
+
+
+@pytest.fixture
+def deck_timer(qapp, app_id, with_a_deck, recording_db):
     yield from a_view(recording_db)
 
 
@@ -1155,6 +1180,7 @@ CARD_KEYS = {
     "← →": Qt.Key.Key_Left,
     "↑ ↓": Qt.Key.Key_Up,
     "0": Qt.Key.Key_0,
+    "BACKSPACE": Qt.Key.Key_Backspace,
 }
 
 
@@ -1235,6 +1261,58 @@ class TestTheCardOfKeys:
             pressed = QKeyEvent(QEvent.Type.KeyPress, key,
                                 Qt.KeyboardModifier.NoModifier)
             assert timer.eventFilter(timer, pressed) is True, label
+
+
+class TestADeck:
+    @pytest.fixture
+    def reviewing(self, deck_timer):
+        enter_strict_break(deck_timer)
+        send_key(deck_timer, Qt.Key.Key_3)
+        return deck_timer
+
+    def test_it_is_offered_by_its_name(self, deck_timer, settled):
+        enter_strict_break(deck_timer)
+        settled()
+
+        assert "3  Japanese" in deck_timer.upcoming.lines()
+
+    def test_its_key_reviews_the_deck_it_names(self, reviewing):
+        assert showing_pane(reviewing).activity == \
+            BreakActivity("Japanese", "Japanese", DECK)
+
+    def test_backspace_takes_the_last_answer_back(self, reviewing):
+        send_key(reviewing, Qt.Key.Key_Backspace)
+
+        assert showing_pane(reviewing).calls == ["undo"]
+
+    def test_backspace_is_left_alone_where_nothing_can_be_taken_back(self, timer):
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_2)
+
+        assert timer._drive_media(Qt.Key.Key_Backspace) is False
+
+    def test_the_card_names_what_each_key_does_to_a_card(self, reviewing):
+        said = dict(reviewing.media_surface.keys.hints)
+
+        assert said["SPACE"] == "show, then good"
+        assert said["← →"] == "again, good"
+        assert said["BACKSPACE"] == "undo"
+
+    def test_every_key_it_names_is_one_the_break_answers(self, reviewing):
+        for label, _says in reviewing.media_surface.keys.hints:
+            key = key_named(label)
+            assert key is not None, f"the card names {label!r} and nothing presses it"
+            pressed = QKeyEvent(QEvent.Type.KeyPress, key,
+                                Qt.KeyboardModifier.NoModifier)
+            assert reviewing.eventFilter(reviewing, pressed) is True, label
+
+    def test_it_leaves_no_place_behind_to_resume(self, reviewing):
+        pane = showing_pane(reviewing)
+        pane.at, pane.of = 12, 49
+
+        send_key(reviewing, Qt.Key.Key_0)
+
+        assert rest_positions.read(reviewing._positions_path) == {}
 
 
 class TestTheReadoutIsOnTheWallBesideTheFilm:

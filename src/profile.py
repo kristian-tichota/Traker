@@ -246,15 +246,22 @@ refuse_switch = true
 # rather than refusing in silence. Off leaves the walls where the compositor
 # put them, which is one desktop each where the script is refused.
 pin_with_rule = true
+# Where AnkiConnect listens, for an activity that names a deck. Anki has to be
+# running, and its window may stay minimized. Its timebox (Preferences, Review)
+# has to be 0: the timebox dialog holds the next card until it is answered.
+anki_url = "http://127.0.0.1:8765"
 
 # What a break may open on the screen it took: a PDF is read, anything else is
-# played. Only what is listed here is offered, and only on the key for it. The
-# first entry is on Enter, the rest on 1-9 in the order they appear.
+# played, and a deck is reviewed in Anki. Only what is listed here is offered,
+# and only on the key for it. The first entry is on Enter, the rest on 1-9 in
+# the order they appear.
 #
 # While an activity shows, that screen shows it alone; the other screens go on
 # showing the countdown, the chores and what is coming. SPACE pauses a video or
 # turns a page, the arrows (and PgUp/PgDn) seek 30 s or turn pages, UP/DOWN are
-# volume or scroll, and 0 puts the wall back.
+# volume or scroll, and 0 puts the wall back. On a deck, SPACE, LEFT and RIGHT
+# first show the answer; then SPACE and RIGHT answer Good, LEFT answers Again,
+# and BACKSPACE takes the last answer back.
 #
 # [[strict_break.activities]]
 # name = "Reading"
@@ -263,6 +270,10 @@ pin_with_rule = true
 # [[strict_break.activities]]
 # name = "Something to watch"
 # path = "~/Videos/rest/talk.mkv"
+#
+# [[strict_break.activities]]
+# name = "Japanese"
+# deck = "Japanese"
 
 # Where the queue of paths added with ":rest <path>" is kept. It is a plain
 # file, one path per line, m3u-shaped, so anything else may append to it.
