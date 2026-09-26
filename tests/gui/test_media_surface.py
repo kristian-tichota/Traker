@@ -1,7 +1,9 @@
 import sys
+import tempfile
 import time
 
 import pytest
+from PyQt6 import sip
 from PyQt6.QtCore import QThreadPool, Qt
 from PyQt6.QtGui import QPageSize, QPainter, QPdfWriter
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
@@ -316,6 +318,18 @@ class TestReadingABook:
         pane = BookPane()
 
         assert pane.view is None and "COULD NOT READ" in failure_of(pane)
+
+    def test_a_book_unpacked_for_a_pane_already_gone_is_not_left_behind(
+            self, qapp, epub, settled, tmp_path, monkeypatch):
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+        monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+        pane = BookPane(epub("<p>一</p>"))
+
+        sip.delete(pane)
+        settled()
+
+        assert list(scratch.iterdir()) == []
 
 
 class TestPlayingAVideo:

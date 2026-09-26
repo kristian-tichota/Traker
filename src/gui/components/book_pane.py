@@ -230,6 +230,14 @@ def _unpack(generation, path) -> tuple:
         return generation, None, error
 
 
+def _hand_over(pane, outcome):
+    """Give an unpacked book to the pane that asked, or remove it once that pane is gone."""
+    if not sip.isdeleted(pane):
+        pane._unpacked(outcome)
+    elif outcome[1] is not None:
+        shutil.rmtree(outcome[1].folder, ignore_errors=True)
+
+
 class BookPane(QWidget):
     """One EPUB, a page at a time, set in the middle of the screen."""
 
@@ -316,8 +324,9 @@ class BookPane(QWidget):
             return
         self._clear_message()
         self.busy = True
-        run_in_background(QThreadPool.globalInstance(), _unpack, self._unpacked,
-                          self._crashed, self._generation, os.path.abspath(path))
+        run_in_background(QThreadPool.globalInstance(), _unpack,
+                          partial(_hand_over, self), self._crashed,
+                          self._generation, os.path.abspath(path))
 
     def toggle(self):
         """Turn to the next page."""
