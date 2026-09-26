@@ -2,6 +2,7 @@ import logging
 import os
 import re
 
+from PyQt6 import sip
 from PyQt6.QtCore import QPointF, QThreadPool, QUrl, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QOpenGLContext, QPalette
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
@@ -675,6 +676,13 @@ class DeckPane(QWidget, _MarkedList):
         self.card, self.side, self.busy = None, None, False
         if self.view is not None:
             self.view.setHtml("")
+
+    def shutdown(self):
+        """Let go of the card and destroy the web view at once."""
+        self.stop()
+        if self.view is not None:
+            sip.delete(self.view)
+            self.view = None
 
     def _review(self, deck):
         """Open Anki's reviewer on deck and show the card it chooses."""

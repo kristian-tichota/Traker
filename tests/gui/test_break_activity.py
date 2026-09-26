@@ -1,4 +1,5 @@
 import pytest
+from PyQt6 import sip
 from PyQt6.QtCore import QAbstractAnimation, QEvent, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
 from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
@@ -11,9 +12,11 @@ from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
 from src.config import PALETTE
-from src.gui.components.media_surface import LibraryPane
+from src.gui.components.book_pane import BookPane
+from src.gui.components.media_surface import DeckPane, LibraryPane
 from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.views.pomodoro_view import RELEASE_KEY, PomodoroView, StrictOverlay
+from tests.anki_double import FakeAnki
 from tests.gui.conftest import advance
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact, pytest.mark.accessibility]
@@ -125,6 +128,12 @@ class Panes:
     @property
     def last(self):
         return self.built[-1]
+
+
+def web_pane(activity, start_at=0, parent=None):
+    if activity.kind == DECK:
+        return DeckPane(activity.path, start_at, parent, client=FakeAnki())
+    return BookPane(activity.path, start_at, parent)
 
 
 class FakeShell(QWidget):
@@ -828,6 +837,28 @@ class TestTheBreakGoesOnBeingABreak:
         assert timer.overlays == []
         assert rest_positions.read(timer._positions_path) == {
             "/x/rest.mp4": Place(754_000, 0)}
+
+    @pytest.mark.parametrize("kind", [DECK, BOOK])
+    @pytest.mark.parametrize("ended", [True, False], ids=["run-out", "held"])
+    def test_leaving_destroys_a_web_view_before_its_wall_is_hidden(
+            self, timer, epub, settled, kind, ended):
+        timer.media_pane_factory = web_pane
+        enter_strict_break(timer)
+        timer._show_activity(BreakActivity(
+            "Web", "Japanese" if kind == DECK else epub("<p>一</p>"), kind))
+        settled()
+        wall, standing = timer._media_host, []
+        showing_pane(timer).view.destroyed.connect(
+            lambda: standing.append(not sip.isdeleted(wall) and wall.isVisible()))
+
+        if ended:
+            advance(timer, timer.break_ms + 1000)
+            send_key(timer, RELEASE_KEY)
+        else:
+            timer._release_strict_break()
+        settled()
+
+        assert standing == [True]
 
     def test_the_engine_slows_down_while_the_walls_are_up(self, timer, qapp):
         timer.parent().show()

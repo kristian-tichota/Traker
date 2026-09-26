@@ -2202,7 +2202,6 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         for wall in spare:
             wall.dismiss()
-            wall.setParent(None)
             wall.deleteLater()
 
         self.overlays = [wall if wall is not None else self._build_wall(screen)
@@ -2298,7 +2297,6 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         for o in self.overlays:
             o.dismiss()
-            o.setParent(None)
             o.deleteLater()
         self.overlays.clear()
         self.media_surface = None

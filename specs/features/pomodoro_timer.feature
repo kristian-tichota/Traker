@@ -419,7 +419,7 @@ Feature: Focus timer
       Then every screen the break covers names the key to hold and for how long
 
     Scenario: Leaving while something is playing
-      Given a break is showing me a video or a document
+      Given a break is showing me a video, a document, a book or a deck
       When I hold the release key
       Then the hold is paid exactly as it is on a bare wall, and what was playing stops
 

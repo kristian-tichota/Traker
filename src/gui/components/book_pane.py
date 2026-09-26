@@ -4,6 +4,7 @@ import os
 import shutil
 from functools import partial
 
+from PyQt6 import sip
 from PyQt6.QtCore import QThreadPool, QUrl, Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
@@ -375,7 +376,11 @@ class BookPane(QWidget):
             self.view.setHtml("")
 
     def shutdown(self):
+        """Let go of the book and destroy the web view at once."""
         self._let_go()
+        if self.view is not None:
+            sip.delete(self.view)
+            self.view = None
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
