@@ -783,6 +783,30 @@ Feature: Focus timer
       Then the tray icon shows how far the current phase has progressed
       And its centre carries the colour of my current schedule regime
 
+  Rule: Another program may follow what a break shows
+
+    Scenario: Each change runs the hook
+      Given my profile names a hook command
+      When a break begins, shows a document, and gives the screens back
+      Then the command runs with "break", "document" and "focus", in that order
+      And a shelf runs it with the kind of the file it opens
+
+    Scenario: A burst of changes is one change
+      When one offer replaces another
+      Then the command hears only the second
+
+    Scenario: The walls standing after a break are still the break
+      When the break reaches zero and its walls stay
+      Then the command hears nothing new until focus starts
+
+    Scenario: Quitting mid-break hands focus back
+      When I quit during a break
+      Then the command runs with "focus"
+
+    Scenario: A hook that fails costs one warning
+      Given the command fails every time
+      Then the log warns once, however often it fails
+
   Rule: Shutdown is orderly
 
     Scenario: Closing the window while the timer runs

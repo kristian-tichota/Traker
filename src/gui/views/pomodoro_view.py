@@ -14,6 +14,7 @@ from src.desktop import activities as break_activities
 from src.desktop import notify as notify_service
 from src.desktop import rest_positions
 from src.desktop import rest_queue
+from src.desktop.hooks import StateHook
 from src.desktop.idle import idle_ms as session_idle_ms
 from src.desktop.kwin import KWinPin, default_app_id
 from src.desktop.kwin_rules import REST_GROUP, RestRule, prune
@@ -45,6 +46,9 @@ UNDO_KEY_NAME = "BACKSPACE"
 LONG_BREAK_EVENT = "long_break_started"
 
 HOLD_TICK_MS = 50
+
+FOCUS_STATE = "focus"
+BREAK_STATE = "break"
 
 HOLD_RELEASE = "release"
 HOLD_STOP = "stop"
@@ -846,6 +850,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._library_path = break_activities.library_for(self.profile)
         self._offers = list(self.activities)
         self.media_pane_factory = None
+        self.hook = StateHook(self.profile.get_metric("hooks", "state", ""))
+        self._hook_pending = False
 
         self.kwin_pin = None
         if self.profile.get_metric("strict_break", "follow_across_desktops", True):
@@ -1653,6 +1659,26 @@ class PomodoroView(ShutdownMixin, QWidget):
             self.media_surface.show_progress(playing[1:] if playing else None)
         self._say_when_the_offers_open()
         self._keep_the_walls_on_their_screens()
+        self._follow_the_state()
+
+    def hook_state(self) -> str:
+        """Return what the break shows: focus, break, or the kind of what is open."""
+        if self._showing is not None:
+            return self._showing.kind
+        if self.overlays or self.current_phase != "work":
+            return BREAK_STATE
+        return FOCUS_STATE
+
+    def _follow_the_state(self):
+        """Tell the hook what the break shows, once the change in hand has settled."""
+        if self._hook_pending or self.hook_state() == self.hook.told:
+            return
+        self._hook_pending = True
+        QTimer.singleShot(0, self._tell_the_hook)
+
+    def _tell_the_hook(self):
+        self._hook_pending = False
+        self.hook.tell(self.hook_state())
 
     def _playing(self) -> tuple:
         """Return what is showing and where it has reached: (name, place, unit)."""
@@ -2257,12 +2283,15 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._apply_exit_controls()
         self._show_upcoming()
         self._show_chores()
+        self._follow_the_state()
 
     def shutdown(self):
-        """Stop the timers, then drop the strict-mode overlays."""
+        """Stop the timers, drop the strict-mode overlays, and tell the hook focus is back."""
         self._shut_down = True
         super().shutdown()
         self._clear_overlays()
+        self.hook.tell(FOCUS_STATE)
+        self.hook.close()
 
     def phase_length_ms(self) -> int:
         """Return how long the interval now running was given."""

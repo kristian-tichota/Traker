@@ -16,7 +16,7 @@ class TestGeneratedDocument:
 
     @pytest.mark.parametrize(
         "section",
-        ["windows", "biometrics", "goals", "timer", "strict_break", "keybinds",
+        ["windows", "biometrics", "goals", "timer", "strict_break", "hooks", "keybinds",
          "schedule", "regime_colors", "exercise_goals", "supplement_targets"],
     )
     def test_every_section_the_app_reads_is_present(self, user_profile, section):

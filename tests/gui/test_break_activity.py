@@ -1689,3 +1689,99 @@ class TestAPressIsAcknowledged:
         panel.set_sections([("OFFERS", ["ENTER  a.mkv       —", "    2  b.pdf  1 / 9"])])
 
         assert self.offers(panel, "OFFERS") == [None, PALETTE['base2']]
+
+
+class Told:
+    def __init__(self):
+        self.told = None
+        self.states = []
+
+    def tell(self, state):
+        if state != self.told:
+            self.told = state
+            self.states.append(state)
+
+    def close(self):
+        pass
+
+
+@pytest.fixture
+def with_a_hook(with_activities, tmp_path):
+    heard = tmp_path / "heard"
+    written = with_activities.read_text(encoding="utf-8")
+    assert '[hooks]\nstate = ""' in written, "the [hooks] template no longer says this"
+    with_activities.write_text(written.replace(
+        '[hooks]\nstate = ""', f"[hooks]\nstate = \"printf '%s\\\\n' {{state}} >> {heard}\""),
+        encoding="utf-8")
+    profile_module.reload_profile()
+    return heard
+
+
+class TestTheHookFollowsTheBreak:
+    def test_it_hears_each_thing_the_break_shows_in_turn(self, timer, settled):
+        timer.hook = told = Told()
+
+        enter_strict_break(timer)
+        settled()
+        send_key(timer, Qt.Key.Key_Return)
+        settled()
+        send_key(timer, Qt.Key.Key_0)
+        settled()
+        send_key(timer, Qt.Key.Key_2)
+        settled()
+        timer._release_strict_break()
+        settled()
+
+        assert told.states == ["break", "document", "break", "video", "focus"]
+
+    def test_an_offer_in_place_of_another_is_heard_alone(self, timer, settled):
+        timer.hook = told = Told()
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_Return)
+        settled()
+
+        send_key(timer, Qt.Key.Key_2)
+        settled()
+
+        assert told.states == ["document", "video"]
+
+    def test_a_shelf_is_heard_as_what_it_opens(self, library_timer, settled):
+        library_timer.hook = told = Told()
+        enter_strict_break(library_timer)
+
+        send_key(library_timer, Qt.Key.Key_3)
+        settled()
+
+        assert told.states == ["book"]
+
+    def test_the_walls_standing_after_the_break_are_still_the_break(self, timer, settled):
+        timer.hook = told = Told()
+        enter_strict_break(timer)
+        settled()
+
+        advance(timer, timer.break_ms + 1000)
+        settled()
+        assert timer.overlays and told.states == ["break"]
+
+        send_key(timer, RELEASE_KEY)
+        settled()
+        assert told.states == ["break", "focus"]
+
+    def test_quitting_mid_break_tells_it_focus(self, timer, settled):
+        timer.hook = told = Told()
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_Return)
+        settled()
+
+        timer.shutdown()
+
+        assert told.states == ["document", "focus"]
+
+    def test_the_profile_names_the_command_the_shell_runs(
+            self, qapp, app_id, with_a_hook, recording_db, settled):
+        for view in a_view(recording_db):
+            enter_strict_break(view)
+            settled()
+            view.shutdown()
+
+        assert with_a_hook.read_text().splitlines()[-1] == "focus"

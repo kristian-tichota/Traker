@@ -302,6 +302,12 @@ font_px = 28
 width_em = 32
 height_em = 30
 
+# A shell command run each time what a break shows changes. Every {{state}} in it
+# becomes focus, break, video, document, book or deck, so that another program can
+# follow the break. It MUST finish within 3 s. Empty runs nothing.
+[hooks]
+state = ""
+
 [keybinds]
 up = "k"
 down = "j"

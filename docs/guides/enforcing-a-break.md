@@ -5,10 +5,8 @@ day. There are no timer modes. `:break long` makes the next break the long one, 
 withdraws it, and `:break` reports how many the day has left; the choice is spent when that break
 begins. Contract: `specs/features/pomodoro_timer.feature`. The generated profile documents every key.
 
-Absence is not focus, and a stop is not a click, whether or not breaks take the screens. After
-`idle_pause_secs` with neither a key nor the mouse, the interval stops itself and the window that
-proved the absence is stored again as rest overtime, the one case that rewrites a stored minute. Any
-input carries the interval on, together with the break behind it. Stopping a running interval
+After `idle_pause_secs` without input, a focus interval stops itself and that window is stored again
+as rest overtime, the one case that rewrites a stored minute. Stopping a running interval by hand
 requires `stop_hold_secs` held on the play button, and that time is focus overtime.
 
 ## Strict break behaviour
@@ -18,14 +16,12 @@ reversed, and each wall is placed on every desktop and activity by a KWin window
 the request KWin applies rather than refusing in silence. Every screen is covered; the application
 window stays behind the walls, and the keyboard starts on the wall covering its screen.
 
-A wall refuses `Alt+F4` and the application refuses to quit, though terminating the process still
-works. A monitor switched off is not an exit: the walls are rebuilt once the screens settle. Pause and
-skip are refused. Holding `Esc` for `release_hold_secs` abandons the break, and the remaining time is
-recorded as `overridden_break`. When the break ends the walls stay but give up the desktops, the
-switch and the focus: the countdown becomes `BREAK OVER` and a count up, a file goes on playing, and
-the press that starts focus takes the walls away. A wall shows the session, the chores that are due
-and, after `away_secs`, the offers; a pressed offer glows, yellow while the offers are held back.
-The chore tick is the one surface that writes to the service.
+Holding `Esc` for `release_hold_secs` abandons the break, and the remaining time is recorded as
+`overridden_break`. When the break ends the walls stay but give up the desktops, the switch and the
+focus: the countdown becomes `BREAK OVER` and a count up, a file goes on playing, and the press that
+starts focus takes the walls away. A wall shows the session, the chores that are due and, after
+`away_secs`, the offers; a pressed offer glows, yellow while the offers are held back. The chore tick
+is the one surface that writes to the service.
 
 ## Break activities
 
@@ -38,13 +34,17 @@ and prunes it. Positions are kept in `rest-positions.json`, so a film or a book 
 A film needs the `video` extra and the system `libmpv` (`media-video/mpv` with `USE="libmpv"`), which
 no lockfile carries; an EPUB and an Anki deck need QtWebEngine, the `anki` extra. Without them the
 screen displays `COULD NOT PLAY`, `COULD NOT READ` or `COULD NOT REVIEW`, and the break still holds.
-An EPUB is set in CSS columns on a Solarized light page in the middle of the screen, and its position
-is a share of its text, so a changed page size keeps the place.
 
 A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`, which chooses, schedules
 and sounds every card; the wall draws it in Solarized light, forwards the keys and confirms each
 answer on the next card. A `deck` of `*` lists every deck first. Anki MUST be running, its window MAY
 stay minimized, and its timebox MUST be 0.
+
+## State hook
+
+`[hooks] state` is a shell command run each time what the break shows changes, with `{state}` replaced
+by `focus`, `break`, `video`, `document`, `book` or `deck`. Runs go one at a time off the interface
+thread; a burst of changes is one run of its last state, and quitting tells `focus`.
 
 ## Session verification
 
