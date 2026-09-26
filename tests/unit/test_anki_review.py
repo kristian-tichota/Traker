@@ -32,6 +32,31 @@ class TestOpeningADeck:
     def test_a_deck_with_nothing_due_is_no_card_at_all(self):
         assert anki.begin(FakeAnki(cards=()), "Japanese")[1] is None
 
+    def test_a_subdeck_owes_what_its_own_entry_says(self):
+        fake = FakeAnki(decks=("Japanese::Kaishi 1.5k",))
+
+        assert anki.begin(fake, "Japanese::Kaishi 1.5k")[1].due == 3
+
+
+class TestListingTheDecks:
+    def test_the_decks_are_in_the_order_of_anki_s_tree(self):
+        fake = FakeAnki(decks={"Japanese Grammar": ("g",), "Japanese::Kanji": ("k",),
+                               "Japanese": ("j",), "maths": ("m",)})
+
+        assert [deck.name for deck in anki.decks(fake)] == [
+            "Japanese", "Japanese::Kanji", "Japanese Grammar", "maths"]
+
+    def test_a_deck_the_list_hides_is_left_out(self):
+        fake = FakeAnki(decks={"Default": None, "Japanese": ("j",)})
+
+        assert [deck.name for deck in anki.decks(fake)] == ["Japanese"]
+
+    def test_two_decks_of_one_last_name_each_owe_their_own(self):
+        fake = FakeAnki(decks={"Maths::Tables": ("a",), "Personal::Tables": ("b", "c")})
+
+        assert [(deck.name, deck.owed) for deck in anki.decks(fake)] == [
+            ("Maths::Tables", 1), ("Personal::Tables", 2)]
+
 
 class TestAnswering:
     def test_the_next_card_is_waited_for_and_the_answer_given_once(self):

@@ -261,7 +261,9 @@ anki_url = "http://127.0.0.1:8765"
 # turns a page, the arrows (and PgUp/PgDn) seek 30 s or turn pages, UP/DOWN are
 # volume or scroll, and 0 puts the wall back. On a deck, SPACE, LEFT and RIGHT
 # first show the answer; then SPACE and RIGHT answer Good, LEFT answers Again,
-# and BACKSPACE takes the last answer back.
+# and BACKSPACE takes the last answer back. A deck of "*" lists every deck in
+# Anki first: UP/DOWN choose one, LEFT/RIGHT skip to one with cards due, SPACE
+# reviews it, and 0 in it goes back to the list.
 #
 # [[strict_break.activities]]
 # name = "Reading"
@@ -272,8 +274,8 @@ anki_url = "http://127.0.0.1:8765"
 # path = "~/Videos/rest/talk.mkv"
 #
 # [[strict_break.activities]]
-# name = "Japanese"
-# deck = "Japanese"
+# name = "Anki"
+# deck = "*"
 
 # Where the queue of paths added with ":rest <path>" is kept. It is a plain
 # file, one path per line, m3u-shaped, so anything else may append to it.

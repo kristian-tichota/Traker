@@ -38,16 +38,16 @@ A standing entry is a `[[strict_break.activities]]` table carrying a `name` and 
 `deck`. One-off entries go in the queue instead, at `rest-queue.m3u` under the dotted key
 `[strict_break.queue]`, one path per line, so any process can append to it. `:rest <path>` queues an
 entry, `:rest` reads the queue back, `:rest rm 2` drops one and `:rest clear` empties it. Playback
-position is held in `rest-positions.json`, as a position for a video, a page for a PDF, and the
-length, so a long film can span several breaks. A film requires both the `video` extra
-(`uv sync --extra video`) and `libmpv`, a system library (`media-video/mpv` with `USE="libmpv"`) that
-no lockfile carries. Without either, a break still holds the screens and the screen that would show a
-film displays `COULD NOT PLAY`.
+position is held in `rest-positions.json`, so a long film can span several breaks. A film requires
+both the `video` extra (`uv sync --extra video`) and `libmpv`, a system library (`media-video/mpv`
+with `USE="libmpv"`) that no lockfile carries. Without either, a break still holds the screens and the
+screen that would show a film displays `COULD NOT PLAY`.
 
 A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`: Anki chooses, schedules
-and sounds every card, and the wall draws the card and forwards the keys. Anki MUST be running, its
-window MAY stay minimized, and its timebox MUST be 0. QtWebEngine draws the card and is the `anki`
-extra. Without it, or without Anki, the screen displays `COULD NOT REVIEW`. A deck keeps no position.
+and sounds every card, and the wall draws the card and forwards the keys. A `deck` of `*` first lists
+every deck with what it owes today, and 0 in a deck chosen there returns to the list. Anki MUST be
+running, its window MAY stay minimized, and its timebox MUST be 0. QtWebEngine draws the card and is
+the `anki` extra. Without it, or without Anki, the screen displays `COULD NOT REVIEW`.
 
 ## Session verification
 

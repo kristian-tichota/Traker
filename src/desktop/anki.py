@@ -15,6 +15,8 @@ AGAIN, GOOD = 1, 3
 POLL_SECS = 0.05
 SETTLE_SECS = 5.0
 
+SEPARATOR = "::"
+
 
 class AnkiUnreachable(ConnectionError):
     """Nothing answered at the AnkiConnect address."""
@@ -43,6 +45,28 @@ class Shown(NamedTuple):
     answer: str
     ordinal: int
     due: int
+
+
+class Deck(NamedTuple):
+    """One deck as Anki's deck list shows it, and what it still owes today."""
+
+    name: str
+    new: int
+    learning: int
+    review: int
+
+    @property
+    def depth(self) -> int:
+        return self.name.count(SEPARATOR)
+
+    @property
+    def leaf(self) -> str:
+        """Return the last part of the name, the one Anki's list shows."""
+        return self.name.rsplit(SEPARATOR, 1)[-1]
+
+    @property
+    def owed(self) -> int:
+        return self.new + self.learning + self.review
 
 
 class AnkiConnect:
@@ -82,7 +106,22 @@ def current(client, deck):
     card = card["result"]
     return Shown(int(card["cardId"]), str(card.get("question") or ""),
                  str(card.get("answer") or ""), int(card.get("fieldOrder") or 0),
-                 _due(stats.get("result"), deck))
+                 _due(stats.get("result")))
+
+
+def decks(client) -> list:
+    """Return every deck Anki's deck list shows, in its order, with what each owes."""
+    ids = client.call("deckNamesAndIds") or {}
+    if not isinstance(ids, dict):
+        raise AnkiRefused(f"deckNamesAndIds: unexpected reply {ids!r}")
+    stats = client.call("getDeckStats", decks=list(ids)) or {}
+    if not isinstance(stats, dict):
+        raise AnkiRefused(f"getDeckStats: unexpected reply {stats!r}")
+    listed = [Deck(str(name), *_owed(stats[str(deck_id)]))
+              for name, deck_id in ids.items()
+              if isinstance(stats.get(str(deck_id)), dict)]
+    return sorted(listed, key=lambda deck: [part.casefold()
+                                            for part in deck.name.split(SEPARATOR)])
 
 
 def reveal(client) -> bool:
@@ -128,10 +167,13 @@ def _reps(client, card_id) -> int:
     return int(info[0]["reps"])
 
 
-def _due(stats, deck) -> int:
-    """Return the new, learning and review cards deck still owes today."""
-    for entry in (stats or {}).values():
-        if isinstance(entry, dict) and entry.get("name") == deck:
-            return sum(int(entry.get(key) or 0)
-                       for key in ("new_count", "learn_count", "review_count"))
-    return 0
+def _due(stats) -> int:
+    """Return what the one deck getDeckStats was asked about still owes today."""
+    return sum(sum(_owed(entry)) for entry in (stats or {}).values()
+               if isinstance(entry, dict))
+
+
+def _owed(entry) -> tuple:
+    """Return the new, learning and review cards one getDeckStats entry owes today."""
+    return tuple(int(entry.get(key) or 0)
+                 for key in ("new_count", "learn_count", "review_count"))

@@ -3,10 +3,10 @@ import sys
 import pytest
 from PyQt6.QtGui import QPageSize, QPainter, QPdfWriter
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtWidgets import QLabel, QWidget
+from PyQt6.QtWidgets import QLabel, QTreeWidgetItemIterator, QWidget
 
 from src.desktop import anki
-from src.desktop.activities import BreakActivity, DECK, DOCUMENT, VIDEO
+from src.desktop.activities import ANY_DECK, BreakActivity, DECK, DOCUMENT, VIDEO
 from src.config import PALETTE
 from src.domain import media
 from src.domain.media import Place
@@ -417,6 +417,129 @@ class TestReviewingADeck:
         pane = DeckPane("Japanese", client=FakeAnki())
 
         assert pane.view is None and "COULD NOT REVIEW" in failure_of(pane)
+
+
+LIBRARY = {"Japanese": ("j1",), "Japanese::Kaishi 1.5k": ("k1", "k2"),
+           "Japanese::Kanji": (), "Personal Math": ("p1",)}
+
+
+@pytest.fixture
+def choosing(qapp, settled):
+    def _open(decks=LIBRARY):
+        fake = FakeAnki(decks=decks)
+        pane = DeckPane(ANY_DECK, client=fake)
+        settled()
+        return pane, fake
+
+    return _open
+
+
+def rows(pane):
+    listed, walk = [], QTreeWidgetItemIterator(pane.chooser)
+    while walk.value() is not None:
+        row, parent, depth = walk.value(), walk.value().parent(), 0
+        while parent is not None:
+            parent, depth = parent.parent(), depth + 1
+        listed.append(["    " * depth + row.text(0)] + [row.text(column) for column in (1, 2, 3)])
+        walk += 1
+    return listed
+
+
+class TestChoosingADeck:
+    def test_every_deck_is_listed_under_its_parent_with_what_it_owes(self, choosing):
+        pane, _ = choosing()
+
+        assert rows(pane) == [["Japanese", "0", "0", "1"],
+                              ["    Kaishi 1.5k", "0", "0", "2"],
+                              ["    Kanji", "0", "0", "0"],
+                              ["Personal Math", "0", "0", "1"]]
+
+    def test_the_first_deck_that_owes_cards_is_marked(self, choosing):
+        pane, _ = choosing({"Japanese": (), "Japanese::Kanji": ("k1",)})
+
+        assert (pane.choosing, pane.marked) == (True, 1)
+
+    def test_up_and_down_mark_the_deck_beside_within_the_list(self, choosing):
+        pane, _ = choosing()
+
+        pane.nudge(-1)
+        assert pane.marked == 1
+        pane.nudge(1)
+        pane.nudge(1)
+        assert pane.marked == 0
+
+    def test_left_and_right_skip_to_a_deck_that_owes_cards(self, choosing):
+        pane, _ = choosing()
+
+        pane.step(1)
+        pane.step(1)
+        assert pane.marked == 3
+        pane.step(1)
+        assert pane.marked == 0
+        pane.step(-1)
+        assert pane.marked == 3
+
+    def test_space_reviews_the_marked_deck(self, choosing, settled):
+        pane, fake = choosing()
+        pane.nudge(-1)
+
+        pane.toggle()
+        settled()
+
+        assert (fake.reviewing, pane.card.card_id) == ("Japanese::Kaishi 1.5k", 101)
+        assert (pane.choosing, pane.title()) == (False, "Japanese::Kaishi 1.5k")
+
+    def test_back_reads_the_list_again_and_marks_the_next_deck_owing(self, choosing,
+                                                                    settled):
+        pane, _ = choosing()
+        pane.toggle()
+        settled()
+        answered(pane, settled)
+
+        assert pane.back() is True
+        settled()
+
+        assert (pane.choosing, pane.marked, rows(pane)[0][3]) == (True, 1, "0")
+
+    def test_a_deck_left_while_it_owes_cards_stays_marked(self, choosing, settled):
+        pane, _ = choosing()
+        pane.nudge(-1)
+        pane.toggle()
+        settled()
+
+        pane.back()
+        settled()
+
+        assert pane.marked == 1
+
+    def test_space_once_nothing_is_left_goes_back_to_the_list(self, choosing, settled):
+        pane, _ = choosing()
+        pane.toggle()
+        settled()
+        answered(pane, settled)
+        assert "NOTHING DUE IN Japanese" in failure_of(pane)
+
+        pane.toggle()
+        settled()
+
+        assert pane.choosing
+
+    def test_each_change_of_the_keys_is_announced(self, choosing, settled):
+        pane, _ = choosing()
+        heard = []
+        pane.changed.connect(lambda: heard.append(pane.choosing))
+
+        pane.toggle()
+        settled()
+        pane.back()
+        settled()
+
+        assert heard == [False, True]
+
+    def test_a_deck_named_outright_has_no_list_to_go_back_to(self, reviewing):
+        pane, _ = reviewing()
+
+        assert (pane.back(), pane.title()) == (False, "")
 
 
 class TestACardPage:

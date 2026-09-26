@@ -620,6 +620,21 @@ Feature: Focus timer
     Scenario: A deck with nothing due
       Then the screen says that nothing is due, and the break goes on
 
+    Scenario: Any deck, chosen on the wall
+      Given my profile names an activity with the deck "*"
+      When I press that offer's key
+      Then the wall lists every deck Anki's own list shows, with what each owes today
+      And the first deck that owes cards is marked
+      And up and down mark the deck beside, left and right the next one that owes cards
+      And SPACE reviews the marked deck, and the wall beside it names that deck
+
+    Scenario: Back from a deck chosen on the wall
+      Given a break is reviewing a deck chosen from the list
+      When I press 0, or SPACE once nothing is left in it
+      Then the list comes back with what each deck owes read again
+      And the deck I left stays marked while it owes cards, or the next one that does is
+      And 0 on the list puts the wall back
+
     Scenario: Anki is not running, or has no such deck
       When I press that offer's key
       Then that screen says why it cannot review

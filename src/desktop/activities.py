@@ -10,10 +10,11 @@ log = logging.getLogger(__name__)
 VIDEO = "video"
 DOCUMENT = "document"
 DECK = "deck"
+ANY_DECK = "*"
 
 
 class BreakActivity(NamedTuple):
-    """One thing a break may show: a file by path, or an Anki deck by name."""
+    """One thing a break may show: a file by path, or an Anki deck by name or ANY_DECK."""
 
     name: str
     path: str

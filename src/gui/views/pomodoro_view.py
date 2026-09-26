@@ -1515,13 +1515,22 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def media_key_hints(self, kind) -> list:
         """Return every key that drives what is showing, in reading order."""
-        if kind == break_activities.DECK:
+        pane = self.media_surface.pane if self.media_surface is not None else None
+        if kind == break_activities.DECK and getattr(pane, "choosing", False):
+            hints = [
+                ("\u2191 \u2193", "choose a deck"),
+                ("\u2190 \u2192", "one with cards due"),
+                ("SPACE", "review it"),
+                ("0", "back to Traker"),
+            ]
+        elif kind == break_activities.DECK:
             hints = [
                 ("SPACE", "show, then good"),
                 ("\u2190 \u2192", "again, good"),
                 ("\u2191 \u2193", "scroll"),
                 (UNDO_KEY_NAME, "undo"),
-                ("0", "back to Traker"),
+                ("0", "back to the decks" if getattr(pane, "from_list", False)
+                 else "back to Traker"),
             ]
         else:
             paging = kind == break_activities.DOCUMENT
@@ -1630,7 +1639,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self._showing is None or self.media_surface is None:
             return None
         place = self.media_surface.place()
-        return ((self._showing.name,) + place) if place else None
+        return ((self.media_surface.title(),) + place) if place else None
 
     def _keep_the_walls_on_their_screens(self):
         """Report or correct a wall the compositor placed on another output."""
@@ -1742,7 +1751,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         elif key == Qt.Key.Key_Down:
             pane.nudge(-1)
         elif key == Qt.Key.Key_0:
-            self._stop_showing()
+            back = getattr(pane, "back", None)
+            if not (callable(back) and back()):
+                self._stop_showing()
         elif key == UNDO_KEY and callable(getattr(pane, "undo", None)):
             pane.undo()
         else:
@@ -2021,6 +2032,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             self, pane_factory=self.media_pane_factory,
             only_screen=len(self.overlays) == 1,
             parent=self._media_host.media_parent())
+        self.media_surface.pane_changed.connect(self._say_which_keys_drive_it)
         self._media_host.host_media(self.media_surface)
 
     def _watch_the_outputs(self):

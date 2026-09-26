@@ -5,12 +5,13 @@ import re
 from PyQt6.QtCore import QPointF, QThreadPool, QUrl, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QOpenGLContext, QPalette
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtWidgets import (QFrame, QLabel, QStackedWidget, QVBoxLayout,
-                             QWidget)
+from PyQt6.QtWidgets import (QAbstractItemView, QFrame, QHeaderView, QLabel,
+                             QStackedWidget, QTreeWidget, QTreeWidgetItem,
+                             QVBoxLayout, QWidget)
 
 from src.config import PALETTE
 from src.desktop import anki
-from src.desktop.activities import DECK, DOCUMENT, readout_of
+from src.desktop.activities import ANY_DECK, DECK, DOCUMENT, readout_of
 from src.domain.media import Place, as_elapsed
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
@@ -40,6 +41,12 @@ hr {{ background-color: {PALETTE['base01']}; margin: 1em 0; border: none; height
 
 TO_THE_ANSWER = ("<script>addEventListener('load', () => "
                  "document.getElementById('answer')?.scrollIntoView());</script>")
+
+DECK_COLUMNS = ("DECK", "NEW", "LEARN", "DUE", "")
+COUNT_COLOURS = ('blue', 'red', 'green')
+DECK_INDENT_PX = 28
+DECK_FONT_PX = 20
+RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 
 
 def _failure_label(parent, text, colour='red') -> QLabel:
@@ -410,8 +417,85 @@ def _why_not(error, url, deck) -> str:
     return str(error)
 
 
+def _next_owing(decks, start, direction=1) -> int:
+    """Return the next deck from start, going direction and wrapping, that owes cards."""
+    for step in range(1, len(decks) + 1):
+        index = (start + step * direction) % len(decks)
+        if decks[index].owed:
+            return index
+    return min(max(start, 0), max(len(decks) - 1, 0))
+
+
+def _first_marked(decks, left="") -> int:
+    """Return the deck the list opens on: the one left while it owes cards, else the next."""
+    names = [deck.name for deck in decks]
+    if left in names:
+        at = names.index(left)
+        return at if decks[at].owed else _next_owing(decks, at)
+    return _next_owing(decks, -1)
+
+
+def _deck_list(parent) -> QTreeWidget:
+    """Build the list a deck is chosen from, in the columns of Anki's own."""
+    tree = QTreeWidget(parent)
+    tree.setColumnCount(len(DECK_COLUMNS))
+    tree.setHeaderLabels(DECK_COLUMNS)
+    tree.setRootIsDecorated(False)
+    tree.setItemsExpandable(False)
+    tree.setIndentation(DECK_INDENT_PX)
+    tree.setUniformRowHeights(True)
+    tree.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+    tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    tree.setFrameShape(QFrame.Shape.NoFrame)
+    header = tree.header()
+    header.setStretchLastSection(True)
+    for column in range(len(DECK_COLUMNS) - 1):
+        header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+    for column in range(1, len(COUNT_COLOURS) + 1):
+        tree.headerItem().setTextAlignment(column, RIGHT)
+    tree.setStyleSheet(
+        f"QTreeWidget {{ background-color: {PALETTE['base03']}; border: none;"
+        f" font-family: 'Fira Code'; font-size: {DECK_FONT_PX}px; padding: 20px; }}"
+        f" QTreeWidget::item {{ padding: 4px 16px; }}"
+        f" QHeaderView::section {{ background-color: {PALETTE['base03']};"
+        f" color: {PALETTE['base01']}; border: none; font-family: 'Fira Code';"
+        f" font-size: 11px; letter-spacing: 2px; padding: 4px 16px; }}")
+    return tree
+
+
+def _name_colour(deck, marked=False) -> QColor:
+    """Return the colour of a deck's name: bright when marked, faint when it owes nothing."""
+    return QColor(PALETTE['base2' if marked else 'base0' if deck.owed else 'base01'])
+
+
+def _deck_rows(tree, decks) -> list:
+    """Put each deck under its parent with what it owes, and return the rows in list order."""
+    rows, placed = [], {}
+    for deck in decks:
+        parent = placed.get(deck.name.rpartition(anki.SEPARATOR)[0])
+        counts = (deck.new, deck.learning, deck.review)
+        row = QTreeWidgetItem([deck.name if parent is None else deck.leaf,
+                               *map(str, counts)])
+        row.setForeground(0, _name_colour(deck))
+        for column, (count, colour) in enumerate(zip(counts, COUNT_COLOURS), start=1):
+            row.setTextAlignment(column, RIGHT)
+            row.setForeground(column, QColor(PALETTE[colour if count else 'base01']))
+        if parent is None:
+            tree.addTopLevelItem(row)
+        else:
+            parent.addChild(row)
+        placed[deck.name] = row
+        rows.append(row)
+    tree.expandAll()
+    return rows
+
+
 class DeckPane(QWidget):
     """One Anki deck, a card at a time, chosen and scheduled by Anki's reviewer."""
+
+    changed = pyqtSignal()
 
     def __init__(self, deck=None, start_at=0, parent=None, client=None):
         super().__init__(parent)
@@ -422,10 +506,16 @@ class DeckPane(QWidget):
         self.side = None
         self.answered = 0
         self.busy = False
+        self.listing = []
+        self._rows = []
+        self.marked = 0
+        self.choosing = False
+        self.from_list = False
         self._generation = 0
         self._media = ""
         self._message = None
         self.view = None
+        self.chooser = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -442,26 +532,38 @@ class DeckPane(QWidget):
         self.view.page().setBackgroundColor(QColor(PALETTE['base03']))
         self.view.page().setAudioMuted(True)
         layout.addWidget(self.view)
+        self.chooser = _deck_list(self)
+        self.chooser.hide()
+        layout.addWidget(self.chooser)
         if deck:
             self.open(deck, start_at)
 
     def open(self, deck, start_at=0):
-        """Open Anki's reviewer on deck and show the card it chooses."""
-        self._generation += 1
-        self.deck = str(deck)
-        self.card, self.side, self.answered, self.busy = None, None, 0, False
-        if self.view is None:
-            return
-        self._clear_message()
-        self._run(anki.begin, self._began, self.client, self.deck)
+        """Open Anki's reviewer on deck, or list every deck to choose one for ANY_DECK."""
+        self.from_list = str(deck) == ANY_DECK
+        if self.from_list:
+            self._list()
+        else:
+            self._review(str(deck))
 
     def toggle(self):
-        """Show the answer, or answer Good once it shows."""
+        """Review the marked deck, or show the answer and then answer Good."""
+        if self.choosing:
+            if not self.busy and self.listing:
+                self._review(self.listing[self.marked].name)
+            return
         self.step(1)
 
     def step(self, direction):
-        """Show the answer, or once it shows, answer Good forward and Again back."""
-        if self.busy or self.card is None:
+        """Show the answer, then answer Good or Again; on the list, skip to an owing deck."""
+        if self.busy:
+            return
+        if self.choosing:
+            self._mark(_next_owing(self.listing, self.marked, 1 if int(direction) > 0 else -1))
+            return
+        if self.card is None:
+            if self.from_list and int(direction) > 0:
+                self._list()
             return
         if self.side == QUESTION:
             self._run(anki.reveal, self._revealed, self.client)
@@ -472,15 +574,30 @@ class DeckPane(QWidget):
 
     def undo(self):
         """Take this opening's last answer back and show that card again."""
-        if self.busy or self.answered <= 0 or self.view is None:
+        if self.busy or self.choosing or self.answered <= 0 or self.view is None:
             return
         self._run(anki.take_back, self._taken_back, self.client, self.deck)
 
     def nudge(self, direction):
-        """Scroll the card."""
+        """Scroll the card, or mark the deck above or below."""
+        if self.choosing:
+            if not self.busy:
+                self._mark(self.marked - int(direction))
+            return
         if self.view is not None:
             self.view.page().runJavaScript(
                 f"window.scrollBy(0, {-int(direction) * SCROLL_STEP_PX})")
+
+    def back(self) -> bool:
+        """Leave a deck chosen from the list for the list, reporting whether it did."""
+        if not self.from_list or self.choosing or self.view is None:
+            return False
+        self._list()
+        return True
+
+    def title(self) -> str:
+        """Return the deck chosen from the list while it is reviewed, or nothing."""
+        return self.deck if self.from_list and not self.choosing else ""
 
     def position(self) -> int:
         """Return how many cards this opening has answered."""
@@ -496,6 +613,26 @@ class DeckPane(QWidget):
         self.card, self.side, self.busy = None, None, False
         if self.view is not None:
             self.view.setHtml("")
+
+    def _review(self, deck):
+        """Open Anki's reviewer on deck and show the card it chooses."""
+        self._generation += 1
+        self.deck = deck
+        self.card, self.side, self.answered, self.busy = None, None, 0, False
+        self.choosing = False
+        if self.view is not None:
+            self._clear_message()
+            self._run(anki.begin, self._began, self.client, self.deck)
+        self.changed.emit()
+
+    def _list(self):
+        """Read every deck Anki has, with what each owes, to choose one from."""
+        self._generation += 1
+        self.card, self.side, self.answered, self.busy = None, None, 0, False
+        self.choosing, self.listing, self._rows = True, [], []
+        if self.view is not None:
+            self._run(anki.decks, self._listed, self.client)
+        self.changed.emit()
 
     def _run(self, step, receiver, *args):
         """Run one step off the interface thread, taking no key until it lands."""
@@ -521,6 +658,15 @@ class DeckPane(QWidget):
         if self._settles(outcome):
             self._media, shown = outcome[1]
             self._present(shown)
+
+    def _listed(self, outcome):
+        if not self._settles(outcome):
+            return
+        self.listing = list(outcome[1])
+        self.chooser.clear()
+        self._rows = _deck_rows(self.chooser, self.listing)
+        self._clear_message()
+        self._mark(_first_marked(self.listing, self.deck))
 
     def _revealed(self, outcome):
         if not self._settles(outcome):
@@ -558,7 +704,8 @@ class DeckPane(QWidget):
         self.card = shown
         if shown is None:
             self.side = None
-            self._show_message(f"NOTHING DUE IN {self.deck}", colour='base1')
+            back = "\nSPACE OR 0 FOR THE DECKS" if self.from_list else ""
+            self._show_message(f"NOTHING DUE IN {self.deck}{back}", colour='base1')
             return
         self.side = QUESTION
         self._render(shown.question)
@@ -568,10 +715,31 @@ class DeckPane(QWidget):
         self.view.setHtml(card_page(side, self.card.ordinal, answer),
                           QUrl.fromLocalFile(self._media.rstrip("/") + "/"))
 
+    def _mark(self, index):
+        """Mark the deck at index, within the list, and keep it in view."""
+        if not self._rows:
+            return
+        self._paint_row(False)
+        self.marked = max(0, min(len(self._rows) - 1, int(index)))
+        self._paint_row(True)
+        self.chooser.scrollToItem(self._rows[self.marked],
+                                  QAbstractItemView.ScrollHint.PositionAtCenter)
+
+    def _paint_row(self, marked):
+        """Paint the marked row as marked, or as what it owes once it is not."""
+        if not 0 <= self.marked < len(self._rows):
+            return
+        row = self._rows[self.marked]
+        row.setForeground(0, _name_colour(self.listing[self.marked], marked))
+        for column in range(len(DECK_COLUMNS)):
+            row.setData(column, Qt.ItemDataRole.BackgroundRole,
+                        QColor(PALETTE['base02']) if marked else None)
+
     def _show_message(self, text, colour='red'):
         self._clear_message()
-        if self.view is not None:
-            self.view.hide()
+        for shown in (self.view, self.chooser):
+            if shown is not None:
+                shown.hide()
         self._message = _failure_label(self, text, colour)
         self.layout().addWidget(self._message)
 
@@ -580,7 +748,8 @@ class DeckPane(QWidget):
             self._message.deleteLater()
             self._message = None
         if self.view is not None:
-            self.view.show()
+            self.view.setVisible(not self.choosing)
+            self.chooser.setVisible(self.choosing)
 
 
 def build_pane(activity, start_at=0, parent=None) -> QWidget:
@@ -594,6 +763,8 @@ def build_pane(activity, start_at=0, parent=None) -> QWidget:
 
 class MediaSurface(QWidget):
     """The break's screen while it is showing something."""
+
+    pane_changed = pyqtSignal()
 
     def __init__(self, timer_ref, pane_factory=None, only_screen=False,
                  parent=None):
@@ -648,6 +819,9 @@ class MediaSurface(QWidget):
         pane = self.panes.get(activity.kind)
         if pane is None:
             pane = self._build_pane(activity, start_at, parent=self.stack)
+            changed = getattr(pane, "changed", None)
+            if changed is not None:
+                changed.connect(self.pane_changed)
             self.panes[activity.kind] = pane
             self.stack.addWidget(pane)
         else:
@@ -699,6 +873,13 @@ class MediaSurface(QWidget):
         """Place the card in its corner, in front."""
         self.keys.place_top_right(self.rect())
         self.keys.raise_()
+
+    def title(self) -> str:
+        """Return the name of what is showing, as narrowed by the pane."""
+        if self.activity is None:
+            return ""
+        narrowed = getattr(self.pane, "title", None)
+        return (narrowed() if callable(narrowed) else "") or self.activity.name
 
     def place(self):
         """Return where what is showing has reached, and which readout says it."""

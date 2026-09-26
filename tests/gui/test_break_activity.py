@@ -1,11 +1,11 @@
 import pytest
-from PyQt6.QtCore import QEvent, Qt, QThreadPool
+from PyQt6.QtCore import QEvent, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
 from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
 
 import src.profile as profile_module
 from src.desktop import rest_positions, rest_queue
-from src.desktop.activities import DECK, DOCUMENT, VIDEO, BreakActivity
+from src.desktop.activities import ANY_DECK, DECK, DOCUMENT, VIDEO, BreakActivity
 from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
@@ -28,6 +28,10 @@ DECK_TOML = """
 [[strict_break.activities]]
 name = "Japanese"
 deck = "Japanese"
+
+[[strict_break.activities]]
+name = "Anki"
+deck = "*"
 """
 
 
@@ -66,8 +70,29 @@ class FakePane(QWidget):
 
 
 class FakeDeckPane(FakePane):
+    changed = pyqtSignal()
+
+    def __init__(self, activity, start_at=0, parent=None):
+        super().__init__(activity, start_at, parent)
+        self.choosing = self.from_list = activity.path == ANY_DECK
+        self.deck = ""
+
+    def open(self, path, start_at=0):
+        super().open(path, start_at)
+        self.choosing = self.from_list = path == ANY_DECK
+
     def undo(self):
         self.calls.append("undo")
+
+    def back(self):
+        self.calls.append("back")
+        if not self.from_list or self.choosing:
+            return False
+        self.choosing = True
+        return True
+
+    def title(self):
+        return self.deck
 
 
 class Panes:
@@ -1313,6 +1338,58 @@ class TestADeck:
         send_key(reviewing, Qt.Key.Key_0)
 
         assert rest_positions.read(reviewing._positions_path) == {}
+
+
+class TestEveryDeck:
+    @pytest.fixture
+    def listing(self, deck_timer):
+        enter_strict_break(deck_timer)
+        send_key(deck_timer, Qt.Key.Key_4)
+        return deck_timer
+
+    def in_a_deck(self, view):
+        pane = showing_pane(view)
+        pane.choosing, pane.deck = False, "Japanese::Kanji"
+        pane.changed.emit()
+        return pane
+
+    def test_the_card_names_the_keys_that_choose_a_deck(self, listing):
+        said = dict(listing.media_surface.keys.hints)
+
+        assert said["\u2191 \u2193"] == "choose a deck"
+        assert said["SPACE"] == "review it"
+        assert said["0"] == "back to Traker"
+
+    def test_the_card_follows_the_list_into_a_deck(self, listing):
+        self.in_a_deck(listing)
+
+        assert dict(listing.media_surface.keys.hints)["0"] == "back to the decks"
+
+    def test_0_in_a_deck_from_the_list_goes_back_to_the_list(self, listing):
+        pane = self.in_a_deck(listing)
+
+        send_key(listing, Qt.Key.Key_0)
+
+        assert (pane.calls[-1], pane.choosing) == ("back", True)
+        assert listing._showing is not None
+
+    def test_0_on_the_list_puts_the_wall_back(self, listing):
+        send_key(listing, Qt.Key.Key_0)
+
+        assert listing._showing is None
+
+    def test_the_wall_beside_names_the_deck_under_review(self, listing):
+        self.in_a_deck(listing)
+
+        assert listing._playing()[0] == "Japanese::Kanji"
+
+    def test_every_key_it_names_is_one_the_break_answers(self, listing):
+        for label, _says in listing.media_surface.keys.hints:
+            key = key_named(label)
+            assert key is not None, f"the card names {label!r} and nothing presses it"
+            pressed = QKeyEvent(QEvent.Type.KeyPress, key,
+                                Qt.KeyboardModifier.NoModifier)
+            assert listing.eventFilter(listing, pressed) is True, label
 
 
 class TestTheReadoutIsOnTheWallBesideTheFilm:
