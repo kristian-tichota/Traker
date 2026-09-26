@@ -217,6 +217,32 @@ class ChangeGlow(QObject):
         self.model.highlight_changes(0.0)
 
 
+GLOW_MS = 900
+
+
+class TextGlow(QObject):
+    """Fades a label's text from a flash colour back to its own."""
+
+    def __init__(self, label, rest_hex, duration=GLOW_MS):
+        super().__init__(label)
+        self.label = label
+        self.rest = QColor(rest_hex)
+        self.animation = QVariantAnimation(self)
+        self.animation.setDuration(duration)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.animation.valueChanged.connect(self._apply)
+
+    def glow(self, flash_hex: str):
+        """Flash the text and let it settle back."""
+        self.animation.stop()
+        self.animation.setStartValue(QColor(flash_hex))
+        self.animation.setEndValue(self.rest)
+        self.animation.start()
+
+    def _apply(self, colour: typing.Any):
+        self.label.setStyleSheet(f"color: {colour.name()};")
+
+
 class StatusBarPulser(QObject):
     def __init__(self, status_bar, base_bg_hex, text_color_hex, duration=500):
         super().__init__(status_bar)

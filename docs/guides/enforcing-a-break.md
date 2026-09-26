@@ -24,7 +24,8 @@ skip are refused. Holding `Esc` for `release_hold_secs` abandons the break, and 
 recorded as `overridden_break`. When the break ends the walls stay but give up the desktops, the
 switch and the focus: the countdown becomes `BREAK OVER` and a count up, a file goes on playing, and
 the press that starts focus takes the walls away. A wall shows the session, the chores that are due
-and, after `away_secs`, the offers; the chore tick is the one surface that writes to the service.
+and, after `away_secs`, the offers; a pressed offer glows, yellow while the offers are held back.
+The chore tick is the one surface that writes to the service.
 
 ## Break activities
 

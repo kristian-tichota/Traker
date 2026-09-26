@@ -1,5 +1,5 @@
 import pytest
-from PyQt6.QtCore import QEvent, Qt, QThreadPool, pyqtSignal
+from PyQt6.QtCore import QAbstractAnimation, QEvent, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
 from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
 
@@ -9,6 +9,8 @@ from src.desktop.activities import ANY_DECK, BOOK, DECK, DOCUMENT, VIDEO, BreakA
 from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
+from src.config import PALETTE
+from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.views.pomodoro_view import RELEASE_KEY, PomodoroView, StrictOverlay
 from tests.gui.conftest import advance
 
@@ -1637,3 +1639,53 @@ class TestABook:
         assert rest_positions.place_for(pane.activity.path, reading._positions_path) == (
             Place(1_660, 4_486))
         assert "    3  Books   a.epub      37%" in reading.upcoming.lines()
+
+
+def glowing(label):
+    """Return the colour a label glows from, or None where it rests."""
+    animation = label.glowing.animation
+    if animation.state() != QAbstractAnimation.State.Running:
+        return None
+    return animation.startValue().name()
+
+
+class TestAPressIsAcknowledged:
+    def offers(self, panel, title):
+        return [glowing(line) for line in panel._lines[title]]
+
+    def test_an_offer_pressed_while_they_wait_glows_yellow_with_its_title(self, timer):
+        enter_strict_break(timer, past_the_wait=False)
+
+        send_key(timer, Qt.Key.Key_2)
+
+        panel = timer.overlays[0].upcoming
+        assert self.offers(panel, timer.OFFERS_TITLE) == [None, PALETTE['yellow']]
+        assert glowing(panel._titles[timer.OFFERS_TITLE]) == PALETTE['yellow']
+
+    def test_one_pressed_once_they_open_glows_on_its_own(self, timer):
+        enter_strict_break(timer)
+
+        send_key(timer, Qt.Key.Key_2)
+
+        panel = timer.upcoming
+        assert self.offers(panel, timer.OFFERS_TITLE) == [None, PALETTE['base2']]
+        assert glowing(panel._titles[timer.OFFERS_TITLE]) is None
+
+    def test_the_line_that_changed_glows_as_the_wall_comes_back(self, timer, settled):
+        enter_strict_break(timer)
+        settled()
+        send_key(timer, Qt.Key.Key_2)
+        pane = timer.media_pane_factory.last
+        pane.at, pane.of = 1_593_000, 5_195_000
+
+        send_key(timer, Qt.Key.Key_0)
+
+        assert self.offers(timer.upcoming, timer.OFFERS_TITLE) == [None, PALETTE['base2']]
+
+    def test_a_line_only_aligned_anew_does_not_glow(self, qapp):
+        panel = UpcomingPanel()
+        panel.set_sections([("OFFERS", ["ENTER  a.mkv", "2  b.pdf"])])
+
+        panel.set_sections([("OFFERS", ["ENTER  a.mkv       —", "    2  b.pdf  1 / 9"])])
+
+        assert self.offers(panel, "OFFERS") == [None, PALETTE['base2']]

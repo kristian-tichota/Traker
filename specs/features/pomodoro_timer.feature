@@ -446,7 +446,7 @@ Feature: Focus timer
     Scenario: The first minutes of a break are away from the screen
       Given breaks take the screens and one begins
       Then nothing can be shown for the first five minutes of it
-      And an offer's key does nothing at all until they are up
+      And an offer's key opens nothing until they are up, and only glows to say so
       And the offers are listed the whole time, titled with how long is left
       And what is due and what is coming are on the wall as they always are
       And a chore still takes its tick, because that is what being away is for
@@ -476,6 +476,12 @@ Feature: Focus timer
       When one of them reaches its end
       Then nothing else starts, and the wall is what I am left looking at
       And the next thing shown is whichever one I press a key for
+
+    Scenario: A press is acknowledged
+      When I press an offer's key
+      Then its line glows for a moment on every panel listing the offers
+      And while the offers are held back it glows yellow, with the title saying how long is left
+      And a line that reads differently when the wall comes back glows the same way
 
     Scenario: Showing one
       When I press an offer's key while the break holds

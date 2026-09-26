@@ -1730,9 +1730,10 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self._strict_engaged:
             if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat() \
                     and not is_typing_into(watched):
-                activity = self._activity_for(event.key())
-                if activity is not None:
-                    self._show_activity(activity)
+                index = self._offer_index(event.key())
+                if index is not None:
+                    self._show_activity(self._offers[index])
+                    self._acknowledge_offer(index)
                     return True
                 if self._drive_media(event.key()):
                     return True
@@ -1744,15 +1745,24 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _activity_for(self, key):
         """Return the offer a key opens, or None for a key left alone."""
+        index = self._offer_index(key)
+        return None if index is None else self._offers[index]
+
+    def _offer_index(self, key):
+        """Return where in the offers a key's offer stands, or None for a key left alone."""
         if not self._offers:
             return None
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            return self._offers[0]
-        if Qt.Key.Key_1 <= key <= Qt.Key.Key_9:
-            index = key - Qt.Key.Key_1
-            if index < len(self._offers):
-                return self._offers[index]
+            return 0
+        if Qt.Key.Key_1 <= key <= Qt.Key.Key_9 and key - Qt.Key.Key_1 < len(self._offers):
+            return key - Qt.Key.Key_1
         return None
+
+    def _acknowledge_offer(self, index):
+        """Glow the pressed offer on every panel listing it, yellow while offers wait."""
+        held = self.opens_in_ms() > 0
+        for panel in [self.upcoming] + [wall.upcoming for wall in self.overlays]:
+            panel.glow(self.OFFERS_TITLE, index, held)
 
     def _drive_media(self, key) -> bool:
         """Apply one key to what the break is showing."""
