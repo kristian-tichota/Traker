@@ -620,6 +620,10 @@ Feature: Focus timer
       And BACKSPACE takes back the last answer I gave and shows that card again
       And up and down scroll the card, and 0 puts the wall back
 
+    Scenario: Each answer is confirmed
+      When an answer or a taking back lands
+      Then the next card says for a moment which it was: GOOD, AGAIN or TAKEN BACK, each in its colour
+
     Scenario: A press while Anki moves on is not a second answer
       Given I answered a card and Anki has not yet shown the next one
       When I press another key

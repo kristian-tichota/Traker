@@ -14,7 +14,8 @@ from src.domain import media
 from src.domain.media import Place
 from src.gui.components import media_progress
 from src.gui.components.book_pane import BookPane
-from src.gui.components.media_surface import (ANSWER, QUESTION, DeckPane, DocumentPane,
+from src.gui.components.media_surface import (AGAIN_SAID, ANSWER, GOOD_SAID, QUESTION,
+                                              UNDONE, DeckPane, DocumentPane,
                                               MediaSurface, MpvScreen, VideoPane,
                                               build_pane, card_page)
 from tests.anki_double import FakeAnki
@@ -485,6 +486,38 @@ class TestReviewingADeck:
 
         assert (pane.card.card_id, pane.answered, fake.reps[100]) == (100, 0, 0)
 
+    def test_the_next_card_says_the_answer_was_good(self, reviewing, settled):
+        pane, _ = reviewing()
+
+        answered(pane, settled, 1)
+
+        assert pane.verdict == GOOD_SAID
+
+    def test_or_that_it_was_again(self, reviewing, settled):
+        pane, _ = reviewing()
+
+        answered(pane, settled, -1)
+
+        assert pane.verdict == AGAIN_SAID
+
+    def test_an_answer_taken_back_says_so(self, reviewing, settled):
+        pane, _ = reviewing()
+        answered(pane, settled)
+
+        pane.undo()
+        settled()
+
+        assert pane.verdict == UNDONE
+
+    def test_the_answer_side_carries_no_verdict(self, reviewing, settled):
+        pane, _ = reviewing()
+        answered(pane, settled)
+
+        pane.step(1)
+        settled()
+
+        assert (pane.side, pane.verdict) == (ANSWER, None)
+
     def test_nothing_is_taken_back_before_an_answer(self, reviewing, settled):
         pane, fake = reviewing()
 
@@ -667,6 +700,17 @@ class TestACardPage:
     def test_the_answer_is_scrolled_to_and_the_question_is_not(self):
         assert "scrollIntoView" in card_page("x", 0, answer=True)
         assert "scrollIntoView" not in card_page("x", 0)
+
+    @pytest.mark.parametrize("verdict, word, colour", [
+        (GOOD_SAID, "GOOD", 'green'), (AGAIN_SAID, "AGAIN", 'red'),
+        (UNDONE, "TAKEN BACK", 'yellow')])
+    def test_a_verdict_is_worded_and_coloured(self, verdict, word, colour):
+        page = card_page("x", 0, verdict=verdict)
+
+        assert f">{word}</div>" in page and PALETTE[colour] in page
+
+    def test_a_card_with_no_verdict_carries_none(self):
+        assert "traker-verdict" not in card_page("x", 0)
 
 
 class TestWhichPaneIsBuilt:

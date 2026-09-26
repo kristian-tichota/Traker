@@ -43,6 +43,18 @@ hr {{ background-color: {PALETTE['base01']}; margin: 1em 0; border: none; height
 TO_THE_ANSWER = ("<script>addEventListener('load', () => "
                  "document.getElementById('answer')?.scrollIntoView());</script>")
 
+GOOD_SAID, AGAIN_SAID, UNDONE = "good", "again", "undone"
+VERDICTS = {GOOD_SAID: ("GOOD", 'green'), AGAIN_SAID: ("AGAIN", 'red'),
+            UNDONE: ("TAKEN BACK", 'yellow')}
+
+VERDICT_CSS = f"""
+#traker-verdict {{ position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 2147483647; pointer-events: none; padding: 6px 18px; border-radius: 4px;
+  font: 600 18px 'Fira Code', monospace; letter-spacing: 3px; color: {PALETTE['base03']};
+  animation: traker-verdict 2.5s ease-in forwards; }}
+@keyframes traker-verdict {{ 0%, 60% {{ opacity: 1; }} 100% {{ opacity: 0; }} }}
+"""
+
 DECK_COLUMNS = ("DECK", "NEW", "LEARN", "DUE", "")
 COUNT_COLOURS = ('blue', 'red', 'green')
 DECK_INDENT_PX = 28
@@ -390,13 +402,18 @@ class DocumentPane(QWidget):
         self.document.close()
 
 
-def card_page(side, ordinal, answer=False) -> str:
-    """Wrap one side of a card as Anki's reviewer does, in night mode."""
+def card_page(side, ordinal, answer=False, verdict=None) -> str:
+    """Wrap a card's side as Anki's reviewer does at night, with any verdict on it."""
     body = CARD_MARKERS.sub("", side)
+    said = ""
+    if verdict in VERDICTS:
+        word, colour = VERDICTS[verdict]
+        said = (f'<div id="traker-verdict" style="background: {PALETTE[colour]};">'
+                f"{word}</div>")
     return ('<!doctype html><html><head><meta charset="utf-8">'
-            f"<style>{CARD_CSS}</style></head>"
+            f"<style>{CARD_CSS}{VERDICT_CSS if said else ''}</style></head>"
             f'<body class="card card{int(ordinal) + 1} isLin nightMode night_mode">'
-            f"{body}{TO_THE_ANSWER if answer else ''}</body></html>")
+            f"{said}{body}{TO_THE_ANSWER if answer else ''}</body></html>")
 
 
 def _attempt(generation, step, *args) -> tuple:
@@ -505,6 +522,7 @@ class DeckPane(QWidget):
         self.deck = ""
         self.card = None
         self.side = None
+        self.verdict = None
         self.answered = 0
         self.busy = False
         self.listing = []
@@ -569,9 +587,10 @@ class DeckPane(QWidget):
         if self.side == QUESTION:
             self._run(anki.reveal, self._revealed, self.client)
             return
-        ease = anki.GOOD if int(direction) > 0 else anki.AGAIN
-        self._run(anki.grade, self._graded, self.client, self.deck,
-                  self.card.card_id, ease)
+        good = int(direction) > 0
+        self._run(anki.grade, self._answered_good if good else self._answered_again,
+                  self.client, self.deck, self.card.card_id,
+                  anki.GOOD if good else anki.AGAIN)
 
     def undo(self):
         """Take this opening's last answer back and show that card again."""
@@ -678,16 +697,22 @@ class DeckPane(QWidget):
         else:
             self._run(anki.current, self._reread, self.client, self.deck)
 
-    def _graded(self, outcome):
+    def _answered_good(self, outcome):
+        self._graded(outcome, GOOD_SAID)
+
+    def _answered_again(self, outcome):
+        self._graded(outcome, AGAIN_SAID)
+
+    def _graded(self, outcome, verdict):
         if self._settles(outcome):
             landed, shown = outcome[1]
             self.answered += int(bool(landed))
-            self._present(shown)
+            self._present(shown, verdict if landed else None)
 
     def _taken_back(self, outcome):
         if self._settles(outcome):
             self.answered = max(0, self.answered - 1)
-            self._present(outcome[1])
+            self._present(outcome[1], UNDONE)
 
     def _reread(self, outcome):
         if self._settles(outcome):
@@ -700,20 +725,23 @@ class DeckPane(QWidget):
         self.card, self.side = None, None
         self._show_message(f"COULD NOT REVIEW\n{error}")
 
-    def _present(self, shown):
+    def _present(self, shown, verdict=None):
         """Show the question of the card Anki holds, or that the deck owes nothing."""
         self.card = shown
         if shown is None:
             self.side = None
+            said = f"{VERDICTS[verdict][0]}\n" if verdict in VERDICTS else ""
             back = "\nSPACE OR 0 FOR THE DECKS" if self.from_list else ""
-            self._show_message(f"NOTHING DUE IN {self.deck}{back}", colour='base1')
+            self._show_message(f"{said}NOTHING DUE IN {self.deck}{back}", colour='base1')
+            self.verdict = verdict
             return
         self.side = QUESTION
-        self._render(shown.question)
+        self._render(shown.question, verdict=verdict)
 
-    def _render(self, side, answer=False):
+    def _render(self, side, answer=False, verdict=None):
         self._clear_message()
-        self.view.setHtml(card_page(side, self.card.ordinal, answer),
+        self.verdict = verdict
+        self.view.setHtml(card_page(side, self.card.ordinal, answer, verdict),
                           QUrl.fromLocalFile(self._media.rstrip("/") + "/"))
 
     def _mark(self, index):
@@ -738,6 +766,7 @@ class DeckPane(QWidget):
 
     def _show_message(self, text, colour='red'):
         self._clear_message()
+        self.verdict = None
         for shown in (self.view, self.chooser):
             if shown is not None:
                 shown.hide()
