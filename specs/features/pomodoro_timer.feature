@@ -256,6 +256,7 @@ Feature: Focus timer
       When a break begins
       Then every screen is covered by a wall of its own, in front of other windows
       And each wall is a window naming the output it fills, apart from Traker's own
+      And the break opens no other window while it stands
       And my own Traker window is left exactly where I had it, behind them
       And the compositor is asked to keep all of it on every virtual desktop and activity
       And it is told which output each wall belongs on, because Qt cannot ask for one

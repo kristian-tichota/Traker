@@ -2,7 +2,7 @@ import pytest
 from PyQt6 import sip
 from PyQt6.QtCore import QAbstractAnimation, QEvent, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
-from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 import src.profile as profile_module
 from src.desktop import rest_positions, rest_queue
@@ -1793,6 +1793,21 @@ class TestAPressIsAcknowledged:
         panel.set_sections([("OFFERS", ["ENTER  a.mkv       —", "    2  b.pdf  1 / 9"])])
 
         assert self.offers(panel, "OFFERS") == [None, PALETTE['base2']]
+
+    def test_lines_drawn_twice_at_once_open_no_window_of_their_own(self, qapp):
+        host = QWidget()
+        panel = UpcomingPanel(host)
+        host.show()
+        panel.set_sections([("OFFERS", ["ENTER  a.mkv"])])
+        qapp.processEvents()
+        panel.set_sections([("OFFERS", ["ENTER  b.mkv"])])
+        drawn = panel.findChildren(QLabel)
+
+        panel.set_sections([("OFFERS", ["ENTER  c.mkv"])])
+        qapp.processEvents()
+
+        assert not any(label.isVisible() for label in drawn)
+        host.close()
 
 
 class Told:

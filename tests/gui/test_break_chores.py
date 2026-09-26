@@ -3,9 +3,10 @@ import datetime
 import pytest
 from PyQt6.QtCore import QEvent, Qt, QThreadPool
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
-from PyQt6.QtWidgets import QLineEdit
+from PyQt6.QtWidgets import QLabel, QLineEdit, QWidget
 
 from src.database import rows
+from src.domain.chores import due_now
 from src.gui.components.chore_panel import DONE_MARK, ChorePanel, chore_key
 from src.gui.views.pomodoro_view import PomodoroView, read_chores
 from tests.gui.conftest import advance
@@ -340,3 +341,18 @@ class TestThePanelAlone:
         assert panel.chore_at(0) is None
         assert panel.chore_at(99) is None
         panel.deleteLater()
+
+    def test_a_board_drawn_twice_at_once_opens_no_window_of_its_own(self, qapp):
+        host = QWidget()
+        panel = ChorePanel(host)
+        host.show()
+        panel.set_entries(due_now([chore("Vacuum", -3)]))
+        qapp.processEvents()
+        panel.set_entries(due_now([chore("Bins", ident=2)]))
+        drawn = panel.findChildren(QLabel)
+
+        panel.set_entries(due_now([chore("Descale", -1, ident=4)]))
+        qapp.processEvents()
+
+        assert not any(label.isVisible() for label in drawn)
+        host.close()

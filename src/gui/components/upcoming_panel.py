@@ -78,7 +78,7 @@ class UpcomingPanel(QWidget):
         while self._layout.count():
             taken = self._layout.takeAt(0).widget()
             if taken is not None:
-                taken.setParent(None)
+                taken.hide()
                 taken.deleteLater()
 
     @staticmethod
