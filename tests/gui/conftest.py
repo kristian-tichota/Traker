@@ -355,6 +355,8 @@ class RecordingSession:
         self.answers = {"loadScript": 3, "unloadScript": True, "start": None}
         self.guard_calls = []
         self.subscriptions = []
+        self.inhibition_calls = []
+        self.inhibit_cookie = 7
         self.desktop = "desktop-one"
         self.activity = "activity-one"
         self.kwin_reachable = True
@@ -415,12 +417,19 @@ class RecordingSession:
     def guard_methods(self):
         return [call[0] for call in self.guard_calls]
 
+    def inhibition(self, service, path, interface, method, *args):
+        self.inhibition_calls.append((method,) + args)
+        if method != "Inhibit":
+            return True, None
+        return (True, self.inhibit_cookie) if self.inhibit_cookie else (False, None)
+
 
 @pytest.fixture(autouse=True)
 def desktop_session(monkeypatch, tmp_path):
     recorded = RecordingSession()
     monkeypatch.setattr("src.desktop.kwin._session_caller", recorded.kwin)
     monkeypatch.setattr("src.desktop.notify.notify", recorded.notify)
+    monkeypatch.setattr("src.desktop.notify._session_call", recorded.inhibition)
     recorded.rules_path = str(tmp_path / "kwinrulesrc")
     recorded.kwinrc_path = str(tmp_path / "kwinrc")
     monkeypatch.setattr("src.desktop.kwin_rules.DEFAULT_PATH", recorded.rules_path)

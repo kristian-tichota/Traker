@@ -370,6 +370,19 @@ Feature: Focus timer
       And a switch is no longer put straight back
       And no wall takes the focus off what I reach for any more
 
+    Scenario: Nothing else interrupts a break
+      Given breaks take the screens
+      When a break begins
+      Then the session's Do Not Disturb holds every notification back
+      And it holds until the walls come down, and ends with Traker however Traker ends
+      And when the wait is up, only the walls say so
+
+    Scenario: Letting notifications through
+      Given breaks take the screens
+      And my profile says a break does not hold notifications back
+      When a break begins
+      Then notifications arrive as they would without one
+
   Rule: A strict break has one exit, and it costs seconds
 
     Scenario: Pausing is refused while the screens are held
@@ -459,6 +472,7 @@ Feature: Focus timer
 
     Scenario: I hear when the wait is up
       Given a break is holding the screens and I am away from them
+      And the break is not holding notifications back
       When the wait runs out and something can be shown
       Then I am told so through the session's notification, with its sound
       And it names the key and what is behind it

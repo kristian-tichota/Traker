@@ -862,6 +862,10 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self.switch_guard = SwitchGuard() if self._refuse_switch else None
 
+        self.do_not_disturb = None
+        if self.profile.get_metric("strict_break", "do_not_disturb", True):
+            self.do_not_disturb = notify_service.DoNotDisturb()
+
         prune((REST_GROUP,))
         self.rest_rule = None
         if self.profile.get_metric("strict_break", "pin_with_rule", True):
@@ -1598,8 +1602,10 @@ class PomodoroView(ShutdownMixin, QWidget):
             overlay.set_offers_note(note)
 
     def _say_the_offers_are_open(self):
-        """Announce that the wait is up, as a coming break is announced."""
+        """Announce that the wait is up, unless the break holds notifications back."""
         self._said_the_offers_are_open = True
+        if self.do_not_disturb is not None and self.do_not_disturb.holding:
+            return
         notify_service.notify(
             "The break can show something now",
             f"{media.as_elapsed(self.away_ms())} away from the screen is up. "
@@ -2209,6 +2215,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self.switch_guard is not None:
             self.switch_guard.hold()
 
+        if self.do_not_disturb is not None:
+            self.do_not_disturb.hold()
+
         front = self._media_host or self._wall_for(self._screen_taken)
         self._engage_kwin(front.windowTitle() if front is not None else "",
                           self.wall_outputs())
@@ -2249,7 +2258,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 self.rest_rule.release()
 
     def _clear_overlays(self):
-        """Give the screens back: the hold, what was showing, the walls, KWin."""
+        """Give the screens back: the hold, what was showing, the walls, notifications, KWin."""
         self.cancel_hold()
 
         self._stop_showing()
@@ -2275,6 +2284,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._filtering_keys = False
 
         self._stop_watching_the_outputs()
+
+        if self.do_not_disturb is not None:
+            self.do_not_disturb.release()
 
         self._stand_down_enforcement()
 

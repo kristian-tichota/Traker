@@ -228,7 +228,8 @@ def timer_that_never_waits(qapp, app_id, with_no_wait, recording_db):
 
 
 @pytest.fixture
-def said(monkeypatch):
+def said(monkeypatch, desktop_session):
+    desktop_session.inhibit_cookie = None
     posted = []
     monkeypatch.setattr(pomodoro_view.notify_service, "notify",
                         lambda summary, body, **kw: posted.append((summary, body)))
@@ -484,6 +485,16 @@ class TestHearingThatTheWaitIsUp:
 
         (_, body), = said
         assert "ENTER" in body and "Reading" in body and "5:00" in body
+
+    def test_a_break_holding_notifications_back_leaves_it_to_the_walls(
+            self, timer, said, desktop_session):
+        desktop_session.inhibit_cookie = 7
+        enter_strict_break(timer, past_the_wait=False)
+
+        advance(timer, timer.away_ms())
+
+        assert said == []
+        assert timer.offers_note() == ""
 
     def test_nothing_is_said_while_the_wait_runs(self, timer, said):
         enter_strict_break(timer, past_the_wait=False)

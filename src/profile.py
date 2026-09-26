@@ -246,6 +246,10 @@ refuse_switch = true
 # rather than refusing in silence. Off leaves the walls where the compositor
 # put them, which is one desktop each where the script is refused.
 pin_with_rule = true
+# Hold notifications back while the walls stand, through the session's Do Not
+# Disturb, until focus starts or Traker exits. While it holds, only the walls
+# say when the wait is up.
+do_not_disturb = true
 # Where AnkiConnect listens, for an activity that names a deck. Anki has to be
 # running, and its window may stay minimized. Its timebox (Preferences, Review)
 # has to be 0: the timebox dialog holds the next card until it is answered.

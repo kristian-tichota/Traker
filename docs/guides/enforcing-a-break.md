@@ -14,7 +14,8 @@ requires `stop_hold_secs` held on the play button, and that time is focus overti
 Everything in this section applies only where `strict = true`. A desktop or activity switch is
 reversed, and each wall is placed on every desktop and activity by a KWin window rule, the one form of
 the request KWin applies rather than refusing in silence. Every screen is covered; the application
-window stays behind the walls, and the keyboard starts on the wall covering its screen.
+window stays behind the walls, and the keyboard starts on the wall covering its screen. The walls
+hold Plasma's Do Not Disturb through `Notifications.Inhibit`; Plasma drops it when Traker exits.
 
 Holding `Esc` for `release_hold_secs` abandons the break, and the remaining time is recorded as
 `overridden_break`. When the break ends the walls stay but give up the desktops, the switch and the

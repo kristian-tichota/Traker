@@ -697,6 +697,57 @@ class TestAMistypedShortcutIsNotAWayOut:
         view.deleteLater()
 
 
+class TestNothingElseInterruptsABreak:
+    def test_a_break_holds_every_notification_back(self, timer, desktop_session):
+        enter_strict_break(timer)
+
+        assert timer.do_not_disturb.holding is True
+        assert desktop_session.inhibition_calls == [
+            ("Inhibit", "Traker", "strict break", {})]
+
+    def test_the_walls_outliving_the_break_keep_them_held(self, timer, desktop_session):
+        enter_strict_break(timer)
+
+        advance(timer, timer.break_ms + 1000)
+
+        assert timer.overlays
+        assert timer.do_not_disturb.holding is True
+        assert len(desktop_session.inhibition_calls) == 1
+
+    def test_the_press_that_starts_focus_lets_them_through(self, timer,
+                                                           desktop_session):
+        enter_strict_break(timer)
+        advance(timer, timer.break_ms + 1000)
+
+        send_key(timer, RELEASE_KEY)
+
+        assert timer.do_not_disturb.holding is False
+        assert [call[0] for call in desktop_session.inhibition_calls] == [
+            "Inhibit", "UnInhibit"]
+
+    def test_the_profile_can_switch_it_off(self, qapp, app_id, strict_timer,
+                                           recording_db, desktop_session):
+        written = strict_timer.read_text(encoding="utf-8")
+        assert "do_not_disturb = true" in written, "the template no longer says this"
+        strict_timer.write_text(
+            written.replace("do_not_disturb = true", "do_not_disturb = false"),
+            encoding="utf-8")
+        import src.profile as profile_module
+        profile_module.reload_profile()
+
+        view = PomodoroView(recording_db, tray_icon=None)
+        view.refresh_timer.stop()
+        view.stress_calendar.anim_timer.stop()
+        try:
+            enter_strict_break(view)
+            assert view.do_not_disturb is None
+            assert desktop_session.inhibition_calls == []
+        finally:
+            view.shutdown()
+            QThreadPool.globalInstance().waitForDone(2000)
+            view.deleteLater()
+
+
 class TestAWallRefusesToBeClosed:
     def test_closing_one_does_nothing_while_the_break_holds(self, timer):
         enter_strict_break(timer)
