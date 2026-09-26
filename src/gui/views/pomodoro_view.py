@@ -598,22 +598,24 @@ class StressCalendar(PausesWhenHidden, QWidget):
         self.clock += 0.06
         self.update()
 
-    def _fetch_day_detail(self, date_iso):
+    def _fetch_day_detail(self, date_iso, show_close):
         return (date_iso,
                 self.db.get_pomodoro_heartbeats_for_day(date_iso),
-                self.db.get_pomodoro_events_for_day(date_iso))
+                self.db.get_pomodoro_events_for_day(date_iso),
+                show_close)
 
     def _load_day_into_popup(self, date_iso, show_close):
-        def apply(payload):
-            day, heartbeats, events = payload
-            if day not in (self.hovered_date, self.pinned_date):
-                return
-            popup = self._get_popup()
-            popup.set_data(day, heartbeats, events)
-            popup.btn_close.setVisible(show_close)
-
         run_in_background(
-            QThreadPool.globalInstance(), self._fetch_day_detail, apply, None, date_iso)
+            QThreadPool.globalInstance(), self._fetch_day_detail, self._apply_day_detail,
+            None, date_iso, show_close)
+
+    def _apply_day_detail(self, payload):
+        day, heartbeats, events, show_close = payload
+        if day not in (self.hovered_date, self.pinned_date):
+            return
+        popup = self._get_popup()
+        popup.set_data(day, heartbeats, events)
+        popup.btn_close.setVisible(show_close)
 
     def _get_popup(self):
         if not hasattr(self, '_popup') or self._popup is None:
