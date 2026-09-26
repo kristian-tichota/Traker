@@ -28,9 +28,10 @@ is the one surface that writes to the service.
 
 Offers come in key order: the queue, the `[[strict_break.activities]]` entries, then one shelf per
 subfolder of the media folder, `Media/` in the checkout unless `[strict_break.library]` names another.
-A shelf opens the file opened last in it or, once that one reached its end, the next by name. The
-queue is `rest-queue.m3u`, one path per line, so any process can append to it; `:rest` reads, extends
-and prunes it. Positions are kept in `rest-positions.json`, so a film or a book spans several breaks.
+A shelf lists its folder, the file opened last marked or, once that one ended, the next by name; the
+list climbs to the media folder, and 0 returns from a file to it. The queue is `rest-queue.m3u`, one
+path per line, so any process can append to it; `:rest` reads, extends and prunes it. Positions are
+kept in `rest-positions.json`, so a film or a book spans several breaks.
 
 A film needs the `video` extra and the system `libmpv` (`media-video/mpv` with `USE="libmpv"`), which
 no lockfile carries; an EPUB and an Anki deck need QtWebEngine, the `anki` extra. Without them the

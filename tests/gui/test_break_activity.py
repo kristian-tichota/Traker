@@ -5,11 +5,13 @@ from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
 
 import src.profile as profile_module
 from src.desktop import rest_positions, rest_queue
-from src.desktop.activities import ANY_DECK, BOOK, DECK, DOCUMENT, VIDEO, BreakActivity
+from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, SHELF, VIDEO,
+                                    BreakActivity)
 from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
 from src.config import PALETTE
+from src.gui.components.media_surface import LibraryPane
 from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.views.pomodoro_view import RELEASE_KEY, PomodoroView, StrictOverlay
 from tests.gui.conftest import advance
@@ -112,8 +114,11 @@ class Panes:
         self.built = []
 
     def __call__(self, activity, start_at=0, parent=None):
-        kind = {DECK: FakeDeckPane, BOOK: FakeBookPane}.get(activity.kind, FakePane)
-        pane = kind(activity, start_at, parent)
+        if activity.kind == SHELF:
+            pane = LibraryPane(activity.path, start_at, parent)
+        else:
+            kind = {DECK: FakeDeckPane, BOOK: FakeBookPane}.get(activity.kind, FakePane)
+            pane = kind(activity, start_at, parent)
         self.built.append(pane)
         return pane
 
@@ -1567,33 +1572,89 @@ class TestTheLibrary:
         assert library_timer.upcoming.lines()[-2:] == [
             "3  Books   a.epub", "4  Videos  e1.mkv"]
 
-    def test_its_key_opens_that_file_as_what_it_is(self, library_timer, media):
+    def test_its_key_lists_its_folder_with_the_file_it_reached_marked(self, library_timer,
+                                                                      media):
         enter_strict_break(library_timer)
 
         send_key(library_timer, Qt.Key.Key_3)
 
-        assert library_timer.media_pane_factory.last.activity == BreakActivity(
-            "a.epub", str(media / "Books" / "a.epub"), BOOK)
+        assert marked(library_timer) == str(media / "Books" / "a.epub")
+        assert library_timer.hook_state() == "break"
 
-    def test_a_file_that_reached_its_end_hands_the_key_to_the_next(self, library_timer,
-                                                                   media):
+    def test_a_file_that_reached_its_end_hands_the_mark_to_the_next(self, library_timer,
+                                                                    media):
         ended = str(media / "Videos" / "e1.mkv")
         rest_positions.remember(ended, 1_440_000, library_timer._positions_path, 1_440_000)
         enter_strict_break(library_timer)
 
         send_key(library_timer, Qt.Key.Key_4)
 
-        assert library_timer._showing.path == str(media / "Videos" / "e2.mkv")
+        assert marked(library_timer) == str(media / "Videos" / "e2.mkv")
 
-    def test_its_key_again_while_its_file_shows_does_nothing(self, library_timer):
+    def test_space_opens_the_marked_file_as_what_it_is(self, library_timer, media):
         enter_strict_break(library_timer)
         send_key(library_timer, Qt.Key.Key_3)
+
+        send_key(library_timer, Qt.Key.Key_Down)
+        send_key(library_timer, Qt.Key.Key_Space)
+
+        assert library_timer.media_pane_factory.last.activity == BreakActivity(
+            "b.epub", str(media / "Books" / "b.epub"), BOOK)
+
+    def test_0_in_that_file_brings_the_list_back_with_it_marked(self, library_timer,
+                                                                 media):
+        enter_strict_break(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+        send_key(library_timer, Qt.Key.Key_Down)
+        send_key(library_timer, Qt.Key.Key_Space)
+
+        send_key(library_timer, Qt.Key.Key_0)
+        assert marked(library_timer) == str(media / "Books" / "b.epub")
+
+        send_key(library_timer, Qt.Key.Key_0)
+        assert library_timer._showing is None
+
+    def test_left_climbs_to_the_media_folder_and_right_into_another(self, library_timer,
+                                                                   media):
+        enter_strict_break(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+
+        send_key(library_timer, Qt.Key.Key_Left)
+        assert marked(library_timer) == str(media / "Books")
+
+        send_key(library_timer, Qt.Key.Key_Down)
+        send_key(library_timer, Qt.Key.Key_Right)
+        assert marked(library_timer) == str(media / "Videos" / "e1.mkv")
+
+    def test_every_key_its_card_names_is_one_the_break_answers(self, library_timer):
+        enter_strict_break(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+
+        for label, _says in library_timer.media_surface.keys.hints:
+            key = LIST_KEYS.get(label) or key_named(label)
+            assert key is not None, f"the card names {label!r} and nothing presses it"
+            pressed = QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier)
+            assert library_timer.eventFilter(library_timer, pressed) is True, label
+
+    def test_its_key_again_while_its_list_shows_does_nothing(self, library_timer):
+        enter_strict_break(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+        send_key(library_timer, Qt.Key.Key_Down)
         built = len(library_timer.media_pane_factory.built)
 
         send_key(library_timer, Qt.Key.Key_3)
 
         assert len(library_timer.media_pane_factory.built) == built
-        assert library_timer.media_pane_factory.last.opens == []
+        assert library_timer.media_surface.pane.marked == 1
+
+
+def marked(view) -> str:
+    pane = view.media_surface.pane
+    return pane.entries[pane.marked].path
+
+
+LIST_KEYS = {"\u2191 \u2193": Qt.Key.Key_Up, "SPACE \u2192": Qt.Key.Key_Space,
+             "BACKSPACE \u2190": Qt.Key.Key_Backspace, "0": Qt.Key.Key_0}
 
 
 BOOK_KEYS = {"SPACE →": Qt.Key.Key_Space, "SPACE ←": Qt.Key.Key_Space,
@@ -1606,6 +1667,7 @@ class TestABook:
     def reading(self, library_timer):
         enter_strict_break(library_timer)
         send_key(library_timer, Qt.Key.Key_3)
+        send_key(library_timer, Qt.Key.Key_Space)
         return library_timer
 
     def test_the_card_names_the_keys_that_turn_its_pages(self, reading):
@@ -1756,14 +1818,17 @@ class TestTheHookFollowsTheBreak:
 
         assert told.states == ["document", "video"]
 
-    def test_a_shelf_is_heard_as_what_it_opens(self, library_timer, settled):
+    def test_a_shelf_s_list_is_the_break_and_its_file_what_it_is(self, library_timer,
+                                                                 settled):
         library_timer.hook = told = Told()
         enter_strict_break(library_timer)
 
         send_key(library_timer, Qt.Key.Key_3)
         settled()
+        send_key(library_timer, Qt.Key.Key_Space)
+        settled()
 
-        assert told.states == ["book"]
+        assert told.states == ["break", "book"]
 
     def test_the_walls_standing_after_the_break_are_still_the_break(self, timer, settled):
         timer.hook = told = Told()

@@ -156,6 +156,15 @@ class TestTheLibrary:
     def test_a_folder_that_is_not_there_offers_nothing(self, tmp_path):
         assert break_activities.shelves(str(tmp_path / "absent")) == []
 
+    def test_a_folder_lists_the_folders_holding_something_then_its_files(self, library):
+        folder = library("Books/b10.epub", "Books/b2.epub", "Books/Series/s1.epub",
+                         "Books/Notes/readme.txt", "Books/.old/o.epub", "Books/cover.jpg")
+
+        listed = break_activities.contents(os.path.join(folder, "Books"))
+
+        assert [(entry.name, entry.folder) for entry in listed] == [
+            ("Series", True), ("b2.epub", False), ("b10.epub", False)]
+
     def test_the_folder_is_the_one_the_profile_names(self, write_profile):
         profile = write_profile('[strict_break.library]\npath = "~/Shelf"\n')
 

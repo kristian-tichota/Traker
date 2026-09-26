@@ -32,6 +32,14 @@ class BreakActivity(NamedTuple):
     items: tuple = ()
 
 
+class Entry(NamedTuple):
+    """One line of a folder's list: a folder holding something to show, or a file."""
+
+    name: str
+    path: str
+    folder: bool
+
+
 def kind_of(path) -> str:
     """Return DOCUMENT for a PDF, BOOK for an EPUB and VIDEO for anything else."""
     written = str(path).lower()
@@ -94,6 +102,21 @@ def shelves(folder) -> list:
     return found
 
 
+def contents(folder) -> list:
+    """Return the subfolders holding something to show, then the files to show, in name order."""
+    try:
+        with os.scandir(folder) as scanned:
+            entries = sorted(scanned, key=lambda entry: _natural(entry.name))
+    except OSError:
+        return []
+    folders = [Entry(entry.name, entry.path, True) for entry in entries
+               if not entry.name.startswith(".") and entry.is_dir()
+               and next(_shelved_files(entry.path), None) is not None]
+    files = [Entry(entry.name, entry.path, False) for entry in entries
+             if _shelved(entry.name) and entry.is_file()]
+    return folders + files
+
+
 def resolve(offer, places) -> BreakActivity:
     """Return what an offer opens: a shelf's latest file, or the next once it ended."""
     if offer.kind != SHELF or not offer.items:
@@ -117,7 +140,13 @@ def _shelved(name) -> bool:
 
 def _shelved_under(folder) -> tuple:
     """Return every file under folder a shelf can show, in natural order of path."""
-    found, seen = [], set()
+    return tuple(sorted(_shelved_files(folder),
+                        key=lambda path: _natural(os.path.relpath(path, folder))))
+
+
+def _shelved_files(folder):
+    """Yield every file under folder a shelf can show, walking each real folder once."""
+    seen = set()
     for top, folders, files in os.walk(folder, followlinks=True):
         real = os.path.realpath(top)
         if real in seen:
@@ -125,8 +154,7 @@ def _shelved_under(folder) -> tuple:
             continue
         seen.add(real)
         folders[:] = [name for name in folders if not name.startswith(".")]
-        found.extend(os.path.join(top, name) for name in files if _shelved(name))
-    return tuple(sorted(found, key=lambda path: _natural(os.path.relpath(path, folder))))
+        yield from (os.path.join(top, name) for name in files if _shelved(name))
 
 
 def _natural(text) -> list:

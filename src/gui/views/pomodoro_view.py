@@ -831,6 +831,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             "chores", "on_break", True) is not False
         self.media_surface = None
         self._showing = None
+        self._list_behind = None
 
         self.release_hold_secs = self.profile.number(
             "strict_break", "release_hold_secs", 10, low=1.0, high=60.0)
@@ -1527,7 +1528,16 @@ class PomodoroView(ShutdownMixin, QWidget):
     def media_key_hints(self, kind) -> list:
         """Return every key that drives what is showing, in reading order."""
         pane = self.media_surface.pane if self.media_surface is not None else None
-        if kind == break_activities.DECK and getattr(pane, "choosing", False):
+        zero = ("0", "back to the list" if self._list_behind is not None
+                else "back to Traker")
+        if kind == break_activities.SHELF:
+            hints = [
+                ("\u2191 \u2193", "choose"),
+                ("SPACE \u2192", "open"),
+                (f"{UNDO_KEY_NAME} \u2190", "up a folder"),
+                zero,
+            ]
+        elif kind == break_activities.DECK and getattr(pane, "choosing", False):
             hints = [
                 ("\u2191 \u2193", "choose a deck"),
                 ("\u2190 \u2192", "one with cards due"),
@@ -1550,7 +1560,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 (f"SPACE {ahead}", "next page"),
                 (f"{UNDO_KEY_NAME} {behind}", "page back"),
                 ("\u2191 \u2193", "chapter"),
-                ("0", "back to Traker"),
+                zero,
             ]
         else:
             paging = kind == break_activities.DOCUMENT
@@ -1558,7 +1568,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("SPACE", "turn the page" if paging else "pause"),
                 ("\u2190 \u2192", "page" if paging else "seek 30 s"),
                 ("\u2191 \u2193", "scroll" if paging else "volume"),
-                ("0", "back to Traker"),
+                zero,
             ]
         if len(self._offers) > 1:
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
@@ -1669,7 +1679,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def hook_state(self) -> str:
         """Return what the break shows: focus, break, or the kind of what is open."""
-        if self._showing is not None:
+        if self._showing is not None and self._showing.kind != break_activities.SHELF:
             return self._showing.kind
         if self.overlays or self.current_phase != "work":
             return BREAK_STATE
@@ -1688,7 +1698,8 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _playing(self) -> tuple:
         """Return what is showing and where it has reached: (name, place, unit)."""
-        if self._showing is None or self.media_surface is None:
+        if (self._showing is None or self.media_surface is None
+                or self._showing.kind == break_activities.SHELF):
             return None
         place = self.media_surface.place()
         return ((self.media_surface.title(),) + place) if place else None
@@ -1816,7 +1827,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             pane.nudge(-1)
         elif key == Qt.Key.Key_0:
             back = getattr(pane, "back", None)
-            if not (callable(back) and back()):
+            if not (callable(back) and back()) and not self._back_to_the_list():
                 self._stop_showing()
         elif key == UNDO_KEY and callable(getattr(pane, "undo", None)):
             pane.undo()
@@ -1896,11 +1907,10 @@ class PomodoroView(ShutdownMixin, QWidget):
             sound_file=self._warn_sound_file,
         )
 
-    def _show_activity(self, activity) -> bool:
-        """Show activity on the primary screen's wall, a shelf showing the file it has reached."""
+    def _show_activity(self, activity, behind=None) -> bool:
+        """Show activity on the primary screen's wall, a shelf as the list of its folder."""
         if not self._strict_engaged:
             return False
-        activity = self._opened_by(activity)
 
         if self.opens_in_ms() > 0:
             log.debug("%r is held back for another %d ms: away from the screen.",
@@ -1916,18 +1926,35 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self._showing == activity:
             return True
 
+        leaving, listed = self._showing, self._list_behind
         self._remember_where_it_stopped()
 
+        opened = activity
+        if activity.kind == break_activities.SHELF:
+            opened = activity._replace(path=leaving.path if listed == activity
+                                       else self._opened_by(activity).path)
         surface.open(
-            activity,
-            start_at=rest_positions.position_for(activity.path, self._positions_path))
+            opened,
+            start_at=rest_positions.position_for(opened.path, self._positions_path))
         self._showing = activity
+        self._list_behind = behind
         self._media_host.show_media()
         self._media_host.raise_()
         self._media_host.activateWindow()
         self._say_which_keys_drive_it()
         self._redraw_break_surfaces()
         return True
+
+    def _open_chosen(self, path):
+        """Open the file chosen from the list, which 0 then brings back."""
+        self._show_activity(
+            break_activities.BreakActivity(rest_queue.label(path), path,
+                                           break_activities.kind_of(path)),
+            behind=self._showing)
+
+    def _back_to_the_list(self) -> bool:
+        """Show the list the file showing was opened from, that file marked."""
+        return self._list_behind is not None and self._show_activity(self._list_behind)
 
     def _say_which_keys_drive_it(self):
         """Name the keys that drive what is showing, on every surface showing it."""
@@ -1945,10 +1972,11 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self._showing is None or self.media_surface is None:
             return
         where = self.media_surface.stop()
-        if self._showing.kind != break_activities.DECK:
+        if self._showing.kind not in (break_activities.DECK, break_activities.SHELF):
             rest_positions.remember(self._showing.path, where.at,
                                     self._positions_path, where.of)
         self._showing = None
+        self._list_behind = None
         self._show_upcoming()
 
     def _stop_showing(self):
@@ -2098,6 +2126,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             only_screen=len(self.overlays) == 1,
             parent=self._media_host.media_parent())
         self.media_surface.pane_changed.connect(self._say_which_keys_drive_it)
+        self.media_surface.file_chosen.connect(self._open_chosen)
         self._media_host.host_media(self.media_surface)
 
     def _watch_the_outputs(self):
@@ -2163,6 +2192,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         losing_media = any(wall is self._media_host for wall in spare)
         showing = self._showing if losing_media else None
+        behind = self._list_behind if losing_media else None
         if losing_media:
             self._remember_where_it_stopped()
             if self.media_surface is not None:
@@ -2183,7 +2213,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self.media_surface is None:
             self._host_the_media()
         if showing is not None:
-            self._show_activity(showing)
+            self._show_activity(showing, behind)
 
         front = self._media_host or self._wall_for(self._screen_taken)
         self._engage_kwin(front.windowTitle() if front is not None else "",

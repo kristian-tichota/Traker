@@ -292,10 +292,12 @@ anki_url = "http://127.0.0.1:8765"
 path = ""
 
 # A folder whose subfolders are offered after the entries above, one offer per
-# subfolder, such as Books, Videos and PDF. Each opens the file in it that was
-# open last, or the next one by name once that one reached its end. Empty means
-# the Media folder in Traker's own checkout; a folder that does not exist
-# offers nothing.
+# subfolder, such as Books, Videos and PDF. Each lists what is in it, with the
+# file open last marked, or the next one by name once that one reached its end.
+# UP/DOWN mark an entry, PgUp/PgDn ten at a time, SPACE or RIGHT opens it, LEFT
+# or BACKSPACE goes up a folder as far as this one, and 0 in a file opened from
+# the list goes back to it. Empty means the Media folder in Traker's own
+# checkout; a folder that does not exist offers nothing.
 [strict_break.library]
 path = ""
 

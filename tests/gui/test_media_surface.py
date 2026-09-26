@@ -7,8 +7,9 @@ from PyQt6.QtGui import QPageSize, QPainter, QPdfWriter
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtWidgets import QLabel, QTreeWidgetItemIterator, QWidget
 
-from src.desktop import anki
-from src.desktop.activities import ANY_DECK, BOOK, BreakActivity, DECK, DOCUMENT, VIDEO
+from src.desktop import anki, rest_positions
+from src.desktop.activities import (ANY_DECK, BOOK, BreakActivity, DECK, DOCUMENT, SHELF,
+                                    VIDEO)
 from src.config import PALETTE
 from src.domain import media
 from src.domain.media import Place
@@ -16,8 +17,8 @@ from src.gui.components import media_progress
 from src.gui.components.book_pane import BookPane
 from src.gui.components.media_surface import (AGAIN_SAID, ANSWER, GOOD_SAID, QUESTION,
                                               UNDONE, DeckPane, DocumentPane,
-                                              MediaSurface, MpvScreen, VideoPane,
-                                              build_pane, card_page)
+                                              LibraryPane, MediaSurface, MpvScreen,
+                                              VideoPane, build_pane, card_page)
 from tests.anki_double import FakeAnki
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact, pytest.mark.accessibility]
@@ -690,6 +691,80 @@ class TestChoosingADeck:
         assert (pane.back(), pane.title()) == (False, "")
 
 
+@pytest.fixture
+def library(qapp, tmp_path):
+    root = tmp_path / "Media"
+    for name in ("Books/a.epub", "Books/b.epub", "Books/Series/s1.epub",
+                 "Videos/e1.mkv", "loose.pdf"):
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_bytes(b"")
+    positions = str(tmp_path / "rest-positions.json")
+
+    def _open(path):
+        return LibraryPane(str(root / path), root=str(root), positions=positions)
+
+    _open.root, _open.positions = root, positions
+    return _open
+
+
+def listed(pane):
+    return [pane.chooser.topLevelItem(row).text(0)
+            for row in range(pane.chooser.topLevelItemCount())]
+
+
+class TestChoosingAFile:
+    def test_it_lists_the_folder_of_the_file_it_marks(self, library):
+        pane = library("Books/b.epub")
+
+        assert listed(pane) == ["Series/", "a.epub", "b.epub"]
+        assert (pane.marked, pane.title()) == (2, "Media/Books")
+
+    def test_up_and_down_mark_the_entry_beside_and_a_page_ten_at_once(self, library):
+        pane = library("Books/b.epub")
+
+        pane.nudge(1)
+        assert pane.marked == 1
+        pane.turn(-1)
+        assert pane.marked == 0
+        pane.turn(1)
+        assert pane.marked == 2
+
+    def test_space_lists_a_marked_folder_and_hands_over_a_marked_file(self, library):
+        pane = library("Books/Series")
+        chosen = []
+        pane.chosen.connect(chosen.append)
+
+        pane.undo()
+        pane.toggle()
+        pane.step(1)
+
+        assert chosen == [str(library.root / "Books" / "Series" / "s1.epub")]
+
+    def test_left_goes_up_a_folder_no_higher_than_the_media_folder(self, library):
+        pane = library("Books/a.epub")
+
+        pane.step(-1)
+        pane.undo()
+
+        assert listed(pane) == ["Books/", "Videos/", "loose.pdf"]
+        assert (pane.marked, pane.title()) == (0, "Media")
+
+    def test_each_file_says_how_far_into_it_the_member_is(self, library):
+        rest_positions.remember(str(library.root / "Books" / "a.epub"), 37,
+                                library.positions, 100)
+
+        pane = library("Books/a.epub")
+
+        assert [pane.chooser.topLevelItem(row).text(1) for row in range(3)] == [
+            "", "37%", ""]
+
+    def test_a_folder_with_nothing_to_show_says_so(self, qapp, tmp_path):
+        pane = LibraryPane(str(tmp_path), root=str(tmp_path),
+                           positions=str(tmp_path / "rest-positions.json"))
+
+        assert "NOTHING TO SHOW IN" in failure_of(pane)
+
+
 class TestACardPage:
     def test_the_sound_is_left_to_anki(self):
         assert "[anki:play" not in card_page("x[anki:play:q:0]", 0)
@@ -733,6 +808,11 @@ class TestWhichPaneIsBuilt:
         pane = build_pane(BreakActivity("Watching", str(tmp_path / "a.mkv"), VIDEO))
 
         assert isinstance(pane, VideoPane)
+
+    def test_a_shelf_is_listed(self, library):
+        pane = build_pane(BreakActivity("Books", str(library.root / "Books"), SHELF))
+
+        assert isinstance(pane, LibraryPane)
 
     def test_a_book_is_read(self, qapp, epub, settled):
         pane = build_pane(BreakActivity("Novel", epub("<p>a</p>"), BOOK))

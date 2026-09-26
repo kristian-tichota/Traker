@@ -10,9 +10,10 @@ from PyQt6.QtWidgets import (QAbstractItemView, QFrame, QHeaderView, QLabel,
                              QVBoxLayout, QWidget)
 
 from src.config import PALETTE
-from src.desktop import anki
-from src.desktop.activities import ANY_DECK, BOOK, DECK, DOCUMENT, readout_of
-from src.domain.media import Place, as_elapsed
+from src.desktop import anki, rest_positions, rest_queue
+from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, SHELF, contents,
+                                    kind_of, library_for, readout_of)
+from src.domain.media import UNKNOWN, Place, as_elapsed, finished, how_far
 from src.gui.components.book_pane import BookPane
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
@@ -55,8 +56,10 @@ VERDICT_CSS = f"""
 
 DECK_COLUMNS = ("DECK", "NEW", "LEARN", "DUE", "")
 COUNT_COLOURS = ('blue', 'red', 'green')
-DECK_INDENT_PX = 28
-DECK_FONT_PX = 20
+FOLDER_COLUMNS = ("", "")
+LIST_INDENT_PX = 28
+LIST_FONT_PX = 20
+PAGE_ROWS = 10
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 
 
@@ -451,33 +454,50 @@ def _first_marked(decks, left="") -> int:
     return _next_owing(decks, -1)
 
 
-def _deck_list(parent) -> QTreeWidget:
-    """Build the list a deck is chosen from, in the columns of Anki's own."""
+def _chooser(parent, columns) -> QTreeWidget:
+    """Build a list driven by keys alone, in Solarized light."""
     tree = QTreeWidget(parent)
-    tree.setColumnCount(len(DECK_COLUMNS))
-    tree.setHeaderLabels(DECK_COLUMNS)
+    tree.setColumnCount(len(columns))
+    tree.setHeaderLabels(columns)
     tree.setRootIsDecorated(False)
     tree.setItemsExpandable(False)
-    tree.setIndentation(DECK_INDENT_PX)
+    tree.setIndentation(LIST_INDENT_PX)
     tree.setUniformRowHeights(True)
     tree.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
     tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     tree.setFrameShape(QFrame.Shape.NoFrame)
+    tree.setStyleSheet(
+        f"QTreeWidget {{ background-color: {PALETTE['base3']}; border: none;"
+        f" font-family: 'Fira Code'; font-size: {LIST_FONT_PX}px; padding: 20px; }}"
+        f" QTreeWidget::item {{ padding: 4px 16px; }}"
+        f" QHeaderView::section {{ background-color: {PALETTE['base3']};"
+        f" color: {PALETTE['base1']}; border: none; font-family: 'Fira Code';"
+        f" font-size: 11px; letter-spacing: 2px; padding: 4px 16px; }}")
+    return tree
+
+
+def _deck_list(parent) -> QTreeWidget:
+    """Build the list a deck is chosen from, in the columns of Anki's own."""
+    tree = _chooser(parent, DECK_COLUMNS)
     header = tree.header()
     header.setStretchLastSection(True)
     for column in range(len(DECK_COLUMNS) - 1):
         header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
     for column in range(1, len(COUNT_COLOURS) + 1):
         tree.headerItem().setTextAlignment(column, RIGHT)
-    tree.setStyleSheet(
-        f"QTreeWidget {{ background-color: {PALETTE['base3']}; border: none;"
-        f" font-family: 'Fira Code'; font-size: {DECK_FONT_PX}px; padding: 20px; }}"
-        f" QTreeWidget::item {{ padding: 4px 16px; }}"
-        f" QHeaderView::section {{ background-color: {PALETTE['base3']};"
-        f" color: {PALETTE['base1']}; border: none; font-family: 'Fira Code';"
-        f" font-size: 11px; letter-spacing: 2px; padding: 4px 16px; }}")
+    return tree
+
+
+def _folder_list(parent) -> QTreeWidget:
+    """Build the list a file is chosen from: each name, and how far into it."""
+    tree = _chooser(parent, FOLDER_COLUMNS)
+    header = tree.header()
+    header.setStretchLastSection(False)
+    header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+    tree.headerItem().setTextAlignment(1, RIGHT)
     return tree
 
 
@@ -508,7 +528,31 @@ def _deck_rows(tree, decks) -> list:
     return rows
 
 
-class DeckPane(QWidget):
+class _MarkedList:
+    """A pane choosing from the rows of its chooser, one marked at a time."""
+
+    def _mark(self, index):
+        """Mark the row at index, within the list, and keep it in view."""
+        if not self._rows:
+            return
+        self._paint_row(False)
+        self.marked = max(0, min(len(self._rows) - 1, int(index)))
+        self._paint_row(True)
+        self.chooser.scrollToItem(self._rows[self.marked],
+                                  QAbstractItemView.ScrollHint.PositionAtCenter)
+
+    def _paint_row(self, marked):
+        """Paint the marked row as marked, or as it reads once it is not."""
+        if not 0 <= self.marked < len(self._rows):
+            return
+        row = self._rows[self.marked]
+        row.setForeground(0, self._row_colour(self.marked, marked))
+        for column in range(self.chooser.columnCount()):
+            row.setData(column, Qt.ItemDataRole.BackgroundRole,
+                        QColor(PALETTE['base2']) if marked else None)
+
+
+class DeckPane(QWidget, _MarkedList):
     """One Anki deck, a card at a time, chosen and scheduled by Anki's reviewer."""
 
     changed = pyqtSignal()
@@ -742,25 +786,8 @@ class DeckPane(QWidget):
         self.view.setHtml(card_page(side, self.card.ordinal, answer, verdict),
                           QUrl.fromLocalFile(self._media.rstrip("/") + "/"))
 
-    def _mark(self, index):
-        """Mark the deck at index, within the list, and keep it in view."""
-        if not self._rows:
-            return
-        self._paint_row(False)
-        self.marked = max(0, min(len(self._rows) - 1, int(index)))
-        self._paint_row(True)
-        self.chooser.scrollToItem(self._rows[self.marked],
-                                  QAbstractItemView.ScrollHint.PositionAtCenter)
-
-    def _paint_row(self, marked):
-        """Paint the marked row as marked, or as what it owes once it is not."""
-        if not 0 <= self.marked < len(self._rows):
-            return
-        row = self._rows[self.marked]
-        row.setForeground(0, _name_colour(self.listing[self.marked], marked))
-        for column in range(len(DECK_COLUMNS)):
-            row.setData(column, Qt.ItemDataRole.BackgroundRole,
-                        QColor(PALETTE['base2']) if marked else None)
+    def _row_colour(self, index, marked) -> QColor:
+        return _name_colour(self.listing[index], marked)
 
     def _show_message(self, text, colour='red'):
         self._clear_message()
@@ -780,6 +807,139 @@ class DeckPane(QWidget):
             self.chooser.setVisible(self.choosing)
 
 
+def _entry_colour(entry, ended, marked=False) -> QColor:
+    """Return an entry's colour: strong when marked, blue for a folder, faint once ended."""
+    if marked:
+        return QColor(PALETTE['base02'])
+    return QColor(PALETTE['blue' if entry.folder else 'base1' if ended else 'base00'])
+
+
+def _how_far_into(entry, places) -> tuple:
+    """Return how far into a file the member is, and whether that is its end."""
+    place = None if entry.folder else places.get(entry.path)
+    if place is None:
+        return "", False
+    unit = readout_of(kind_of(entry.path))
+    said = how_far(place, unit)
+    return ("" if said == UNKNOWN else said), finished(place, unit)
+
+
+class LibraryPane(QWidget, _MarkedList):
+    """The media folder as a list, a folder at a time, to open a file from."""
+
+    chosen = pyqtSignal(str)
+
+    def __init__(self, path=None, start_at=0, parent=None, root=None, positions=None):
+        super().__init__(parent)
+        profile = UserProfile()
+        self.root = os.path.abspath(root or library_for(profile))
+        self.positions = positions or rest_positions.beside(rest_queue.path_for(profile))
+        self.folder = self.root
+        self.entries = []
+        self.marked = 0
+        self._rows = []
+        self._ended = []
+        self._message = None
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.chooser = _folder_list(self)
+        layout.addWidget(self.chooser)
+        if path:
+            self.open(path, start_at)
+
+    def open(self, path, start_at=0):
+        """List the folder holding path, path marked, or path itself where it is a folder."""
+        path = os.path.abspath(str(path))
+        if os.path.isdir(path):
+            self._list(path)
+        else:
+            self._list(os.path.dirname(path), path)
+
+    def toggle(self):
+        """List the marked folder, or open the marked file."""
+        if not self.entries:
+            return
+        entry = self.entries[self.marked]
+        if entry.folder:
+            self._list(entry.path)
+        else:
+            self.chosen.emit(entry.path)
+
+    def step(self, direction):
+        """Open the marked entry going right, or go up a folder going left."""
+        if int(direction) > 0:
+            self.toggle()
+        else:
+            self.undo()
+
+    def undo(self):
+        """List the folder above, the one left marked, no higher than the media folder."""
+        if self.folder != self.root:
+            self._list(os.path.dirname(self.folder), self.folder)
+
+    def nudge(self, direction):
+        """Mark the entry above or below."""
+        self._mark(self.marked - int(direction))
+
+    def turn(self, direction):
+        """Mark the entry a page further down or up."""
+        self._mark(self.marked + int(direction) * PAGE_ROWS)
+
+    def title(self) -> str:
+        """Return the folder listed, named from the media folder down."""
+        return os.path.relpath(self.folder, os.path.dirname(self.root))
+
+    def position(self) -> int:
+        return 0
+
+    def duration(self) -> int:
+        return 0
+
+    def stop(self):
+        """Leave the list as it is, there being no place in it to keep."""
+
+    def _list(self, folder, mark=None):
+        """List folder, or the nearest folder above it inside the media folder, marking mark."""
+        folder = os.path.abspath(folder)
+        if os.path.commonpath([self.root, folder]) != self.root:
+            folder = self.root
+        while folder != self.root and not os.path.isdir(folder):
+            folder = os.path.dirname(folder)
+        self.folder = folder
+        self.entries = contents(folder)
+        places = rest_positions.read(self.positions)
+        self.chooser.clear()
+        self.chooser.headerItem().setText(0, self.title())
+        self._rows, self._ended = [], []
+        for entry in self.entries:
+            said, ended = _how_far_into(entry, places)
+            row = QTreeWidgetItem([entry.name + ("/" if entry.folder else ""), said])
+            row.setForeground(0, _entry_colour(entry, ended))
+            row.setForeground(1, QColor(PALETTE['base1']))
+            row.setTextAlignment(1, RIGHT)
+            self.chooser.addTopLevelItem(row)
+            self._rows.append(row)
+            self._ended.append(ended)
+        paths = [entry.path for entry in self.entries]
+        self.marked = 0
+        self._mark(paths.index(mark) if mark in paths else 0)
+        self._say_what_is_here()
+
+    def _row_colour(self, index, marked) -> QColor:
+        return _entry_colour(self.entries[index], self._ended[index], marked)
+
+    def _say_what_is_here(self):
+        """Show the list, or say that the folder holds nothing to show."""
+        if self._message is not None:
+            self._message.deleteLater()
+            self._message = None
+        self.chooser.setVisible(bool(self.entries))
+        if not self.entries:
+            self._message = _failure_label(self, f"NOTHING TO SHOW IN\n{self.title()}",
+                                           'base01')
+            self.layout().addWidget(self._message)
+
+
 def build_pane(activity, start_at=0, parent=None) -> QWidget:
     """Build the pane for what this activity is."""
     if activity.kind == DOCUMENT:
@@ -788,6 +948,8 @@ def build_pane(activity, start_at=0, parent=None) -> QWidget:
         return DeckPane(activity.path, start_at, parent)
     if activity.kind == BOOK:
         return BookPane(activity.path, start_at, parent)
+    if activity.kind == SHELF:
+        return LibraryPane(activity.path, start_at, parent)
     return VideoPane(activity.path, start_at, parent)
 
 
@@ -795,6 +957,7 @@ class MediaSurface(QWidget):
     """The break's screen while it is showing something."""
 
     pane_changed = pyqtSignal()
+    file_chosen = pyqtSignal(str)
 
     def __init__(self, timer_ref, pane_factory=None, only_screen=False,
                  parent=None):
@@ -848,17 +1011,20 @@ class MediaSurface(QWidget):
             changed = getattr(pane, "changed", None)
             if changed is not None:
                 changed.connect(self.pane_changed)
+            chosen = getattr(pane, "chosen", None)
+            if chosen is not None:
+                chosen.connect(self.file_chosen)
             self.panes[activity.kind] = pane
             self.stack.addWidget(pane)
         else:
             pane.open(activity.path, start_at)
 
         self.activity = activity
-        self._dress(light=activity.kind in (BOOK, DECK))
+        self._dress(light=activity.kind in (BOOK, DECK, SHELF))
         self.stack.setCurrentWidget(pane)
         self.set_keys(key_hints)
         if self.progress is not None:
-            self.progress.setVisible(True)
+            self.progress.setVisible(activity.kind != SHELF)
             self.show_progress()
         self._place_the_overlays()
         self.update_display()
@@ -886,7 +1052,7 @@ class MediaSurface(QWidget):
         return where
 
     def _dress(self, light):
-        """Paint the surface Solarized light around a book or a deck, and dark otherwise."""
+        """Paint the surface Solarized light around a book, a deck or a list, else dark."""
         self.setStyleSheet(f"#mediaSurface {{ background-color: "
                            f"{PALETTE['base3' if light else 'base03']}; }}")
         self.keys.set_light(light)

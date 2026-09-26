@@ -724,12 +724,22 @@ Feature: Focus timer
 
     Scenario: One offer per subfolder
       Given my media folder holds subfolders such as Books, PDF and Videos
-      Then each is an offer, named with the file it opens
+      Then each is an offer, named with the file its list marks
       And a subfolder added since is offered at the next break
 
-    Scenario: A subfolder carries on where I was
-      Then its key opens the file I opened last in it, where I left it
-      And once that file reached its end, the next one by name
+    Scenario: A subfolder lists what is in it
+      When I press a subfolder's key
+      Then the wall lists its folders and then its files, each file with how far into it I am
+      And the file I opened last in it is marked, or the next one by name once that one reached its end
+      And up and down mark the entry beside, and page up and page down mark one ten away
+      And SPACE or right opens the marked folder, or the marked file where I left it
+      And left or BACKSPACE goes up a folder, as far as the media folder itself
+      And 0 puts the wall back
+
+    Scenario: Back from a file opened from the list
+      Given a break is showing a file opened from the list
+      When I press 0
+      Then the list comes back in that file's folder, with that file marked
 
     Scenario: The folder is mine to name
       Then it is the Media folder in Traker's checkout, kept out of the repository, unless my profile names another
@@ -803,7 +813,7 @@ Feature: Focus timer
       Given my profile names a hook command
       When a break begins, shows a document, and gives the screens back
       Then the command runs with "break", "document" and "focus", in that order
-      And a shelf runs it with the kind of the file it opens
+      And a subfolder's list runs it with "break", and a file opened from it with its kind
 
     Scenario: A burst of changes is one change
       When one offer replaces another
