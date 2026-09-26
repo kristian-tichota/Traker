@@ -12,10 +12,10 @@ requires `stop_hold_secs` held on the play button, and that time is focus overti
 ## Strict break behaviour
 
 Everything in this section applies only where `strict = true`. A desktop or activity switch is
-reversed, and each wall is placed on every desktop and activity by a KWin window rule, the one form of
-the request KWin applies rather than refusing in silence. Every screen is covered; the application
-window stays behind the walls, and the keyboard starts on the wall covering its screen. The walls
-hold Plasma's Do Not Disturb through `Notifications.Inhibit`; Plasma drops it when Traker exits.
+reversed, and a KWin window rule places each wall on every desktop and activity. Every screen is
+covered; the application window stays behind the walls, and the keyboard starts on the wall covering
+its screen. The walls hold Plasma's Do Not Disturb through `Notifications.Inhibit` and ask a
+restarted notification server again; Plasma drops the hold when Traker exits.
 
 Holding `Esc` for `release_hold_secs` abandons the break, and the remaining time is recorded as
 `overridden_break`. When the break ends the walls stay but give up the desktops, the switch and the
@@ -51,7 +51,7 @@ thread; a burst of changes is one run of its last state, and quitting tells `foc
 ## Session verification
 
 `scripts/check_desktop_integration.py` listens for a desktop switch; `--screens`, `--release`,
-`--media` and `--idle` report the outputs, clear what a crashed break left behind, and report what the
-player gets and whether idle time is answered. `journalctl --user -b -g 'traker:'` prints one
-`holding '<caption>' wall=… everyDesktop=…` line per window. The script MUST be re-run after a
-Plasma upgrade. Mechanism: `docs/architecture/invariants.md` and `placing-the-window.md`.
+`--media`, `--idle` and `--notifications` report the outputs, clear what a crashed break left
+behind, and check the player, the idle time and Do Not Disturb. `journalctl --user -b -g 'traker:'`
+prints one `holding '<caption>' wall=… everyDesktop=…` line per window. The script MUST be re-run
+after a Plasma upgrade. Mechanism: `docs/architecture/invariants.md` and `placing-the-window.md`.

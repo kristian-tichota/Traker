@@ -43,11 +43,24 @@ def notify(summary, body, *, timeout_ms=15000,
     return sent
 
 
+def _watch_the_server(slot):
+    """Call slot with the new owner each time the notification service changes hands."""
+    from PyQt6.QtDBus import QDBusConnection, QDBusServiceWatcher
+
+    watcher = QDBusServiceWatcher(
+        SERVICE, QDBusConnection.sessionBus(),
+        QDBusServiceWatcher.WatchModeFlag.WatchForOwnerChange)
+    watcher.serviceOwnerChanged.connect(lambda _service, _old, new: slot(new))
+    return watcher
+
+
 class DoNotDisturb:
     """Holds the session's Do Not Disturb as an inhibition of the notification server."""
 
-    def __init__(self, caller=None):
+    def __init__(self, caller=None, watcher=None):
         self._call = caller or _session_call
+        self._watch = watcher or _watch_the_server
+        self._watching = None
         self.cookie = None
 
     @property
@@ -55,21 +68,14 @@ class DoNotDisturb:
         return self.cookie is not None
 
     def hold(self) -> bool:
-        """Ask the notification server to hold every notification back."""
-        if self.cookie is not None:
-            return True
-        reached, cookie = self._call(SERVICE, OBJECT, INTERFACE, "Inhibit",
-                                     DESKTOP_ENTRY, HOLD_REASON, {})
-        if not reached or not cookie:
-            log.info("%s takes no inhibition: notifications still arrive "
-                     "during a break.", SERVICE)
-            return False
-        self.cookie = int(cookie)
-        log.info("A strict break is holding notifications back.")
-        return True
+        """Ask the notification server, and any server replacing it, to hold notifications back."""
+        if self._watching is None:
+            self._watching = self._watch(self._server_changed)
+        return self._ask()
 
     def release(self):
         """Let notifications through again."""
+        self._watching = None
         if self.cookie is None:
             return
         cookie, self.cookie = self.cookie, None
@@ -78,6 +84,26 @@ class DoNotDisturb:
         if not reached:
             log.warning("%s did not end its inhibition; notifications stay "
                         "held back until Traker exits.", SERVICE)
+
+    def _ask(self) -> bool:
+        if self.cookie is not None:
+            return True
+        reached, cookie = self._call(SERVICE, OBJECT, INTERFACE, "Inhibit",
+                                     DESKTOP_ENTRY, HOLD_REASON, {})
+        if not reached or not cookie:
+            log.warning("%s takes no inhibition: notifications still arrive "
+                        "during a break.", SERVICE)
+            return False
+        self.cookie = int(cookie)
+        log.info("A strict break is holding notifications back.")
+        return True
+
+    def _server_changed(self, owner):
+        """Forget the cookie of a server that is gone, and ask its successor."""
+        self.cookie = None
+        if owner and self._watching is not None:
+            log.info("%s changed hands during a break; asking again.", SERVICE)
+            self._ask()
 
 
 # Workaround: PyQt marshals a plain int as "i" where the interface declares "u".

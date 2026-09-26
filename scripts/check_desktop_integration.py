@@ -18,6 +18,7 @@ from src.desktop import notify
 from src.desktop import kwin_rules
 from src.desktop import rest_positions
 from src.desktop import rest_queue
+from src.desktop.session import session_call
 from src.desktop.kwin import (HOME_PLUGIN_NAME, PLUGIN_NAME, KWinPin,
                               run_script, unload_script)
 from src.domain import media
@@ -39,6 +40,28 @@ def report_session():
         carried = kwin_rules.carried(group)
         print(f"  {label:<20} "
               f"{'[' + group + '] in ' + kwin_rules.DEFAULT_PATH if carried else '(none)'}")
+
+
+def report_do_not_disturb(seconds):
+    """Hold Do Not Disturb as a break does, and report what the server says."""
+    def inhibited():
+        reached, value = session_call(notify.SERVICE, notify.OBJECT,
+                                      "org.freedesktop.DBus.Properties", "Get",
+                                      notify.INTERFACE, "Inhibited")
+        return value if reached else "(no answer)"
+
+    print(f"\nDo Not Disturb  (held for {seconds:.0f}s)")
+    print(f"  before   Inhibited={inhibited()}")
+    quiet = notify.DoNotDisturb()
+    if not quiet.hold():
+        print("  refused: notifications will arrive during a break")
+        return
+    notify.notify("Held back by Traker", "This shows only once the hold ends.")
+    print(f"  holding  Inhibited={inhibited()}   cookie={quiet.cookie}")
+    print("  a notification was just sent: it must not show until the hold ends")
+    time.sleep(seconds)
+    quiet.release()
+    print(f"  after    Inhibited={inhibited()}")
 
 
 def report_idle(profile):
@@ -370,6 +393,9 @@ def main():
     parser.add_argument("--idle", action="store_true",
                         help="whether this session reports how long the member has "
                              "been away, which is what stops the timer")
+    parser.add_argument("--notifications", action="store_true",
+                        help="hold Do Not Disturb as a break does, send a "
+                             "notification under it, and report the server's answer")
     parser.add_argument("--screens", action="store_true",
                         help="what KWin answers for outputs and windows, and what "
                              "a desktop or activity switch does to them")
@@ -414,6 +440,10 @@ def main():
 
     if args.idle:
         report_idle(profile)
+
+    if args.notifications:
+        report_do_not_disturb(args.engage_secs)
+        return 0
 
     if args.window:
         report_window(bus)

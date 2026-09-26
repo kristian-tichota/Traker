@@ -376,6 +376,7 @@ Feature: Focus timer
       When a break begins
       Then the session's Do Not Disturb holds every notification back
       And it holds until the walls come down, and ends with Traker however Traker ends
+      And a notification server that restarts meanwhile is asked to hold them back again
       And when the wait is up, only the walls say so
 
     Scenario: Letting notifications through
