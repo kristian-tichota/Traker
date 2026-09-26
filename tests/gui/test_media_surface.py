@@ -694,8 +694,11 @@ class TestACardPage:
     def test_the_sound_is_left_to_anki(self):
         assert "[anki:play" not in card_page("x[anki:play:q:0]", 0)
 
-    def test_the_body_carries_the_classes_anki_gives_it_at_night(self):
-        assert 'class="card card2 isLin nightMode night_mode"' in card_page("x", 1)
+    def test_the_body_carries_the_classes_anki_gives_it_by_day(self):
+        page = card_page("x", 1)
+
+        assert 'class="card card2 isLin"' in page and "nightMode" not in page
+        assert PALETTE['base3'] in page
 
     def test_the_answer_is_scrolled_to_and_the_question_is_not(self):
         assert "scrollIntoView" in card_page("x", 0, answer=True)
@@ -901,9 +904,11 @@ class TestTheSurfaceAroundThem:
 
         surface.open(BreakActivity("Novel", "/x/novel.epub", BOOK))
         reading = painted()
+        surface.open(BreakActivity("Anki", ANY_DECK, DECK))
+        reviewing = painted()
         surface.open(activity)
 
-        assert reading == (PALETTE['base3'], PALETTE['base2'])
+        assert reading == reviewing == (PALETTE['base3'], PALETTE['base2'])
         assert painted() == (PALETTE['base03'], PALETTE['base02'])
 
 

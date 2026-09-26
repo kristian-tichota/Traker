@@ -31,13 +31,11 @@ QUESTION, ANSWER = "question", "answer"
 CARD_MARKERS = re.compile(r"\[anki:play:[qa]:\d+\]|\[\[type:[^\]]*\]\]")
 
 CARD_CSS = f"""
-:root {{ color-scheme: dark; --canvas: {PALETTE['base03']}; --fg: {PALETTE['base0']}; }}
-body {{ margin: 20px; overflow-wrap: break-word; }}
-body.nightMode {{ background-color: var(--canvas); color: var(--fg); }}
+:root {{ color-scheme: light; }}
+html, body.card {{ background-color: {PALETTE['base3']} !important; }}
+body.card {{ margin: 20px; overflow-wrap: break-word; color: {PALETTE['base00']}; }}
 img {{ max-width: 100%; max-height: 95vh; }}
-hr {{ background-color: {PALETTE['base01']}; margin: 1em 0; border: none; height: 1px; }}
-.nightMode .latex {{ filter: invert(100%); }}
-.nightMode img.drawing {{ filter: invert(1) hue-rotate(180deg); }}
+hr {{ background-color: {PALETTE['base1']}; margin: 1em 0; border: none; height: 1px; }}
 """
 
 TO_THE_ANSWER = ("<script>addEventListener('load', () => "
@@ -403,7 +401,7 @@ class DocumentPane(QWidget):
 
 
 def card_page(side, ordinal, answer=False, verdict=None) -> str:
-    """Wrap a card's side as Anki's reviewer does at night, with any verdict on it."""
+    """Wrap a card's side as Anki's reviewer does by day, with any verdict on it."""
     body = CARD_MARKERS.sub("", side)
     said = ""
     if verdict in VERDICTS:
@@ -412,7 +410,7 @@ def card_page(side, ordinal, answer=False, verdict=None) -> str:
                 f"{word}</div>")
     return ('<!doctype html><html><head><meta charset="utf-8">'
             f"<style>{CARD_CSS}{VERDICT_CSS if said else ''}</style></head>"
-            f'<body class="card card{int(ordinal) + 1} isLin nightMode night_mode">'
+            f'<body class="card card{int(ordinal) + 1} isLin">'
             f"{said}{body}{TO_THE_ANSWER if answer else ''}</body></html>")
 
 
@@ -474,18 +472,18 @@ def _deck_list(parent) -> QTreeWidget:
     for column in range(1, len(COUNT_COLOURS) + 1):
         tree.headerItem().setTextAlignment(column, RIGHT)
     tree.setStyleSheet(
-        f"QTreeWidget {{ background-color: {PALETTE['base03']}; border: none;"
+        f"QTreeWidget {{ background-color: {PALETTE['base3']}; border: none;"
         f" font-family: 'Fira Code'; font-size: {DECK_FONT_PX}px; padding: 20px; }}"
         f" QTreeWidget::item {{ padding: 4px 16px; }}"
-        f" QHeaderView::section {{ background-color: {PALETTE['base03']};"
-        f" color: {PALETTE['base01']}; border: none; font-family: 'Fira Code';"
+        f" QHeaderView::section {{ background-color: {PALETTE['base3']};"
+        f" color: {PALETTE['base1']}; border: none; font-family: 'Fira Code';"
         f" font-size: 11px; letter-spacing: 2px; padding: 4px 16px; }}")
     return tree
 
 
 def _name_colour(deck, marked=False) -> QColor:
-    """Return the colour of a deck's name: bright when marked, faint when it owes nothing."""
-    return QColor(PALETTE['base2' if marked else 'base0' if deck.owed else 'base01'])
+    """Return the colour of a deck's name: strong when marked, faint when it owes nothing."""
+    return QColor(PALETTE['base02' if marked else 'base00' if deck.owed else 'base1'])
 
 
 def _deck_rows(tree, decks) -> list:
@@ -499,7 +497,7 @@ def _deck_rows(tree, decks) -> list:
         row.setForeground(0, _name_colour(deck))
         for column, (count, colour) in enumerate(zip(counts, COUNT_COLOURS), start=1):
             row.setTextAlignment(column, RIGHT)
-            row.setForeground(column, QColor(PALETTE[colour if count else 'base01']))
+            row.setForeground(column, QColor(PALETTE[colour if count else 'base1']))
         if parent is None:
             tree.addTopLevelItem(row)
         else:
@@ -548,7 +546,7 @@ class DeckPane(QWidget):
         self.view = QWebEngineView(self)
         self.view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        self.view.page().setBackgroundColor(QColor(PALETTE['base03']))
+        self.view.page().setBackgroundColor(QColor(PALETTE['base3']))
         self.view.page().setAudioMuted(True)
         layout.addWidget(self.view)
         self.chooser = _deck_list(self)
@@ -732,7 +730,7 @@ class DeckPane(QWidget):
             self.side = None
             said = f"{VERDICTS[verdict][0]}\n" if verdict in VERDICTS else ""
             back = "\nSPACE OR 0 FOR THE DECKS" if self.from_list else ""
-            self._show_message(f"{said}NOTHING DUE IN {self.deck}{back}", colour='base1')
+            self._show_message(f"{said}NOTHING DUE IN {self.deck}{back}", colour='base01')
             self.verdict = verdict
             return
         self.side = QUESTION
@@ -762,7 +760,7 @@ class DeckPane(QWidget):
         row.setForeground(0, _name_colour(self.listing[self.marked], marked))
         for column in range(len(DECK_COLUMNS)):
             row.setData(column, Qt.ItemDataRole.BackgroundRole,
-                        QColor(PALETTE['base02']) if marked else None)
+                        QColor(PALETTE['base2']) if marked else None)
 
     def _show_message(self, text, colour='red'):
         self._clear_message()
@@ -856,7 +854,7 @@ class MediaSurface(QWidget):
             pane.open(activity.path, start_at)
 
         self.activity = activity
-        self._dress(light=activity.kind == BOOK)
+        self._dress(light=activity.kind in (BOOK, DECK))
         self.stack.setCurrentWidget(pane)
         self.set_keys(key_hints)
         if self.progress is not None:
@@ -888,7 +886,7 @@ class MediaSurface(QWidget):
         return where
 
     def _dress(self, light):
-        """Paint the surface Solarized light around a book, and dark around anything else."""
+        """Paint the surface Solarized light around a book or a deck, and dark otherwise."""
         self.setStyleSheet(f"#mediaSurface {{ background-color: "
                            f"{PALETTE['base3' if light else 'base03']}; }}")
         self.keys.set_light(light)

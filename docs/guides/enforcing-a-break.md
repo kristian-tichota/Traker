@@ -41,9 +41,9 @@ An EPUB is set in CSS columns on a Solarized light page in the middle of the scr
 is a share of its text, so a changed page size keeps the place.
 
 A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`, which chooses, schedules
-and sounds every card; the wall draws it, forwards the keys and confirms each answer on the next card.
-A `deck` of `*` lists every deck first. Anki MUST be running, its window MAY stay minimized, and its
-timebox MUST be 0.
+and sounds every card; the wall draws it in Solarized light, forwards the keys and confirms each
+answer on the next card. A `deck` of `*` lists every deck first. Anki MUST be running, its window MAY
+stay minimized, and its timebox MUST be 0.
 
 ## Session verification
 
