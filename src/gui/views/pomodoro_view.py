@@ -104,8 +104,9 @@ def complete_chore(db, chore_id: int, name: str) -> tuple:
 
 
 def is_typing_into(watched) -> bool:
-    """Report whether this key was delivered to a text field."""
-    return isinstance(watched, QLineEdit)
+    """Report whether a text field receives the key or holds the keyboard focus."""
+    return any(isinstance(widget, QLineEdit)
+               for widget in (watched, QApplication.focusWidget()))
 
 
 def read_long_breaks_spent(db) -> tuple:

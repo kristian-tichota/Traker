@@ -3,6 +3,7 @@ import datetime
 import pytest
 from PyQt6.QtCore import QEvent, Qt, QThreadPool
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QLabel, QLineEdit, QWidget
 
 from src.database import rows
@@ -66,9 +67,9 @@ def enter_strict_break(view):
     assert view._strict_break_is_holding()
 
 
-def press(view, key, watched=None):
+def press(view, key):
     event = QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier)
-    return view.eventFilter(watched if watched is not None else view, event)
+    return view.eventFilter(view, event)
 
 
 class TestWhatABreakLists:
@@ -274,14 +275,21 @@ class TestTickingOneOff:
 
         assert press(timer, Qt.Key.Key_Z) is False
 
-    def test_a_letter_typed_into_a_field_is_left_alone(self, timer, settled):
+    def test_a_letter_typed_into_a_field_is_left_alone(self, timer, settled, qapp):
         enter_strict_break(timer)
         settled()
+        advance(timer, timer.break_ms + 1000)
         field = QLineEdit()
+        field.show()
+        field.activateWindow()
+        field.setFocus()
+        qapp.processEvents()
 
-        assert press(timer, Qt.Key.Key_A, watched=field) is False
+        QTest.keyClick(field.windowHandle(), Qt.Key.Key_A)
+
+        assert field.text() == "a"
         assert not any(call[0] == "complete_chore" for call in timer.db.calls)
-        field.deleteLater()
+        field.close()
 
     def test_no_key_ticks_anything_outside_a_break(self, timer, settled):
         assert press(timer, Qt.Key.Key_A) is False
