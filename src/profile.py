@@ -251,19 +251,22 @@ pin_with_rule = true
 # has to be 0: the timebox dialog holds the next card until it is answered.
 anki_url = "http://127.0.0.1:8765"
 
-# What a break may open on the screen it took: a PDF is read, anything else is
-# played, and a deck is reviewed in Anki. Only what is listed here is offered,
-# and only on the key for it. The first entry is on Enter, the rest on 1-9 in
-# the order they appear.
+# What a break may open on the screen it took: a PDF is read, an EPUB is read
+# as a book, anything else is played, and a deck is reviewed in Anki. The queue
+# is offered first, then these entries, then the library below, each only on
+# its key: the first on Enter, the rest on 1-9 in that order.
 #
 # While an activity shows, that screen shows it alone; the other screens go on
 # showing the countdown, the chores and what is coming. SPACE pauses a video or
 # turns a page, the arrows (and PgUp/PgDn) seek 30 s or turn pages, UP/DOWN are
-# volume or scroll, and 0 puts the wall back. On a deck, SPACE, LEFT and RIGHT
-# first show the answer; then SPACE and RIGHT answer Good, LEFT answers Again,
-# and BACKSPACE takes the last answer back. A deck of "*" lists every deck in
-# Anki first: UP/DOWN choose one, LEFT/RIGHT skip to one with cards due, SPACE
-# reviews it, and 0 in it goes back to the list.
+# volume or scroll, and 0 puts the wall back. In an EPUB, SPACE and the arrow
+# pointing along the book (LEFT in a right-to-left book) turn to the next page,
+# BACKSPACE and the other arrow turn back, and UP/DOWN go to the chapter before
+# or after. On a deck, SPACE, LEFT and RIGHT first show the answer; then SPACE
+# and RIGHT answer Good, LEFT answers Again, and BACKSPACE takes the last answer
+# back. A deck of "*" lists every deck in Anki first: UP/DOWN choose one,
+# LEFT/RIGHT skip to one with cards due, SPACE reviews it, and 0 in it goes back
+# to the list.
 #
 # [[strict_break.activities]]
 # name = "Reading"
@@ -283,6 +286,21 @@ anki_url = "http://127.0.0.1:8765"
 # remembered beside it.
 [strict_break.queue]
 path = ""
+
+# A folder whose subfolders are offered after the entries above, one offer per
+# subfolder, such as Books, Videos and PDF. Each opens the file in it that was
+# open last, or the next one by name once that one reached its end. Empty means
+# the Media folder in Traker's own checkout; a folder that does not exist
+# offers nothing.
+[strict_break.library]
+path = ""
+
+# How an EPUB is set: the size of its type in pixels, and the page it fills in
+# the middle of the screen, as a width and a height in multiples of that size.
+[strict_break.book]
+font_px = 28
+width_em = 32
+height_em = 30
 
 [keybinds]
 up = "k"
@@ -359,7 +377,11 @@ class UserProfile:
         return bool(default)
 
     def get_metric(self, section: str, key: str, default=None):
-        return self.data.get(section, {}).get(key, default)
+        """Return one key of a section, a dotted section naming a nested table."""
+        table = self.data
+        for name in section.split("."):
+            table = table.get(name, {}) if isinstance(table, dict) else {}
+        return table.get(key, default) if isinstance(table, dict) else default
 
     def number(self, section: str, key: str, default: float,
                low: float = None, high: float = None) -> float:

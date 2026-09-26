@@ -11,8 +11,9 @@ from PyQt6.QtWidgets import (QAbstractItemView, QFrame, QHeaderView, QLabel,
 
 from src.config import PALETTE
 from src.desktop import anki
-from src.desktop.activities import ANY_DECK, DECK, DOCUMENT, readout_of
+from src.desktop.activities import ANY_DECK, BOOK, DECK, DOCUMENT, readout_of
 from src.domain.media import Place, as_elapsed
+from src.gui.components.book_pane import BookPane
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
 from src.gui.workers import run_in_background
@@ -758,6 +759,8 @@ def build_pane(activity, start_at=0, parent=None) -> QWidget:
         return DocumentPane(activity.path, start_at, parent)
     if activity.kind == DECK:
         return DeckPane(activity.path, start_at, parent)
+    if activity.kind == BOOK:
+        return BookPane(activity.path, start_at, parent)
     return VideoPane(activity.path, start_at, parent)
 
 
@@ -777,8 +780,7 @@ class MediaSurface(QWidget):
         self.panes = {}
 
         self.setObjectName("mediaSurface")
-        self.setStyleSheet(
-            f"#mediaSurface {{ background-color: {PALETTE['base03']}; }}")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.setAutoFillBackground(True)
 
         layout = QVBoxLayout(self)
@@ -799,12 +801,9 @@ class MediaSurface(QWidget):
             layout.addWidget(self.progress)
             self.strip = QLabel()
             self.strip.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.strip.setStyleSheet(
-                f"color: {PALETTE['base01']}; background-color: {PALETTE['base02']};"
-                f" font-size: 10px; font-family: 'Fira Code'; letter-spacing: 2px;"
-                f" padding: 3px;")
             layout.addWidget(self.strip)
 
+        self._dress(light=False)
         self.update_display()
 
     @property
@@ -828,6 +827,7 @@ class MediaSurface(QWidget):
             pane.open(activity.path, start_at)
 
         self.activity = activity
+        self._dress(light=activity.kind == BOOK)
         self.stack.setCurrentWidget(pane)
         self.set_keys(key_hints)
         if self.progress is not None:
@@ -847,6 +847,7 @@ class MediaSurface(QWidget):
         """Stop what is showing and return the place it reached."""
         pane = self.pane
         self.activity = None
+        self._dress(light=False)
         self.set_keys([])
         if self.progress is not None:
             self.progress.setVisible(False)
@@ -856,6 +857,19 @@ class MediaSurface(QWidget):
         where = Place(pane.position(), pane.duration())
         pane.stop()
         return where
+
+    def _dress(self, light):
+        """Paint the surface Solarized light around a book, and dark around anything else."""
+        self.setStyleSheet(f"#mediaSurface {{ background-color: "
+                           f"{PALETTE['base3' if light else 'base03']}; }}")
+        self.keys.set_light(light)
+        if self.strip is None:
+            return
+        self.progress.set_light(light)
+        self.strip.setStyleSheet(
+            f"color: {PALETTE['base01']}; background-color: "
+            f"{PALETTE['base2' if light else 'base02']}; font-size: 10px;"
+            f" font-family: 'Fira Code'; letter-spacing: 2px; padding: 3px;")
 
     def shutdown(self):
         """Release every pane before the wall this is a page of is dropped."""

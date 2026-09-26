@@ -1,7 +1,10 @@
+import os
+
 import pytest
 
 from src.desktop import activities as break_activities
-from src.desktop.activities import DECK, DOCUMENT, VIDEO
+from src.desktop.activities import BOOK, DECK, DOCUMENT, SHELF, VIDEO, BreakActivity
+from src.domain.media import Place
 
 pytestmark = pytest.mark.exact
 
@@ -10,6 +13,10 @@ class TestWhichPaneShowsIt:
     @pytest.mark.parametrize("path", ["/x/paper.pdf", "/x/PAPER.PDF", "~/a b.Pdf"])
     def test_a_pdf_is_read(self, path):
         assert break_activities.kind_of(path) == DOCUMENT
+
+    @pytest.mark.parametrize("path", ["/x/本.epub", "/x/NOVEL.EPUB"])
+    def test_an_epub_is_read_as_a_book(self, path):
+        assert break_activities.kind_of(path) == BOOK
 
     @pytest.mark.parametrize("path", ["/x/talk.mkv", "/x/a.mp4", "/x/no-extension",
                                       "/x/lecture.webm"])
@@ -105,3 +112,90 @@ class TestTheKeys:
 
     def test_past_the_ninth_there_is_no_key(self):
         assert break_activities.offer_key(9) == "—"
+
+
+@pytest.fixture
+def library(tmp_path):
+    def shelve(*names):
+        for name in names:
+            path = tmp_path / "Media" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"")
+        return str(tmp_path / "Media")
+
+    return shelve
+
+
+class TestTheLibrary:
+    def test_each_subfolder_is_a_shelf_in_name_order(self, library):
+        folder = library("Videos/a.mkv", "Books/b.epub", "PDF/c.pdf")
+
+        assert [(shelf.name, shelf.kind) for shelf in break_activities.shelves(folder)] == [
+            ("Books", SHELF), ("PDF", SHELF), ("Videos", SHELF)]
+
+    def test_a_shelf_holds_what_a_break_can_show_in_natural_order(self, library):
+        folder = library("Videos/s1/e10.mkv", "Videos/s1/e2.mkv", "Videos/s1/e2.srt",
+                         "Videos/.e3.mkv", "Videos/cover.jpg")
+
+        shelf, = break_activities.shelves(folder)
+
+        assert [os.path.relpath(path, folder) for path in shelf.items] == [
+            "Videos/s1/e2.mkv", "Videos/s1/e10.mkv"]
+
+    def test_a_subfolder_with_nothing_to_show_is_no_shelf(self, library):
+        folder = library("Notes/readme.txt", "Books/a.epub")
+
+        assert [shelf.name for shelf in break_activities.shelves(folder)] == ["Books"]
+
+    def test_files_beside_the_subfolders_are_a_shelf_of_their_own(self, library):
+        folder = library("loose.mkv", "Books/a.epub")
+
+        assert [shelf.name for shelf in break_activities.shelves(folder)] == [
+            "Media", "Books"]
+
+    def test_a_folder_that_is_not_there_offers_nothing(self, tmp_path):
+        assert break_activities.shelves(str(tmp_path / "absent")) == []
+
+    def test_the_folder_is_the_one_the_profile_names(self, write_profile):
+        profile = write_profile('[strict_break.library]\npath = "~/Shelf"\n')
+
+        assert break_activities.library_for(profile) == os.path.expanduser("~/Shelf")
+
+    def test_or_else_the_media_folder_of_the_checkout(self, write_profile):
+        profile = write_profile('[strict_break.library]\npath = ""\n')
+
+        assert break_activities.library_for(profile) == break_activities.DEFAULT_LIBRARY
+
+
+class TestWhatAShelfOpens:
+    SHELF = BreakActivity("Videos", "/m/Videos", SHELF,
+                          ("/m/Videos/e1.mkv", "/m/Videos/e2.mkv", "/m/Videos/e3.mkv"))
+    ENDED, PART_WAY = Place(1_440_000, 1_440_000), Place(60_000, 1_440_000)
+
+    def opened(self, places):
+        return break_activities.resolve(self.SHELF, places).path
+
+    def test_its_first_file_until_one_of_them_is_opened(self):
+        assert self.opened({"/elsewhere.pdf": Place(3, 10)}) == "/m/Videos/e1.mkv"
+
+    def test_the_file_opened_last_while_it_is_part_way(self):
+        assert self.opened({"/m/Videos/e2.mkv": self.PART_WAY,
+                            "/elsewhere.pdf": Place(3, 10)}) == "/m/Videos/e2.mkv"
+
+    def test_the_next_by_name_once_that_one_reached_its_end(self):
+        assert self.opened({"/m/Videos/e2.mkv": self.ENDED}) == "/m/Videos/e3.mkv"
+
+    def test_past_the_last_one_it_goes_back_to_one_not_yet_ended(self):
+        assert self.opened({"/m/Videos/e1.mkv": self.ENDED,
+                            "/m/Videos/e3.mkv": self.ENDED}) == "/m/Videos/e2.mkv"
+
+    def test_the_file_is_offered_as_what_it_is(self):
+        shelf = BreakActivity("Books", "/m/Books", SHELF, ("/m/Books/a.epub",))
+
+        assert break_activities.resolve(shelf, {}) == BreakActivity(
+            "a.epub", "/m/Books/a.epub", BOOK)
+
+    def test_anything_else_opens_itself(self):
+        entry = BreakActivity("Reading", "/x/reading.pdf", DOCUMENT)
+
+        assert break_activities.resolve(entry, {}) is entry

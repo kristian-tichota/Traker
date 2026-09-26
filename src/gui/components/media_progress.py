@@ -6,11 +6,11 @@ from src.config import PALETTE
 from src.domain import media
 
 BAR_PX = 3
-TRACK = 'base01'
+TRACK, LIGHT_TRACK = 'base01', 'base2'
 FILLED = 'cyan'
 
 TEXT_PX = 13
-TEXT = 'base2'
+TEXT, LIGHT_TEXT = 'base2', 'base01'
 ROW_HEIGHT = 18
 GAP = 3
 
@@ -33,6 +33,7 @@ class MediaProgress(QWidget):
         self._font.setPixelSize(TEXT_PX)
         self._says = ""
         self._fraction = 0.0
+        self.light = False
 
     @property
     def says(self) -> str:
@@ -47,6 +48,11 @@ class MediaProgress(QWidget):
     def sizeHint(self) -> QSize:
         """Size to the given width and exactly the height of the band."""
         return QSize(super().sizeHint().width(), HEIGHT)
+
+    def set_light(self, light):
+        """Paint the line and readout for a light surface behind them, or a dark one."""
+        self.light = bool(light)
+        self.update()
 
     def show_place(self, place, unit=media.TIME):
         """Show where place is."""
@@ -67,7 +73,7 @@ class MediaProgress(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
 
         bar = QRectF(0, self.height() - BAR_PX, self.width(), BAR_PX)
-        painter.setBrush(QColor(PALETTE[TRACK]))
+        painter.setBrush(QColor(PALETTE[LIGHT_TRACK if self.light else TRACK]))
         painter.drawRect(bar)
         filled = self._filled(self._fraction)
         if filled:
@@ -78,5 +84,5 @@ class MediaProgress(QWidget):
                      self.width() - MARGIN, ROW_HEIGHT)
         corner = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         painter.setFont(self._font)
-        painter.setPen(QColor(PALETTE[TEXT]))
+        painter.setPen(QColor(PALETTE[LIGHT_TEXT if self.light else TEXT]))
         painter.drawText(row, corner, self._says)

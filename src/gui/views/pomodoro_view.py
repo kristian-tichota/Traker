@@ -843,6 +843,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             self.profile.get_metric("strict_break", "activities", ()) or ())
         self._queue_path = rest_queue.path_for(self.profile)
         self._positions_path = rest_positions.beside(self._queue_path)
+        self._library_path = break_activities.library_for(self.profile)
         self._offers = list(self.activities)
         self.media_pane_factory = None
 
@@ -1532,6 +1533,15 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("0", "back to the decks" if getattr(pane, "from_list", False)
                  else "back to Traker"),
             ]
+        elif kind == break_activities.BOOK:
+            ahead, behind = (("\u2190", "\u2192") if getattr(pane, "rtl", False)
+                             else ("\u2192", "\u2190"))
+            hints = [
+                (f"SPACE {ahead}", "next page"),
+                (f"{UNDO_KEY_NAME} {behind}", "page back"),
+                ("\u2191 \u2193", "chapter"),
+                ("0", "back to Traker"),
+            ]
         else:
             paging = kind == break_activities.DOCUMENT
             hints = [
@@ -1552,7 +1562,8 @@ class PomodoroView(ShutdownMixin, QWidget):
     def take_offers(self) -> list:
         """Return what this break may be handed to, in key order."""
         self._offers = (break_activities.queued(rest_queue.read(self._queue_path))
-                        + list(self.activities))
+                        + list(self.activities)
+                        + break_activities.shelves(self._library_path))
         return self._offers
 
     OFFERS_TITLE = "SOMETHING TO DO"
@@ -1586,7 +1597,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         notify_service.notify(
             "The break can show something now",
             f"{media.as_elapsed(self.away_ms())} away from the screen is up. "
-            f"{self.offer_key(0)} shows “{self._offers[0].name}”.",
+            f"{self.offer_key(0)} shows “{self._opened_by(self._offers[0]).name}”.",
             sound_name=self._warn_sound,
             sound_file=self._warn_sound_file,
         )
@@ -1600,18 +1611,27 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _offer_lines(self, places) -> list:
         """Build one line per offer: its key, its name, and how far in it is."""
-        said = [media.how_far(places.get(offer.path, media.Place()),
-                              break_activities.readout_of(offer.kind))
-                for offer in self._offers]
+        opened = [break_activities.resolve(offer, places) for offer in self._offers]
+        said = [media.how_far(places.get(shown.path, media.Place()),
+                              break_activities.readout_of(shown.kind))
+                for shown in opened]
+        shelf_width = max((len(offer.name) for offer in self._offers
+                           if offer.kind == break_activities.SHELF), default=0)
+        names = [f"{offer.name:<{shelf_width}}  {shown.name}"
+                 if offer.kind == break_activities.SHELF else offer.name
+                 for offer, shown in zip(self._offers, opened)]
         keys = [self.offer_key(index) for index in range(len(self._offers))]
         if all(how == media.UNKNOWN for how in said):
-            return [f"{key}  {offer.name}"
-                    for key, offer in zip(keys, self._offers)]
+            return [f"{key}  {name}" for key, name in zip(keys, names)]
         key_width = max(len(key) for key in keys)
-        name_width = max(len(offer.name) for offer in self._offers)
+        name_width = max(len(name) for name in names)
         how_width = max(len(how) for how in said)
-        return [f"{key:>{key_width}}  {offer.name:<{name_width}}  {how:>{how_width}}".rstrip()
-                for key, offer, how in zip(keys, self._offers, said)]
+        return [f"{key:>{key_width}}  {name:<{name_width}}  {how:>{how_width}}".rstrip()
+                for key, name, how in zip(keys, names, said)]
+
+    def _opened_by(self, offer):
+        """Return what an offer opens now, a shelf being the file it has reached."""
+        return break_activities.resolve(offer, rest_positions.read(self._positions_path))
 
     offer_key = staticmethod(break_activities.offer_key)
 
@@ -1742,9 +1762,11 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         if key == Qt.Key.Key_Space:
             pane.toggle()
-        elif key in (Qt.Key.Key_Right, Qt.Key.Key_PageDown):
+        elif key in (Qt.Key.Key_PageDown, Qt.Key.Key_PageUp):
+            getattr(pane, "turn", pane.step)(1 if key == Qt.Key.Key_PageDown else -1)
+        elif key == Qt.Key.Key_Right:
             pane.step(1)
-        elif key in (Qt.Key.Key_Left, Qt.Key.Key_PageUp):
+        elif key == Qt.Key.Key_Left:
             pane.step(-1)
         elif key == Qt.Key.Key_Up:
             pane.nudge(1)
@@ -1833,9 +1855,10 @@ class PomodoroView(ShutdownMixin, QWidget):
         )
 
     def _show_activity(self, activity) -> bool:
-        """Show activity on the primary screen's wall."""
+        """Show activity on the primary screen's wall, a shelf showing the file it has reached."""
         if not self._strict_engaged:
             return False
+        activity = self._opened_by(activity)
 
         if self.opens_in_ms() > 0:
             log.debug("%r is held back for another %d ms: away from the screen.",
@@ -1848,7 +1871,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                         activity.name)
             return False
 
-        if self._showing is activity:
+        if self._showing == activity:
             return True
 
         self._remember_where_it_stopped()

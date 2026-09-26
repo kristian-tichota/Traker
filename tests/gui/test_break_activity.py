@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
 
 import src.profile as profile_module
 from src.desktop import rest_positions, rest_queue
-from src.desktop.activities import ANY_DECK, DECK, DOCUMENT, VIDEO, BreakActivity
+from src.desktop.activities import ANY_DECK, BOOK, DECK, DOCUMENT, VIDEO, BreakActivity
 from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
@@ -95,12 +95,22 @@ class FakeDeckPane(FakePane):
         return self.deck
 
 
+class FakeBookPane(FakePane):
+    rtl = False
+
+    def turn(self, direction):
+        self.calls.append(("turn", direction))
+
+    def undo(self):
+        self.calls.append("undo")
+
+
 class Panes:
     def __init__(self):
         self.built = []
 
     def __call__(self, activity, start_at=0, parent=None):
-        kind = FakeDeckPane if activity.kind == DECK else FakePane
+        kind = {DECK: FakeDeckPane, BOOK: FakeBookPane}.get(activity.kind, FakePane)
         pane = kind(activity, start_at, parent)
         self.built.append(pane)
         return pane
@@ -175,7 +185,33 @@ def with_a_deck(with_no_wait):
 
 
 @pytest.fixture
+def media(tmp_path):
+    folder = tmp_path / "Media"
+    for name in ("Books/a.epub", "Books/b.epub", "Videos/e1.mkv", "Videos/e2.mkv"):
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_bytes(b"")
+    return folder
+
+
+@pytest.fixture
+def with_library(with_activities, media):
+    written = with_activities.read_text(encoding="utf-8")
+    assert '[strict_break.library]\npath = ""' in written, \
+        "the [strict_break.library] template no longer says this"
+    with_activities.write_text(written.replace(
+        '[strict_break.library]\npath = ""', f'[strict_break.library]\npath = "{media}"'),
+        encoding="utf-8")
+    profile_module.reload_profile()
+    return with_activities
+
+
+@pytest.fixture
 def timer(qapp, app_id, with_activities, recording_db):
+    yield from a_view(recording_db)
+
+
+@pytest.fixture
+def library_timer(qapp, app_id, with_library, recording_db):
     yield from a_view(recording_db)
 
 
@@ -1502,3 +1538,102 @@ class TestTheCardOnEveryWall:
         send_key(timer, Qt.Key.Key_1)
 
         assert dict(overlay.keys.hints)["SPACE"] == "turn the page"
+
+
+class TestTheLibrary:
+    def test_its_subfolders_are_offered_after_the_standing_entries(self, library_timer):
+        enter_strict_break(library_timer)
+
+        assert [offer.name for offer in library_timer._offers] == [
+            "Reading", "Something to watch", "Books", "Videos"]
+
+    def test_each_names_its_subfolder_and_the_file_it_opens(self, library_timer, settled):
+        enter_strict_break(library_timer)
+        settled()
+
+        assert library_timer.upcoming.lines()[-2:] == [
+            "3  Books   a.epub", "4  Videos  e1.mkv"]
+
+    def test_its_key_opens_that_file_as_what_it_is(self, library_timer, media):
+        enter_strict_break(library_timer)
+
+        send_key(library_timer, Qt.Key.Key_3)
+
+        assert library_timer.media_pane_factory.last.activity == BreakActivity(
+            "a.epub", str(media / "Books" / "a.epub"), BOOK)
+
+    def test_a_file_that_reached_its_end_hands_the_key_to_the_next(self, library_timer,
+                                                                   media):
+        ended = str(media / "Videos" / "e1.mkv")
+        rest_positions.remember(ended, 1_440_000, library_timer._positions_path, 1_440_000)
+        enter_strict_break(library_timer)
+
+        send_key(library_timer, Qt.Key.Key_4)
+
+        assert library_timer._showing.path == str(media / "Videos" / "e2.mkv")
+
+    def test_its_key_again_while_its_file_shows_does_nothing(self, library_timer):
+        enter_strict_break(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+        built = len(library_timer.media_pane_factory.built)
+
+        send_key(library_timer, Qt.Key.Key_3)
+
+        assert len(library_timer.media_pane_factory.built) == built
+        assert library_timer.media_pane_factory.last.opens == []
+
+
+BOOK_KEYS = {"SPACE →": Qt.Key.Key_Space, "SPACE ←": Qt.Key.Key_Space,
+             "BACKSPACE ←": Qt.Key.Key_Backspace, "BACKSPACE →": Qt.Key.Key_Backspace,
+             "↑ ↓": Qt.Key.Key_Up, "0": Qt.Key.Key_0}
+
+
+class TestABook:
+    @pytest.fixture
+    def reading(self, library_timer):
+        enter_strict_break(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+        return library_timer
+
+    def test_the_card_names_the_keys_that_turn_its_pages(self, reading):
+        said = dict(reading.media_surface.keys.hints)
+
+        assert (said["SPACE →"], said["BACKSPACE ←"], said["↑ ↓"]) == (
+            "next page", "page back", "chapter")
+
+    def test_a_right_to_left_book_turns_on_to_the_left(self, reading):
+        showing_pane(reading).rtl = True
+        reading._say_which_keys_drive_it()
+
+        assert dict(reading.media_surface.keys.hints)["SPACE ←"] == "next page"
+
+    def test_page_down_turns_on_in_reading_order_whichever_way_it_runs(self, reading):
+        pane = showing_pane(reading)
+        pane.rtl = True
+
+        send_key(reading, Qt.Key.Key_PageDown)
+        send_key(reading, Qt.Key.Key_PageUp)
+
+        assert pane.calls[-2:] == [("turn", 1), ("turn", -1)]
+
+    def test_backspace_turns_back(self, reading):
+        send_key(reading, Qt.Key.Key_Backspace)
+
+        assert showing_pane(reading).calls[-1] == "undo"
+
+    def test_every_key_it_names_is_one_the_break_answers(self, reading):
+        for label, _says in reading.media_surface.keys.hints:
+            key = BOOK_KEYS.get(label) or key_named(label)
+            assert key is not None, f"the card names {label!r} and nothing presses it"
+            pressed = QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier)
+            assert reading.eventFilter(reading, pressed) is True, label
+
+    def test_where_it_was_left_is_kept_like_any_file(self, reading):
+        pane = showing_pane(reading)
+        pane.at, pane.of = 1_660, 4_486
+
+        send_key(reading, Qt.Key.Key_0)
+
+        assert rest_positions.place_for(pane.activity.path, reading._positions_path) == (
+            Place(1_660, 4_486))
+        assert "    3  Books   a.epub      37%" in reading.upcoming.lines()

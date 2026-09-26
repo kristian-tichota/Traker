@@ -420,7 +420,7 @@ Feature: Focus timer
     Scenario: What can be shown, and what shows it
       Given my profile names activities, each with a name and a file
       And a queue of paths I asked for since
-      Then the offers are the queue first and my standing entries after it
+      Then the offers are the queue first, my standing entries after it, and my media folder last
       And the first is on Enter and the rest are on the digits, in that order
       And every screen the break covers lists them with the key for each
       And a key with no offer behind it is left alone
@@ -430,6 +430,14 @@ Feature: Focus timer
       Given a queue with a video and a document in it
       Then neither needs anything declared for it
       And the one that is a PDF is read, a page at a time
+
+    Scenario: An EPUB is read as a book
+      Given a break is showing me an EPUB
+      Then it is laid out as the book sets it, vertical text, furigana and pictures included
+      And a page of large type stands in the middle of the screen, all of it Solarized light
+      And SPACE and the arrow pointing along the book turn to the next page
+      And BACKSPACE and the other arrow turn back, and up and down change chapter
+      And the wall says how far into it I am as a share of its text
 
     Scenario: Nothing runs unasked
       Given breaks take the screens and one begins
@@ -686,6 +694,21 @@ Feature: Focus timer
     Scenario: A queue of mixed things
       Given the queue holds a video and a PDF
       Then both are offered, and neither needed anything declared
+
+  Rule: A media folder is offered without queuing
+
+    Scenario: One offer per subfolder
+      Given my media folder holds subfolders such as Books, PDF and Videos
+      Then each is an offer, named with the file it opens
+      And a subfolder added since is offered at the next break
+
+    Scenario: A subfolder carries on where I was
+      Then its key opens the file I opened last in it, where I left it
+      And once that file reached its end, the next one by name
+
+    Scenario: The folder is mine to name
+      Then it is the Media folder in Traker's checkout, kept out of the repository, unless my profile names another
+      And a folder that does not exist offers nothing
 
   Rule: A held break shows what is coming
 

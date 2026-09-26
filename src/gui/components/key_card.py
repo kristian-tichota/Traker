@@ -28,11 +28,17 @@ class KeyCard(QWidget):
         self._font = QFont("Fira Code")
         self._font.setPixelSize(FONT_PX)
         self._hints = []
+        self.light = False
         self.set_hints(hints)
 
     def set_hints(self, hints):
         self._hints = [(str(key), str(says)) for key, says in hints]
         self.resize(self.sizeHint())
+        self.update()
+
+    def set_light(self, light):
+        """Paint the card for a light surface behind it, or a dark one."""
+        self.light = bool(light)
         self.update()
 
     @property
@@ -63,7 +69,7 @@ class KeyCard(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        behind = QColor(PALETTE['base03'])
+        behind = QColor(PALETTE['base2' if self.light else 'base03'])
         behind.setAlpha(BACKGROUND_ALPHA)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(behind)
@@ -76,7 +82,7 @@ class KeyCard(QWidget):
         top = PAD_Y
         for key, says in self._hints:
             row = QRectF(PAD_X, top, keys, ROW_HEIGHT)
-            painter.setPen(QColor(PALETTE['base1']))
+            painter.setPen(QColor(PALETTE['base01' if self.light else 'base1']))
             painter.drawText(row, int(Qt.AlignmentFlag.AlignRight
                                       | Qt.AlignmentFlag.AlignVCenter), key)
             painter.setPen(QColor(PALETTE['base00']))

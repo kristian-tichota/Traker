@@ -1,8 +1,10 @@
 from typing import NamedTuple
 
-TIME, PAGES, CARDS = "time", "pages", "cards"
+TIME, PAGES, CARDS, SHARE = "time", "pages", "cards", "share"
 
 UNKNOWN = "—"
+
+END_SLACK_MS = 2000
 
 
 class Place(NamedTuple):
@@ -38,13 +40,23 @@ def as_elapsed(ms) -> str:
 
 
 def how_far(place, unit=TIME) -> str:
-    """Format "26:33 / 1:26:35", "42 / 310" or "12 / 49", or UNKNOWN."""
+    """Format "26:33 / 1:26:35", "42 / 310", "12 / 49" or "37%", or UNKNOWN."""
     at, of = _bounded(place, unit)
     if of <= 0:
         return UNKNOWN
+    if unit == SHARE:
+        return f"{at * 100 // of}%"
     if unit in (PAGES, CARDS):
         return f"{at} / {of}"
     return f"{as_elapsed(at)} / {as_elapsed(of)}"
+
+
+def finished(place, unit=TIME) -> bool:
+    """Report whether place is at the end: the last page, or the last two seconds."""
+    at, of = _bounded(place, unit)
+    if of <= 0:
+        return False
+    return of - at <= (END_SLACK_MS if unit == TIME else 0)
 
 
 def fraction(place, unit=TIME) -> float:

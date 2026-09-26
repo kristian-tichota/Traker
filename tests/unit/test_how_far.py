@@ -1,8 +1,8 @@
 import pytest
 
-from src.desktop.activities import DECK, DOCUMENT, VIDEO, readout_of
-from src.domain.media import (CARDS, PAGES, Place, TIME, UNKNOWN, as_elapsed,
-                              away_ms, fraction, how_far, opens_in)
+from src.desktop.activities import BOOK, DECK, DOCUMENT, VIDEO, readout_of
+from src.domain.media import (CARDS, PAGES, SHARE, Place, TIME, UNKNOWN, as_elapsed,
+                              away_ms, finished, fraction, how_far, opens_in)
 
 pytestmark = pytest.mark.exact
 
@@ -65,6 +65,31 @@ class TestHowFarIntoADeck:
         assert fraction(Place(0, 49), CARDS) == 0.0
 
 
+class TestHowFarIntoABook:
+    def test_it_is_a_share_of_the_whole(self):
+        assert how_far(Place(1_660, 4_486), SHARE) == "37%"
+
+    def test_the_last_page_is_all_of_it(self):
+        assert how_far(Place(4_486, 4_486), SHARE) == "100%"
+
+
+class TestTheEnd:
+    def test_a_video_ends_in_its_last_seconds(self):
+        assert finished(Place(1_438_500, 1_440_000))
+        assert not finished(Place(1_300_000, 1_440_000))
+
+    def test_a_document_ends_on_its_last_page(self):
+        assert finished(Place(309, 310), PAGES)
+        assert not finished(Place(308, 310), PAGES)
+
+    def test_a_book_ends_at_its_length(self):
+        assert finished(Place(900, 900), SHARE)
+        assert not finished(Place(899, 900), SHARE)
+
+    def test_something_of_no_known_length_never_ends(self):
+        assert not finished(Place(12_000, 0))
+
+
 class TestWhichReadoutAKindGets:
     def test_a_video_is_a_clock(self):
         assert readout_of(VIDEO) == TIME
@@ -74,6 +99,9 @@ class TestWhichReadoutAKindGets:
 
     def test_a_deck_is_a_count_of_cards(self):
         assert readout_of(DECK) == CARDS
+
+    def test_a_book_is_a_share_of_its_text(self):
+        assert readout_of(BOOK) == SHARE
 
 BREAK_MS, LONG_MS = 30 * 60_000, 60 * 60_000
 

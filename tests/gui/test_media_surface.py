@@ -1,20 +1,22 @@
 import sys
+import time
 
 import pytest
+from PyQt6.QtCore import QThreadPool, Qt
 from PyQt6.QtGui import QPageSize, QPainter, QPdfWriter
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtWidgets import QLabel, QTreeWidgetItemIterator, QWidget
 
 from src.desktop import anki
-from src.desktop.activities import ANY_DECK, BreakActivity, DECK, DOCUMENT, VIDEO
+from src.desktop.activities import ANY_DECK, BOOK, BreakActivity, DECK, DOCUMENT, VIDEO
 from src.config import PALETTE
 from src.domain import media
 from src.domain.media import Place
 from src.gui.components import media_progress
-from src.gui.components.media_surface import (ANSWER, QUESTION, DeckPane,
-                                              DocumentPane, MediaSurface,
-                                              MpvScreen,
-                                              VideoPane, build_pane, card_page)
+from src.gui.components.book_pane import BookPane
+from src.gui.components.media_surface import (ANSWER, QUESTION, DeckPane, DocumentPane,
+                                              MediaSurface, MpvScreen, VideoPane,
+                                              build_pane, card_page)
 from tests.anki_double import FakeAnki
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact, pytest.mark.accessibility]
@@ -199,6 +201,119 @@ class TestReadingADocument:
         pane.stop()
 
         assert pane.position() == 0
+
+
+NOVEL = "".join(f"<p>{'吾輩は猫である。名前はまだ無い。' * 6}（{n}）</p>" for n in range(30))
+
+
+def settle_the_book(qapp, pane, seconds=15):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        QThreadPool.globalInstance().waitForDone(10)
+        qapp.processEvents()
+        if not pane.busy and (pane.laid_out is not None or failure_of(pane)):
+            return pane
+        time.sleep(0.005)
+    raise AssertionError("the book never settled")
+
+
+@pytest.fixture
+def reading(qapp, epub):
+    novel = epub("<p>表紙</p>", NOVEL, "<p>了</p>", title="吾輩は猫である",
+                 language="ja", vertical=True, direction="rtl")
+    opened = []
+
+    def _open(start_at=0, path=None):
+        pane = BookPane(path or novel, start_at)
+        pane.resize(900, 700)
+        pane.show()
+        opened.append(pane)
+        return settle_the_book(qapp, pane)
+
+    def _turn(pane, *turns):
+        for turn in turns:
+            turn()
+            settle_the_book(qapp, pane)
+        return pane.chapter, pane.laid_out["page"]
+
+    _open.turn = _turn
+    yield _open
+    for pane in opened:
+        pane.stop()
+        pane.close()
+
+
+class TestReadingABook:
+    def test_it_opens_at_the_start_with_its_own_title(self, reading):
+        pane = reading()
+
+        assert (pane.chapter, pane.laid_out["page"], pane.position()) == (0, 0, 0)
+        assert pane.title() == "吾輩は猫である" and pane.duration() > 0
+
+    def test_a_long_chapter_is_several_pages(self, reading):
+        pane = reading()
+
+        reading.turn(pane, pane.toggle)
+
+        assert pane.laid_out["pages"] > 1
+
+    def test_the_page_turns_on_across_chapters_and_back(self, reading):
+        pane = reading()
+
+        assert reading.turn(pane, pane.toggle, pane.toggle) == (1, 1)
+        assert reading.turn(pane, pane.undo, pane.undo) == (0, 0)
+
+    def test_the_arrow_pointing_along_a_right_to_left_book_turns_on(self, reading):
+        pane = reading()
+
+        assert pane.rtl is True
+        assert reading.turn(pane, lambda: pane.step(-1)) == (1, 0)
+        assert reading.turn(pane, lambda: pane.step(1)) == (0, 0)
+
+    def test_up_goes_to_the_start_of_the_chapter_and_then_the_one_before(self, reading):
+        pane = reading()
+        reading.turn(pane, lambda: pane.nudge(-1), pane.toggle)
+
+        assert reading.turn(pane, lambda: pane.nudge(1)) == (1, 0)
+        assert reading.turn(pane, lambda: pane.nudge(1)) == (0, 0)
+
+    def test_it_comes_back_to_the_page_it_was_left_on(self, reading):
+        first = reading()
+        reading.turn(first, first.toggle, first.toggle, first.toggle)
+
+        again = reading(start_at=first.position())
+
+        assert (again.chapter, again.laid_out["page"], again.position()) == (
+            first.chapter, first.laid_out["page"], first.position())
+
+    def test_the_last_page_is_the_whole_of_it(self, reading):
+        pane = reading(start_at=10**9)
+
+        assert pane.chapter == 2 and pane.position() == pane.duration()
+
+    def test_the_page_is_set_light_in_the_middle_of_the_pane(self, reading):
+        pane = reading()
+
+        painted = pane.grab().toImage()
+
+        assert pane.view.width() < pane.width() and pane.view.height() < pane.height()
+        assert painted.pixelColor(3, 3).name() == PALETTE['base3']
+        assert painted.pixelColor(pane.view.x() + 3, pane.view.y() + 3).name() == PALETTE['base3']
+
+    def test_a_file_that_is_not_a_book_says_so(self, qapp, reading, tmp_path):
+        written = tmp_path / "x.epub"
+        written.write_bytes(b"not a zip")
+
+        pane = reading(path=str(written))
+
+        assert "COULD NOT READ" in failure_of(pane)
+
+    def test_a_machine_without_the_web_engine_says_so(self, qapp, monkeypatch):
+        monkeypatch.setitem(sys.modules, "PyQt6.QtWebEngineWidgets", None)
+
+        pane = BookPane()
+
+        assert pane.view is None and "COULD NOT READ" in failure_of(pane)
 
 
 class TestPlayingAVideo:
@@ -572,6 +687,13 @@ class TestWhichPaneIsBuilt:
 
         assert isinstance(pane, VideoPane)
 
+    def test_a_book_is_read(self, qapp, epub, settled):
+        pane = build_pane(BreakActivity("Novel", epub("<p>a</p>"), BOOK))
+        settled()
+
+        assert isinstance(pane, BookPane)
+        pane.stop()
+
 
 class Recorder(QWidget):
     def __init__(self, activity=None, start_at=0, parent=None):
@@ -717,6 +839,28 @@ class TestTheSurfaceAroundThem:
 
         surface.stop()
         assert surface.keys.isVisibleTo(surface) is False
+
+    def test_a_book_is_set_on_a_light_surface_and_nothing_else_is(self, qapp, activity,
+                                                                  timer_double):
+        wall = QWidget()
+        wall.setObjectName("wall")
+        wall.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        wall.setStyleSheet(f"#wall {{ background-color: {PALETTE['base03']}; }}")
+        wall.resize(800, 600)
+        surface = MediaSurface(timer_double, pane_factory=Recorder, only_screen=True,
+                               parent=wall)
+        surface.resize(800, 600)
+
+        def painted():
+            image = wall.grab().toImage()
+            return image.pixelColor(5, 5).name(), image.pixelColor(5, 597).name()
+
+        surface.open(BreakActivity("Novel", "/x/novel.epub", BOOK))
+        reading = painted()
+        surface.open(activity)
+
+        assert reading == (PALETTE['base3'], PALETTE['base2'])
+        assert painted() == (PALETTE['base03'], PALETTE['base02'])
 
 
 class TestWhereInTheFileTheMemberIs:

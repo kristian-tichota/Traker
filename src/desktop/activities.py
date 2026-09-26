@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from typing import NamedTuple
 
 from src.desktop import rest_queue
@@ -9,26 +10,39 @@ log = logging.getLogger(__name__)
 
 VIDEO = "video"
 DOCUMENT = "document"
+BOOK = "book"
 DECK = "deck"
+SHELF = "shelf"
 ANY_DECK = "*"
+
+DEFAULT_LIBRARY = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Media")
+
+SHELVED = (".epub", ".pdf", ".mkv", ".mp4", ".webm", ".avi", ".mov", ".m4v", ".wmv",
+           ".flv", ".mpg", ".mpeg", ".ts", ".ogv", ".mp3", ".flac", ".m4a", ".ogg",
+           ".opus", ".wav")
 
 
 class BreakActivity(NamedTuple):
-    """One thing a break may show: a file by path, or an Anki deck by name or ANY_DECK."""
+    """One thing a break may show: a file, a deck or ANY_DECK, or a shelf."""
 
     name: str
     path: str
     kind: str
+    items: tuple = ()
 
 
 def kind_of(path) -> str:
-    """Return DOCUMENT for a PDF and VIDEO for anything else."""
-    return DOCUMENT if str(path).lower().endswith(".pdf") else VIDEO
+    """Return DOCUMENT for a PDF, BOOK for an EPUB and VIDEO for anything else."""
+    written = str(path).lower()
+    if written.endswith(".pdf"):
+        return DOCUMENT
+    return BOOK if written.endswith(".epub") else VIDEO
 
 
 def readout_of(kind) -> str:
     """Return the readout that says how far through this kind the member is."""
-    return {DOCUMENT: media.PAGES, DECK: media.CARDS}.get(kind, media.TIME)
+    return {DOCUMENT: media.PAGES, BOOK: media.SHARE, DECK: media.CARDS}.get(kind, media.TIME)
 
 
 def offer_key(index) -> str:
@@ -53,6 +67,72 @@ def queued(paths) -> list:
     return [BreakActivity(rest_queue.label(path), os.path.expanduser(str(path)),
                           kind_of(path))
             for path in paths if str(path).strip()]
+
+
+def library_for(profile) -> str:
+    """Return this member's media folder, from [strict_break.library] path."""
+    written = str(profile.get_metric("strict_break.library", "path", "") or "").strip()
+    return os.path.abspath(os.path.expanduser(written)) if written else DEFAULT_LIBRARY
+
+
+def shelves(folder) -> list:
+    """Return one SHELF per subfolder of folder that holds something to show, in name order."""
+    try:
+        with os.scandir(folder) as scanned:
+            entries = sorted(scanned, key=lambda entry: _natural(entry.name))
+    except OSError:
+        return []
+    loose = tuple(entry.path for entry in entries
+                  if _shelved(entry.name) and entry.is_file())
+    found = ([BreakActivity(os.path.basename(os.path.normpath(folder)), folder, SHELF, loose)]
+             if loose else [])
+    for entry in entries:
+        if entry.is_dir() and not entry.name.startswith("."):
+            items = _shelved_under(entry.path)
+            if items:
+                found.append(BreakActivity(entry.name, entry.path, SHELF, items))
+    return found
+
+
+def resolve(offer, places) -> BreakActivity:
+    """Return what an offer opens: a shelf's latest file, or the next once it ended."""
+    if offer.kind != SHELF or not offer.items:
+        return offer
+    latest = next((path for path in reversed(list(places)) if path in offer.items), None)
+    chosen = latest or offer.items[0]
+    if latest is not None and _ended(latest, places):
+        at = offer.items.index(latest)
+        rest = offer.items[at + 1:] + offer.items[:at]
+        chosen = next((path for path in rest if not _ended(path, places)), latest)
+    return BreakActivity(rest_queue.label(chosen), chosen, kind_of(chosen))
+
+
+def _ended(path, places) -> bool:
+    return media.finished(places.get(path, media.Place()), readout_of(kind_of(path)))
+
+
+def _shelved(name) -> bool:
+    return not name.startswith(".") and name.lower().endswith(SHELVED)
+
+
+def _shelved_under(folder) -> tuple:
+    """Return every file under folder a shelf can show, in natural order of path."""
+    found, seen = [], set()
+    for top, folders, files in os.walk(folder, followlinks=True):
+        real = os.path.realpath(top)
+        if real in seen:
+            folders[:] = []
+            continue
+        seen.add(real)
+        folders[:] = [name for name in folders if not name.startswith(".")]
+        found.extend(os.path.join(top, name) for name in files if _shelved(name))
+    return tuple(sorted(found, key=lambda path: _natural(os.path.relpath(path, folder))))
+
+
+def _natural(text) -> list:
+    """Return a sort key that orders "2" before "10"."""
+    return [int(part) if part.isdecimal() else part.casefold()
+            for part in re.split(r"(\d+)", str(text))]
 
 
 def _one(entry, position):

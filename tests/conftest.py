@@ -38,6 +38,10 @@ import src.desktop.rest_queue  # noqa: E402
 
 src.desktop.rest_queue.DEFAULT_PATH = str(_SANDBOX / "rest-queue.m3u")
 
+import src.desktop.activities  # noqa: E402
+
+src.desktop.activities.DEFAULT_LIBRARY = str(_SANDBOX / "Media")
+
 import src.desktop.kwin_rules  # noqa: E402
 import src.desktop.kde_config  # noqa: E402
 
@@ -70,6 +74,50 @@ def write_profile(profile_path):
         return src.profile.UserProfile()
 
     return _write
+
+
+EPUB_CONTAINER = ('<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:'
+                  'opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/'
+                  'content.opf" media-type="application/oebps-package+xml"/></rootfiles>'
+                  '</container>')
+EPUB_CHAPTER = ('<?xml version="1.0" encoding="UTF-8"?>\n<html xmlns="http://www.w3.org/1999/'
+                'xhtml" class="{mode}"><head><title>t</title><link rel="stylesheet" '
+                'type="text/css" href="book.css"/></head><body>{body}</body></html>')
+EPUB_PACKAGE = ('<?xml version="1.0" encoding="UTF-8"?>\n<package xmlns="http://www.idpf.org/2007/'
+                'opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/'
+                'dc/elements/1.1/"><dc:identifier id="id">x</dc:identifier><dc:title>{title}'
+                '</dc:title><dc:language>{language}</dc:language></metadata><manifest>{items}'
+                '</manifest><spine{direction}>{refs}</spine></package>')
+
+
+@pytest.fixture
+def epub(tmp_path):
+    """Build an EPUB of chapter bodies, each a body or (body, itemref attributes)."""
+    import zipfile
+
+    def build(*chapters, name="book.epub", vertical=False, direction="", title="",
+              language="", files=()):
+        path = tmp_path / name
+        items, refs = [], []
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("mimetype", "application/epub+zip")
+            archive.writestr("META-INF/container.xml", EPUB_CONTAINER)
+            archive.writestr("OEBPS/book.css", ".vrtl { -epub-writing-mode: vertical-rl; }")
+            for number, chapter in enumerate(chapters):
+                body, attributes = chapter if isinstance(chapter, tuple) else (chapter, "")
+                archive.writestr(f"OEBPS/c{number}.xhtml", EPUB_CHAPTER.format(
+                    mode="vrtl" if vertical else "", body=body))
+                items.append(f'<item id="c{number}" href="c{number}.xhtml" '
+                             f'media-type="application/xhtml+xml"/>')
+                refs.append(f'<itemref idref="c{number}" {attributes}/>')
+            for member, data in files:
+                archive.writestr(member, data)
+            archive.writestr("OEBPS/content.opf", EPUB_PACKAGE.format(
+                title=title, language=language, items="".join(items), refs="".join(refs),
+                direction=f' page-progression-direction="{direction}"' if direction else ""))
+        return str(path)
+
+    return build
 
 
 @pytest.fixture

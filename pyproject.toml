@@ -23,8 +23,8 @@ graphs = ["matplotlib==3.11.1", "numpy==2.5.2"]
 # The film a strict break can play. Needs system libmpv as well; see
 # docs/guides/enforcing-a-break.md.
 video = ["python-mpv==1.0.8"]
-# The deck a strict break can review. Needs Anki with AnkiConnect running; see
-# docs/guides/enforcing-a-break.md.
+# The deck a strict break can review, and the EPUB it can read. A deck needs Anki
+# with AnkiConnect running; see docs/guides/enforcing-a-break.md.
 anki = ["PyQt6-WebEngine==6.11.0"]
 
 [project.urls]
