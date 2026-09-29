@@ -346,11 +346,13 @@ class StrictOverlay(QWidget):
         if self.media is None:
             return False
         self.stack.setCurrentWidget(self.media)
+        self._dress_for_the_state()
         return True
 
     def hide_media(self):
         """Show the readouts again."""
         self.stack.setCurrentWidget(self.readouts)
+        self._dress_for_the_state()
 
     def is_showing_media(self) -> bool:
         return self.media is not None and self.stack.currentWidget() is self.media
@@ -456,8 +458,8 @@ class StrictOverlay(QWidget):
         self._dress_for_the_state()
 
     def _dress_for_the_state(self):
-        """Dress the wall as a desk countdown or as a sign read from the door."""
-        prompting = self.timer_ref.prompts_for_focus()
+        """Dress the wall as a sign once the break ends, unless it shows an activity."""
+        prompting = self.timer_ref.prompts_for_focus() and not self.is_showing_media()
         dressed = (prompting, self.height())
         if dressed == self._dressed:
             return

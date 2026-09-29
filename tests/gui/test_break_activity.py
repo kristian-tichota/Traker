@@ -274,6 +274,11 @@ def two_screens(view):
     view.screens_to_cover = lambda: [screen, screen]
 
 
+def corner_colour(widget) -> str:
+    QApplication.processEvents()
+    return widget.grab().toImage().pixelColor(2, 2).name()
+
+
 def showing_pane(view):
     return view.media_surface.pane if view.media_surface is not None else None
 
@@ -1028,6 +1033,23 @@ class TestWhatTheScreenShows:
 
         assert timer._showing is not None
         assert "BREAK OVER +0:00" in surface.strip.text()
+
+    def test_the_frame_is_only_on_the_walls_showing_no_file(self, timer):
+        two_screens(timer)
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_Return)
+        host = timer._media_host
+        other, = [wall for wall in timer.overlays if wall is not host]
+
+        advance(timer, timer.break_ms + 1000)
+
+        print("DBG", corner_colour(host), corner_colour(other), host._prompting, other._prompting, host.is_showing_media(), timer.prompts_for_focus())
+        assert corner_colour(host) != PALETTE["blue"]
+        assert corner_colour(other) == PALETTE["blue"]
+
+        send_key(timer, Qt.Key.Key_0)
+
+        assert corner_colour(host) == PALETTE["blue"]
 
 
 class TestTheQueue:

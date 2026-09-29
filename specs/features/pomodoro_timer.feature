@@ -363,6 +363,7 @@ Feature: Focus timer
       And each one is still in front of the screen it covers, every screen
       And the countdown alone becomes the break being over, counting up from its end
       And it says it at the scale of the screen it is on, inside a frame
+      But the wall showing an activity keeps the activity and takes no frame
       And the rest of the wall stands: what is coming, what is due, what is playing
       And the keys that drive what is playing go on driving it
       And that one press starts focus, takes the walls away and keeps the place
