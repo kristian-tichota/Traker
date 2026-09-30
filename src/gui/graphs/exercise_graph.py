@@ -98,7 +98,6 @@ class ExerciseGraphView(BaseGraphView):
 
         self.install_canvas()
 
-        self.signals_blocked = False
         self.slot_select.currentIndexChanged.connect(self.on_slot_selection_changed)
         self.exercise_select.currentIndexChanged.connect(self.on_exercise_assignment_changed)
 
@@ -140,7 +139,8 @@ class ExerciseGraphView(BaseGraphView):
         self.fetch(self.db.get_all_exercise_names, self._fill_selectors)
 
     def _fill_selectors(self, exercise_names):
-        self.signals_blocked = True
+        self.slot_select.blockSignals(True)
+        self.exercise_select.blockSignals(True)
         previous_slot = max(0, self.slot_select.currentIndex())
 
         self.slot_select.clear()
@@ -153,26 +153,25 @@ class ExerciseGraphView(BaseGraphView):
         self.exercise_select.addItem("None")
         self.exercise_select.addItems(exercise_names)
 
-        self.signals_blocked = False
+        self.slot_select.blockSignals(False)
+        self.exercise_select.blockSignals(False)
         self.on_slot_selection_changed()
 
     def _grid_shape(self):
         return int(self._dims[0]), int(self._dims[2])
 
     def on_slot_selection_changed(self):
-        if self.signals_blocked: return
         slot_idx = self.slot_select.currentIndex() + 1
         self.fetch(lambda: self.db.get_setting(f"ex_graph_slot_{slot_idx}", "None"),
                    self._show_slot_assignment)
 
     def _show_slot_assignment(self, current_assigned):
-        self.signals_blocked = True
         idx = self.exercise_select.findText(current_assigned)
+        self.exercise_select.blockSignals(True)
         self.exercise_select.setCurrentIndex(idx if idx >= 0 else 0)
-        self.signals_blocked = False
+        self.exercise_select.blockSignals(False)
 
     def on_exercise_assignment_changed(self):
-        if self.signals_blocked: return
         slot_idx = self.slot_select.currentIndex() + 1
         selected_ex = self.exercise_select.currentText()
 
