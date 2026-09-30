@@ -25,8 +25,16 @@ def differing_pixel_rows(before, after, step=3):
 
 
 @pytest.fixture
-def window(qapp, live_client, settled):
+def window(qapp, live_client, profile_path, settled):
+    import src.profile as profile_module
     from src.gui.main_window import MainWindow
+
+    profile_module.UserProfile()
+    written = profile_path.read_text(encoding="utf-8")
+    for key in ("supplement_graphs", "heatmap"):
+        written = written.replace(f"\n{key} = false", f"\n{key} = true")
+    profile_path.write_text(written, encoding="utf-8")
+    profile_module.reload_profile()
 
     built = MainWindow(live_client)
     built.resize(1200, 800)
