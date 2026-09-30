@@ -159,6 +159,16 @@ class TestLogRoundTrip:
         assert stocked.get_daily_aggregates()[0].energy_kcal == 0.0
 
 
+    @pytest.mark.parametrize("name", ["Rolled Oats#2", "Rolled Oats?2", "Rolled Oats %41"])
+    def test_a_name_with_url_punctuation_removes_only_itself(self, stocked, name):
+        stocked.add_food_item(dict(OATS, name=name))
+
+        success, message = stocked.delete_item_by_name(name)
+
+        assert success, message
+        assert [item.name for item in stocked.get_all_foods()] == ["Rolled Oats"]
+
+
 class TestPerMemberSeparation:
     def test_each_client_sees_only_its_own_logs(self, db_client, db_client_b):
         db_client.add_food_item(OATS)

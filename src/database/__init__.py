@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import quote
 
 import requests
 from requests import RequestException
@@ -190,7 +191,7 @@ class DatabaseClient(DBAnalyticsMixin):
 
     def delete_item_by_name(self, name: str):
         """Remove an item from every catalog that holds it, and say how many."""
-        success, message, r = self._send("delete", f"/api/catalog/items/{name}")
+        success, message, r = self._send("delete", f"/api/catalog/items/{quote(name, safe='')}")
         if not success:
             return False, message
         try:
