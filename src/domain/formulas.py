@@ -3,8 +3,6 @@ import math
 EPLEY_INTERCEPT = 1.0278
 EPLEY_SLOPE = 0.0278
 
-EPLEY_MAX_REPS = math.floor(EPLEY_INTERCEPT / EPLEY_SLOPE)
-
 
 def estimated_1rm(weight: float, max_reps: float):
     """Return the Epley-style one-rep maximum, or None where undefined."""
@@ -43,12 +41,9 @@ def daily_stress_index(focus_s: float, focus_ot_s: float,
 
 def caffeine_residual(dose_mg: float, hours_elapsed: float, half_life_hours: float) -> float:
     """Return what is left of a dose after hours_elapsed."""
-    if dose_mg <= 0:
+    if dose_mg <= 0 or half_life_hours <= 0:
         return 0.0
-    if half_life_hours <= 0:
-        return 0.0
-    elapsed = max(0.0, hours_elapsed)
-    return dose_mg * (0.5 ** (elapsed / half_life_hours))
+    return dose_mg * (0.5 ** (max(0.0, hours_elapsed) / half_life_hours))
 
 
 def residual_at_bedtime(dose_mg: float, drunk_at_minutes: float,
