@@ -202,6 +202,22 @@ class TestForcingTheWallsOntoEveryDesktop:
         assert timer.rest_rule.everywhere is False
         assert "[traker-rest]" in desktop_session.rules_text()
 
+    def test_the_rule_gives_the_desktops_back_before_the_script_does(
+            self, timer, desktop_session):
+        enter_strict_break(timer)
+        call = timer.kwin_pin._call
+        narrowed = []
+
+        def noting(method, *args):
+            if method == "loadScript":
+                narrowed.append("desktopsrule" not in desktop_session.rules_text())
+            return call(method, *args)
+
+        timer.kwin_pin._call = noting
+        advance(timer, timer.break_ms + 1000)
+
+        assert narrowed == [True]
+
     def test_starting_focus_takes_it_back_out(self, timer, desktop_session):
         enter_strict_break(timer)
         advance(timer, timer.break_ms + 1000)

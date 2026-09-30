@@ -2152,14 +2152,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self.switch_guard is not None:
             self.switch_guard.release()
 
-        if self.kwin_pin is not None and self.kwin_pin.engaged:
-            self.kwin_pin.release(standing=standing)
-
         if self.rest_rule is not None:
             if standing:
                 self.rest_rule.stand_down()
             else:
                 self.rest_rule.release()
+
+        if self.kwin_pin is not None and self.kwin_pin.engaged:
+            self.kwin_pin.release(standing=standing)
 
     def _clear_overlays(self):
         """Give the screens back: the hold, what was showing, the walls, notifications, KWin."""
