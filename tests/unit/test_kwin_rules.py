@@ -250,6 +250,17 @@ class TestStandingDownWhenTheBreakRunsOut:
         assert rule.release() is True
         assert rules_file.read_text() == before
 
+    def test_a_stand_down_kwin_does_not_hear_leaves_the_walls_everywhere(self, rules_file):
+        kwin = Compositor()
+        rule = RestRule("Traker rest", path=str(rules_file), reconfigure=kwin)
+        rule.hold()
+        kwin.takes = False
+
+        assert rule.stand_down() is False
+        assert rule.everywhere is True and rule.holding is True
+        assert entries(rules_file.read_text(), REST_GROUP)["desktopsrule"] == \
+            str(FORCE_TEMPORARILY)
+
     def test_a_rule_that_was_never_held_stands_down_to_nothing(self, rules_file):
         kwin = Compositor()
         rule = RestRule("Traker rest", path=str(rules_file), reconfigure=kwin)

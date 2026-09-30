@@ -179,15 +179,7 @@ class TemporaryRule:
     def __init__(self, path=None, reconfigure=None):
         self._path = path or DEFAULT_PATH
         self._reconfigure = reconfigure or _reconfigure
-        self._holding = False
-
-    @property
-    def holding(self) -> bool:
-        return self._holding
-
-    @property
-    def path(self) -> str:
-        return self._path
+        self.holding = False
 
     def keys(self):
         """Return the rule's own keys, or () where there is nothing to say."""
@@ -210,18 +202,18 @@ class TemporaryRule:
             _restore(self._path, before, existed)
             return False
 
-        self._holding = True
-        self.say(dict(keys))
+        self.holding = True
+        self.say()
         return True
 
     def release(self) -> bool:
-        if not self._holding:
+        if not self.holding:
             return True
-        self._holding = False
+        self.holding = False
         return prune((self.group,), self._path, self._reconfigure)
 
-    def say(self, keys):
-        """Build one journal line naming what was asked for."""
+    def say(self):
+        """Log one journal line naming what was asked for."""
 
 
 class RestRule(TemporaryRule):
@@ -232,38 +224,33 @@ class RestRule(TemporaryRule):
     def __init__(self, title_prefix, path=None, reconfigure=None):
         super().__init__(path, reconfigure)
         self._prefix = str(title_prefix or "")
-        self._everywhere = True
-
-    @property
-    def everywhere(self) -> bool:
-        """Report whether the rule still puts the walls on every desktop."""
-        return self._everywhere
+        self.everywhere = True
 
     def keys(self):
         if not self._prefix:
             log.debug("No wall title to match a rule on: a break holds "
                       "whatever the compositor carries.")
             return ()
-        return rest_keys(self._prefix, self._everywhere)
+        return rest_keys(self._prefix, self.everywhere)
 
     def hold(self) -> bool:
-        self._everywhere = True
+        self.everywhere = True
         return super().hold()
 
     def stand_down(self) -> bool:
         """Give the desktops back, leaving the walls in front of their screens."""
-        if not self._holding:
+        if not self.holding:
             return False
-        self._everywhere = False
+        self.everywhere = False
         if super().hold():
             return True
-        self._holding = True
+        self.everywhere = True
         return False
 
-    def say(self, keys):
+    def say(self):
         log.info("A break's walls are forced in front of every screen%s by a "
                  "window rule in %s.",
-                 " and onto every desktop and activity" if self._everywhere else "",
+                 " and onto every desktop and activity" if self.everywhere else "",
                  self._path)
 
 
@@ -301,7 +288,7 @@ class WindowHome(TemporaryRule):
             return ()
         return window_keys(self._caption, desktop, activity)
 
-    def say(self, keys):
+    def say(self):
         log.info("Traker's window is forced onto %s by a window rule in %s.",
                  " / ".join(p for p in (self._desktop, self._activity) if p),
                  self._path)
