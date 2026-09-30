@@ -88,9 +88,8 @@ def report_window(bus):
         print(f"  refused: {reply.errorMessage()}")
         return
     info = reply.arguments()[0] or {}
-    for key in ("resourceClass", "resourceName", "caption", "desktopFile"):
-        print(f"  {key:<20} {info.get(key, '(absent)')}")
-    for key in ("x", "y", "width", "height", "desktops", "activities",
+    for key in ("resourceClass", "resourceName", "caption", "desktopFile",
+                "x", "y", "width", "height", "desktops", "activities",
                 "fullScreen", "onAllDesktops", "keepAbove", "minimized"):
         print(f"  {key:<20} {info.get(key, '(absent)')}")
 
@@ -268,7 +267,7 @@ def report_interfaces(bus):
                 print("  " + stripped.rstrip(">").rstrip("/").strip())
 
 
-def report_where_we_are(bus):
+def report_where_we_are():
     """Report the current desktop and activity, as a client reads them."""
     from src.desktop import switch_guard
 
@@ -453,7 +452,7 @@ def main():
 
     if args.screens:
         report_interfaces(bus)
-        report_where_we_are(bus)
+        report_where_we_are()
         report_screens(app_id, args.engage_secs * 4)
         return 0
 
@@ -478,7 +477,7 @@ def main():
     time.sleep(args.engage_secs)
     print(f"  released: {pin.release()}")
     print("\nkwin's own view of the script: journalctl --user -b -g 'traker:'")
-    print("  one \'holding <caption>\' line per window of this application,")
+    print("  one 'holding <caption>' line per window of this application,")
     print("  saying what Plasma took: everyDesktop=false is a window only")
     print("  *followed* onto each desktop on a switch, and (absent) is a name")
     print("  it does not answer for at all. In a real break wall=false marks")

@@ -6,12 +6,13 @@ import random
 import sys
 from datetime import date, timedelta
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASE_DIR)
 
 from server.config import CONFIG_PATH  # noqa: E402
 from server.database import ServerDatabase  # noqa: E402
+from server.tables import SUPPLEMENT_DOSES  # noqa: E402
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_OUT = os.path.join(BASE_DIR, "data", "dev_seed.db")
 
 DAILY_RATES = {
@@ -126,16 +127,10 @@ def seed(target_path, scale, days, seed_value, quiet=False):
             ("B12", "Iodine", "Creatine", "D3", "K2", "Omega-3", "Calcium",
              "Magnesium", "Zinc", "Vitamin C", "L-theanine", "Multivitamin", "Iron"),
             ("",), CATALOG_SIZES["supplement"])
-        nutrient_columns = ("b12_mcg", "iodine_mcg", "creatine_g", "d3_iu", "k2_mcg",
-                            "dha_mg", "epa_mg", "calcium_mg", "magnesium_mg", "zinc_mg",
-                            "c_mg", "l_theanine_mg")
         for position, name in enumerate(supplements):
-            carried = {nutrient_columns[position % len(nutrient_columns)]:
-                       round(rng.uniform(5, 500), 1)}
-            columns = ", ".join(carried)
-            conn.execute(
-                f"INSERT INTO supplement_items (name, {columns}) VALUES (?, ?)",
-                (name, *carried.values()))
+            dose = SUPPLEMENT_DOSES[position % len(SUPPLEMENT_DOSES)]
+            conn.execute(f"INSERT INTO supplement_items (name, {dose}) VALUES (?, ?)",
+                         (name, round(rng.uniform(5, 500), 1)))
 
         mobilities = _catalog_names(("Walking", "Cycling", "Stretching", "Yoga"),
                                     ("",), CATALOG_SIZES["mobility"])
