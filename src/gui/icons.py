@@ -9,9 +9,10 @@ from src.config import PALETTE
 
 log = logging.getLogger(__name__)
 
-ICON_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "assets", "icons")
+ASSETS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
+
+ICON_DIR = os.path.join(ASSETS_DIR, "icons")
 
 TINT_ANCHOR = "currentColor"
 

@@ -16,7 +16,7 @@ from src.gui.views.mobility_view import MobilityView
 from src.gui.views.pomodoro_view import PomodoroView
 from src.gui.views.plan_view import PlanView
 from src.gui.views.chore_view import ChoreView
-from src.gui.icons import ICON_PX, tab_icon
+from src.gui.icons import ASSETS_DIR, ICON_PX, tab_icon
 
 from src.gui.animations import TabFadeManager, StatusBarPulser
 from src.desktop.kwin import WindowScreen, default_app_id
@@ -64,10 +64,6 @@ def tab_shortcut_keys(also_reserved: str = "") -> str:
     """Return the keys that select a tab, in order, less the reserved ones."""
     blocked = {character.upper() for character in NUTRIENT_WINDOW_KEYS + also_reserved}
     return "".join(c for c in TAB_SHORTCUT_ALPHABET if c not in blocked)
-
-
-ASSETS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
 
 
 def resolve_app_icon() -> QIcon:
