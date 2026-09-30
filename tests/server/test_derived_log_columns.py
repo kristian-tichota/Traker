@@ -94,6 +94,35 @@ class TestBeverageLogShape:
                  for row in member_a.get("/api/logs/beverage").get_json()]
         assert times == ["14:00", "08:30", "06:15"]
 
+    def test_a_time_without_its_zeros_is_stored_padded_so_it_sorts(
+        self, seeded_catalog, member_a
+    ):
+        for time in ("8:5", "10:15"):
+            member_a.post("/api/logs/beverage", json=dict(COFFEE, time=time))
+
+        times = [row[BEVERAGE_COLUMNS.index("time")]
+                 for row in member_a.get("/api/logs/beverage").get_json()]
+        assert times == ["10:15", "08:05"]
+
+    def test_an_unpadded_time_already_stored_is_padded_on_start(
+        self, seeded_catalog, member_a, server_db
+    ):
+        member_a.post("/api/logs/beverage", json=COFFEE)
+        conn = server_db.get_connection()
+        with conn:
+            conn.executemany(
+                "INSERT INTO beverage_logs (user_id, date, time, beverage_item_id, servings) "
+                "SELECT user_id, date, ?, beverage_item_id, servings FROM beverage_logs LIMIT 1",
+                [("7:5",), ("9:30",), ("11:5",)])
+        conn.close()
+
+        server_db.init_db()
+        server_db.init_db()
+
+        times = [row[BEVERAGE_COLUMNS.index("time")]
+                 for row in member_a.get("/api/logs/beverage").get_json()]
+        assert times == ["11:05", "09:30", "08:30", "07:05"]
+
 
 class TestExerciseLogShape:
     @pytest.fixture

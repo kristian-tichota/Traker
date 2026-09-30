@@ -3,7 +3,7 @@ from flask import Blueprint, g
 from server.auth import require_auth
 from server.db_session import get_db, insert, rows
 from server.payload import NotFound, read_payload
-from server.validation import checked_payload, validate_column_value
+from server.validation import canonical_value, checked_payload
 
 pomodoro_bp = Blueprint("pomodoro", __name__)
 
@@ -24,9 +24,8 @@ def get_pomodoro_daily_summary():
 @pomodoro_bp.route("/heartbeats/<date_str>", methods=["GET"])
 @require_auth
 def get_pomodoro_heartbeats(date_str):
-    validate_column_value("date", date_str)
     return rows("SELECT minute_of_day, second, state, mode FROM pomodoro_heartbeats "
-                "WHERE user_id = ? AND date = ?", (g.user_id, date_str))
+                "WHERE user_id = ? AND date = ?", (g.user_id, canonical_value("date", date_str)))
 
 
 @pomodoro_bp.route("/heartbeat", methods=["POST"])
@@ -48,10 +47,9 @@ def log_pomodoro_heartbeat():
 @pomodoro_bp.route("/events/<date_str>", methods=["GET"])
 @require_auth
 def get_pomodoro_events(date_str):
-    validate_column_value("date", date_str)
     return rows("SELECT timestamp, event_type, amount_ms FROM pomodoro_events "
                 "WHERE user_id = ? AND date(timestamp) = ? ORDER BY timestamp ASC",
-                (g.user_id, date_str))
+                (g.user_id, canonical_value("date", date_str)))
 
 
 @pomodoro_bp.route("/event", methods=["POST"])
@@ -92,8 +90,7 @@ def set_pomodoro_dsi_override():
 @pomodoro_bp.route("/dsi-override/<date_str>", methods=["DELETE"])
 @require_auth
 def clear_pomodoro_dsi_override(date_str):
-    validate_column_value("date", date_str)
-
+    date_str = canonical_value("date", date_str)
     conn = get_db()
     with conn:
         removed = conn.execute(

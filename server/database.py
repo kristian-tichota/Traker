@@ -341,8 +341,16 @@ class ServerDatabase:
                 conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{spec.log_table}_user_date "
                              f"ON {spec.log_table}(user_id, date)")
 
+            self._pad_clock_times(conn)
             self._seed_users(conn)
         conn.close()
+
+    @staticmethod
+    def _pad_clock_times(conn) -> None:
+        """Zero-pad a beverage time stored as H:M before the gate padded it."""
+        conn.execute("UPDATE beverage_logs SET time = '0' || time WHERE time GLOB '[0-9]:*'")
+        conn.execute("UPDATE beverage_logs SET time = substr(time, 1, 3) || '0' || "
+                     "substr(time, 4) WHERE time GLOB '[0-9][0-9]:[0-9]'")
 
     @staticmethod
     def _ensure_column(conn, table: str, column: str, declaration: str) -> None:

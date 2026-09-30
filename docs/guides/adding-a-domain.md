@@ -16,7 +16,7 @@ The steps below add one domain, such as sleep.
 3. **Routes.** Add them under `server/routes/`, using `@require_auth`, a connection from `get_db()`,
    `g.user_id` filtering for per-user data, a body through `read_payload(*required)`, values through
    `checked_payload`, a `rowcount` check on anything that mutates, and `?since=` through
-   `_since_clause()`. Broadcast `catalog_updated` on catalog mutations only.
+   `since_date()`. Broadcast `catalog_updated` on catalog mutations only.
 4. **Client.** Add methods on `DatabaseClient` returning a `NamedTuple` from `src/database/rows.py`
    and taking `since: str = None`. Anything derived goes in `DBAnalyticsMixin`, with the arithmetic
    itself in `src/domain/`.

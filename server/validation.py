@@ -7,11 +7,11 @@ from server.tables import coerce_value, mutable_columns, non_negative_columns
 
 
 def _iso_date(value):
-    datetime.datetime.strptime(value, "%Y-%m-%d")
+    return datetime.datetime.strptime(value, "%Y-%m-%d").date().isoformat()
 
 
 def _clock_time(value):
-    datetime.datetime.strptime(value, "%H:%M")
+    return datetime.datetime.strptime(value, "%H:%M").strftime("%H:%M")
 
 
 def _iso_moment(value):
@@ -19,11 +19,13 @@ def _iso_moment(value):
     parsed = datetime.datetime.fromisoformat(value)
     if parsed.time() == datetime.time.min and len(value.strip()) <= 10:
         raise ValueError("a date alone carries no moment")
+    return value
 
 
 def _named(value):
     if not value.strip():
         raise ValueError("a name cannot be blank")
+    return value
 
 
 _CHECKS = {
@@ -35,13 +37,13 @@ _CHECKS = {
 }
 
 
-def validate_column_value(column: str, value) -> None:
-    """Raise BadValue if value is not a well-formed column."""
+def canonical_value(column: str, value):
+    """Return value in the spelling column stores, or raise BadValue."""
     if column not in _CHECKS or value is None:
-        return
+        return value
     check, expected = _CHECKS[column]
     try:
-        check(str(value))
+        return check(str(value))
     except ValueError:
         raise BadValue(
             f"'{value}' is not {expected}, which is what {column} stores"
@@ -50,9 +52,8 @@ def validate_column_value(column: str, value) -> None:
 
 def since_date() -> str:
     """Return the ?since= date bound, or the empty string that bounds nothing."""
-    since = request.args.get("since") or ""
-    validate_column_value("date", since or None)
-    return since
+    since = request.args.get("since")
+    return canonical_value("date", since) if since else ""
 
 
 def validate_column_bound(table_name: str, column: str, value) -> None:
@@ -67,8 +68,7 @@ def checked_columns(conn, table_name: str, values: dict) -> dict:
     """Return values coerced to the declared types of table_name, then checked."""
     checked = {}
     for column, value in values.items():
-        coerced = coerce_value(conn, table_name, column, value)
-        validate_column_value(column, coerced)
+        coerced = canonical_value(column, coerce_value(conn, table_name, column, value))
         validate_column_bound(table_name, column, coerced)
         checked[column] = coerced
     return checked

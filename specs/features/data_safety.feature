@@ -49,6 +49,20 @@ Feature: Data safety
       When I edit a cell to something that reads as a number
       Then it is stored as the text I typed
 
+    Scenario: A whole number is not cut from a fraction
+      Given a column that holds a whole number
+      When a write gives it a fraction
+      Then it is refused rather than stored with the fraction dropped
+
+    Scenario: A name is never blank
+      When a write gives a name that is empty or only spaces
+      Then it is refused
+
+    Scenario: A date or a time is stored the one way it sorts
+      When a write gives a date or a clock time without its leading zeros
+      Then it is stored zero-padded, as YYYY-MM-DD or HH:MM
+      And a clock time stored unpadded earlier is padded when the service starts
+
     Scenario: Referential integrity is enforced
       Then a log row can only reference an item that exists
       And referencing a missing item is refused at the point of logging

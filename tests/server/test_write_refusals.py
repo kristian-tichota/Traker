@@ -105,6 +105,16 @@ class TestAValueThatMustNotBeStored:
 
         assert response.status_code == 400, "DD.MM.YYYY is a display format"
 
+    def test_a_date_without_its_zeros_is_stored_padded(self, member_a):
+        member_a.post("/api/catalog/food", json=OATS)
+        member_a.post("/api/logs/food", json={
+            "date": "2026-9-5", "meal_type": "Lunch",
+            "food_name": "Rolled Oats", "servings": 1.0,
+        })
+
+        (row,) = member_a.get("/api/logs/food").get_json()
+        assert row[2] == "2026-09-05"
+
 
 class TestAWriteThatMatchedNothing:
     @pytest.fixture
