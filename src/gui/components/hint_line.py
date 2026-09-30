@@ -14,7 +14,7 @@ class HintingLineEdit(QLineEdit):
         super().__init__(parent)
         self.hint_text = ""
         self.completion_text = ""
-        self.hint_color = QColor(PALETTE.get("base1", "#93a1a1"))
+        self.hint_color = QColor(PALETTE["base1"])
 
     def event(self, event):
         if event.type() == event.Type.KeyPress and event.key() in (
