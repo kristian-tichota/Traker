@@ -590,6 +590,7 @@ Feature: Focus timer
       Given libmpv is not installed
       Then the break still takes the screens, and still lists what is due
       And the screen that would show a film says it could not play it
+      And where the film had got to is still remembered, as for a file that cannot be read
 
     Scenario: How far into each one I am, before I choose
       Given offers I have opened on an earlier break
