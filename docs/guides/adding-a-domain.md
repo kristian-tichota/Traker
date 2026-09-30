@@ -20,16 +20,17 @@ The steps below add one domain, such as sleep.
 4. **Client.** Add methods on `DatabaseClient` returning a `NamedTuple` from `src/database/rows.py`
    and taking `since: str = None`. Anything derived goes in `DBAnalyticsMixin`, with the arithmetic
    itself in `src/domain/`.
-5. **View.** Subclass `BaseManagedView` with parallel `tables`, `headers` and `mappings` lists, from
-   which the writable columns follow. There are three tables: the ledger, the catalog and the sets
-   pane, the last two stacked 6:4 in the right-hand column. Fewer is permitted, and `PlanView` hosts
-   one beside a hand-painted widget. A view whose surface implies a write MUST emit
-   `command_requested` rather than writing, so that the member confirms it in the bar. Group the
-   ledger through `rows.grouped_by_set` and declare `SET_FIELD`, `NAME_FIELD`, `GROUP_FIELDS` and
-   `HEADING_TOTALS` on the row type. A chart subclasses `BaseGraphView` instead.
+5. **View.** Subclass `CatalogueView` with `DOMAIN`, parallel `TITLES`, `HEADERS` and `MAPPINGS`,
+   from which the writable columns follow, and `read_ledger`/`read_catalogue`. Its three tables are
+   the ledger, the catalog and the sets pane, the last two stacked 6:4 in the right-hand column. A
+   tab of other tables subclasses `BaseManagedView`, as `PlanView` does beside a hand-painted widget.
+   A view whose surface implies a write MUST emit `command_requested` rather than writing, so that
+   the member confirms it in the bar. The ledger is grouped through `rows.grouped_by_set`: declare
+   `SET_FIELD`, `NAME_FIELD`, `GROUP_FIELDS` and `HEADING_TOTALS` on the row type. A chart
+   subclasses `BaseGraphView` instead.
 6. **Tab.** Add it to `tab_registry` in `MainWindow` and to `[windows]` in
-   `_generate_default_profile()`. Register the domain in `src/gui/domains.py`, with the tables in
-   `TABLE_DOMAINS` and the tab key in `TAB_DOMAINS`. A tab left out refreshes on every write, which is
+   `_generate_default_profile()`. Register the domain and its tables in `src/domain/tables.py`,
+   and the tab key in `TAB_DOMAINS` in `src/gui/domains.py`. A tab left out refreshes on every write, which is
    slow but correct; a table left out is a write that nothing invalidates, which leaves stale data.
 7. **Command.** Add one `Command` row in `src/gui/commands.py`. The hints, the completion, the
    parsing, the view effect and which tabs go stale all derive from it.
