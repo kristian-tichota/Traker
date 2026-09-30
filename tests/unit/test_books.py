@@ -100,6 +100,15 @@ class TestUnpacking:
         with pytest.raises(books.BadBook, match="no file"):
             books.unpack(str(tmp_path / "absent.epub"))
 
+    def test_a_container_naming_a_package_it_lacks_falls_back_to_the_one_there_is(
+            self, tmp_path):
+        (tmp_path / "META-INF").mkdir()
+        (tmp_path / "META-INF" / "container.xml").write_text(
+            '<container><rootfiles><rootfile full-path="OEBPS/Content.opf"/></rootfiles>'
+            '</container>')
+
+        assert books._package_path(str(tmp_path), {"OEBPS/content.opf"}) == "OEBPS/content.opf"
+
     def test_a_book_locked_by_drm_says_so(self, epub):
         with pytest.raises(books.BadBook, match="DRM"):
             books.unpack(epub("<p>a</p>", files=[("META-INF/encryption.xml", LOCKED)]))

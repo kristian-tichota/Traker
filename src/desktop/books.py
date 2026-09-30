@@ -57,19 +57,18 @@ def unpack(path) -> Book:
     """Unpack the EPUB at path into a new temporary folder and read its reading order."""
     folder = tempfile.mkdtemp(prefix="traker-book-")
     try:
-        with zipfile.ZipFile(path) as archive:
-            names = _extract(archive, folder)
-        return _read(folder, _package_path(folder, names))
-    except BadBook:
+        try:
+            with zipfile.ZipFile(path) as archive:
+                names = _extract(archive, folder)
+            return _read(folder, _package_path(folder, names))
+        except FileNotFoundError as error:
+            raise BadBook(f"there is no file at {path}") from error
+        except (OSError, zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError,
+                RuntimeError, ElementTree.ParseError) as error:
+            raise BadBook(f"it is not an EPUB that can be opened: {error}") from error
+    except BaseException:
         shutil.rmtree(folder, ignore_errors=True)
         raise
-    except FileNotFoundError as error:
-        shutil.rmtree(folder, ignore_errors=True)
-        raise BadBook(f"there is no file at {path}") from error
-    except (OSError, zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError,
-            RuntimeError, ElementTree.ParseError) as error:
-        shutil.rmtree(folder, ignore_errors=True)
-        raise BadBook(f"it is not an EPUB that can be opened: {error}") from error
 
 
 def length(book) -> int:
@@ -125,7 +124,7 @@ def _package_path(folder, names) -> str:
     """Return the package document container.xml names, or the first there is."""
     try:
         for element in ElementTree.parse(os.path.join(folder, CONTAINER)).iter():
-            if _local(element.tag) == "rootfile" and element.get("full-path"):
+            if _local(element.tag) == "rootfile" and element.get("full-path") in names:
                 return element.get("full-path")
     except (OSError, ElementTree.ParseError) as error:
         log.debug("No usable %s: %s", CONTAINER, error)
