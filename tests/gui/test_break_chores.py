@@ -343,13 +343,6 @@ class TestThePanelAlone:
         assert not panel.isVisible()
         panel.deleteLater()
 
-    def test_a_key_past_the_end_answers_nothing(self, qapp):
-        panel = ChorePanel()
-
-        assert panel.chore_at(0) is None
-        assert panel.chore_at(99) is None
-        panel.deleteLater()
-
     def test_a_board_drawn_twice_at_once_opens_no_window_of_its_own(self, qapp):
         host = QWidget()
         panel = ChorePanel(host)

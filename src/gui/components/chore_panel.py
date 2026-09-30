@@ -13,6 +13,7 @@ def chore_key(index) -> str:
     """Return the key for the chore at index, or "" past the twenty-sixth."""
     return KEYS[index] if 0 <= index < len(KEYS) else ""
 
+
 STANDING_COLOURS = {
     chores.OVERDUE: "red",
     chores.DUE: "orange",
@@ -74,29 +75,21 @@ class ChorePanel(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 12, 0, 0)
         self._layout.setSpacing(2)
-        self.entries = []
         self._lines = []
         self.setVisible(False)
 
     def set_entries(self, entries):
-        self.entries = list(entries)
         self._clear()
-        if not self.entries:
+        if not entries:
             self.setVisible(False)
             return
 
         self._layout.addWidget(self._title())
-        for index, entry in enumerate(self.entries):
-            line = ChoreLine(entry, chore_key(index), self._clicked, self)
+        for index, entry in enumerate(entries):
+            line = ChoreLine(entry, chore_key(index), self.chore_ticked.emit, self)
             self._layout.addWidget(line)
             self._lines.append(line)
         self.setVisible(True)
-
-    def chore_at(self, index):
-        """Return the chore a key opens, or None for a key left alone."""
-        if 0 <= index < len(self.entries):
-            return self.entries[index]
-        return None
 
     def mark_done(self, chore_id):
         """Strike one row through, on the keystroke that ticked it."""
@@ -110,9 +103,6 @@ class ChorePanel(QWidget):
     def lines(self) -> list:
         """Return every line shown, title first, in the order shown."""
         return [TITLE] + [line.text_shown() for line in self._lines]
-
-    def _clicked(self, chore_id):
-        self.chore_ticked.emit(chore_id)
 
     def _clear(self):
         self._lines = []
