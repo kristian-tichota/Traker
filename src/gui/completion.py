@@ -59,15 +59,10 @@ def ranked_matches(typed: str, names, prefer=None) -> list:
     typed_norm = normalize(typed)
     keys = []
     for position, name in enumerate(names):
-        preferred = 0 if prefer is not None and prefer(name) else 1
-        if not typed_norm:
-            keys.append((PREFIX, preferred, 0, position, name))
-            continue
-        scored = _score(typed_norm, name)
-        if scored is None:
-            continue
-        quality, offset, length, tiebreak = scored
-        keys.append((quality, preferred, offset, length, tiebreak))
+        scored = _score(typed_norm, name) if typed_norm else (PREFIX, 0, position, name)
+        if scored is not None:
+            quality, *order = scored
+            keys.append((quality, 0 if prefer is not None and prefer(name) else 1, *order))
     return [key[-1] for key in sorted(keys)]
 
 
