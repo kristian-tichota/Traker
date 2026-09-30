@@ -311,8 +311,7 @@ class StrictOverlay(QWidget):
         self.stands_corrected = False
         self.let_go = False
         self._playing_name = None
-        self._prompting = None
-        self._dressed = None
+        self._dressed = (False, -1)
         self.setWindowFlags(self.FLAGS)
         self.setWindowTitle(wall_caption(screen))
         self.setObjectName(WALL_NAME)
@@ -425,7 +424,6 @@ class StrictOverlay(QWidget):
         self.lbl_hint = QLabel(self.timer_ref.wall_hint())
         self.lbl_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.lbl_hint)
-        self._dress_for_the_state()
 
         self.upcoming = UpcomingPanel()
         layout.addWidget(self.upcoming)
@@ -486,34 +484,27 @@ class StrictOverlay(QWidget):
         if dressed == self._dressed:
             return
         self._dressed = dressed
-        self._prompting = prompting
 
         inset = PROMPT_BORDER_PX if prompting else 0
         self.frame.setContentsMargins(inset, inset, inset, inset)
 
         if prompting:
-            headline = max(28, self.height() // 16)
-            instruction = max(11, self.height() // 48)
-            self.label.setStyleSheet(f"color: {PALETTE['blue']};"
-                                     f" font-size: {headline}px;"
-                                     f" font-family: 'Fira Code';")
-            self.lbl_hint.setStyleSheet(f"color: {PALETTE['base2']};"
-                                        f" font-size: {instruction}px;"
-                                        f" font-family: 'Fira Code';"
-                                        f" letter-spacing: {max(2, instruction // 6)}px;")
-            self.update()
-            return
-
-        self.label.setStyleSheet(f"color: {PALETTE['base01']}; font-size: 28px;"
+            headline, instruction = max(28, self.height() // 16), max(11, self.height() // 48)
+            said, hint = PALETTE['blue'], PALETTE['base2']
+        else:
+            headline, instruction = 28, 11
+            said = hint = PALETTE['base01']
+        self.label.setStyleSheet(f"color: {said}; font-size: {headline}px;"
                                  f" font-family: 'Fira Code';")
-        self.lbl_hint.setStyleSheet(f"color: {PALETTE['base01']}; font-size: 11px;"
-                                    f" font-family: 'Fira Code'; letter-spacing: 2px;")
+        self.lbl_hint.setStyleSheet(f"color: {hint}; font-size: {instruction}px;"
+                                    f" font-family: 'Fira Code';"
+                                    f" letter-spacing: {max(2, instruction // 6)}px;")
         self.update()
 
     def paintEvent(self, event):
         """Paint the frame around a wall whose break has run out."""
         super().paintEvent(event)
-        if not self._prompting:
+        if not self._dressed[0]:
             return
         painter = QPainter(self)
         pen = QPen(QColor(PALETTE['blue']), PROMPT_BORDER_PX)
@@ -801,7 +792,6 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self._strict_engaged = False
         self._media_host = None
-        self._screen_taken = None
         self._filtering_keys = False
         self._watching_outputs = False
         self._screens_settling = QTimer(self)
@@ -1897,12 +1887,15 @@ class PomodoroView(ShutdownMixin, QWidget):
             self._media_host.hide_media()
         self._redraw_break_surfaces()
 
-    def _engage_kwin(self, caption="", wall_outputs=None) -> bool:
-        """Ask KWin to hold this break's windows across every desktop."""
-        if self.kwin_pin is None:
-            return False
-        return self.kwin_pin.engage(focus_caption=caption,
-                                    wall_outputs=wall_outputs or {})
+    def _bring_the_front_forward(self):
+        """Have KWin hold the walls on every desktop, the keyboard on the one showing files."""
+        front = self._media_host
+        if self.kwin_pin is not None:
+            self.kwin_pin.engage(focus_caption=front.windowTitle() if front is not None else "",
+                                 wall_outputs=self.wall_outputs())
+        if front is not None:
+            front.raise_()
+            front.activateWindow()
 
     def _read_upcoming(self):
         """Read what is coming, once, as the break begins."""
@@ -1979,13 +1972,6 @@ class PomodoroView(ShutdownMixin, QWidget):
             overlay.set_upcoming(sections)
         self._say_when_the_offers_open()
 
-    def _member_screen(self):
-        """Return the screen the break's focus starts on, being this window's."""
-        main_win = self.window()
-        handle = main_win.windowHandle() if main_win is not None else None
-        screen = handle.screen() if handle is not None else None
-        return screen or QApplication.primaryScreen()
-
     def _media_screen(self):
         """Return the screen that shows what the break was asked for."""
         for wanted in (self._media_screen_name, self._window_screen_name):
@@ -1996,7 +1982,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                     return screen
             log.warning("No output is called %r: showing what a break plays "
                         "elsewhere.", wanted)
-        return QApplication.primaryScreen() or self._member_screen()
+        return QApplication.primaryScreen()
 
     def screens_to_cover(self) -> list:
         """Return every output a break walls, which is all of them."""
@@ -2068,8 +2054,6 @@ class PomodoroView(ShutdownMixin, QWidget):
             if wall.screen_covered is screen:
                 wall.forget_screen()
                 wall.hide()
-        if self._screen_taken is screen:
-            self._screen_taken = None
         self._screens_settling.start(SCREENS_SETTLE_MS)
 
     def _rewall_for_the_outputs(self):
@@ -2114,22 +2098,16 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.overlays = [wall if wall is not None else self._build_wall(screen)
                          for screen, wall in zip(wanted, kept)]
 
-        if self._screen_taken is None:
-            self._screen_taken = self._member_screen()
         if self.media_surface is None:
             self._host_the_media()
         if showing is not None:
             self._show_activity(showing, behind)
-
-        front = self._media_host or self._wall_for(self._screen_taken)
-        self._engage_kwin(front.windowTitle() if front is not None else "",
-                          self.wall_outputs())
-        if front is not None:
-            front.raise_()
-            front.activateWindow()
+        if self.holds_the_screens():
+            self._bring_the_front_forward()
 
         self._show_upcoming()
         self._show_chores()
+        self._say_which_keys_drive_it()
         self._redraw_break_surfaces()
 
     def _enforce_strict_mode(self):
@@ -2137,8 +2115,6 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._clear_overlays()
 
         self.take_offers()
-
-        self._screen_taken = self._member_screen()
 
         if self.rest_rule is not None:
             self.rest_rule.hold()
@@ -2154,12 +2130,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self.do_not_disturb is not None:
             self.do_not_disturb.hold()
 
-        front = self._media_host or self._wall_for(self._screen_taken)
-        self._engage_kwin(front.windowTitle() if front is not None else "",
-                          self.wall_outputs())
-        if front is not None:
-            front.raise_()
-            front.activateWindow()
+        self._bring_the_front_forward()
 
         app = QApplication.instance()
         if app is not None and not self._filtering_keys:
@@ -2176,9 +2147,6 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _stand_down_enforcement(self):
         """Stop enforcing, with the walls still up and still in front."""
-        self._show_upcoming()
-        self._show_chores()
-
         standing = bool(self.overlays)
 
         if self.switch_guard is not None:
@@ -2209,7 +2177,6 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.media_surface = None
         self._media_host = None
 
-        self._screen_taken = None
         self._upcoming = []
         self._chores = []
 

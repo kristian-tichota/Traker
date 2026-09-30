@@ -1064,7 +1064,6 @@ class TestWhatTheScreenShows:
 
         advance(timer, timer.break_ms + 1000)
 
-        print("DBG", corner_colour(host), corner_colour(other), host._prompting, other._prompting, host.is_showing_media(), timer.prompts_for_focus())
         assert corner_colour(host) != PALETTE["blue"]
         assert corner_colour(other) == PALETTE["blue"]
 
@@ -1647,6 +1646,17 @@ class TestTheCardOnEveryWall:
 
         assert overlay.keys.hints == timer.media_surface.keys.hints
         assert overlay.keys.isHidden() is False
+
+    def test_a_monitor_arriving_mid_activity_is_walled_with_the_keys_named(self, timer):
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_Return)
+        two_screens(timer)
+
+        timer._rewall_for_the_outputs()
+
+        arrived, = [wall for wall in timer.overlays if wall is not timer._media_host]
+        assert arrived.keys.hints == timer.media_surface.keys.hints
+        assert arrived.keys.isHidden() is False
 
     def test_a_wall_with_nothing_showing_names_none_of_them(self, timer):
         enter_strict_break(timer)

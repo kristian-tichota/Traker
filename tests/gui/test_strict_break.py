@@ -237,17 +237,6 @@ class TestForcingTheWallsOntoEveryDesktop:
 
 
 class TestWhichScreenTheBreakTakes:
-    def test_it_is_the_screen_this_window_is_on(self, timer):
-        elsewhere = object()
-        timer.windowHandle = lambda: type("Handle", (), {"screen": lambda _: elsewhere})()
-
-        assert timer._member_screen() is elsewhere
-
-    def test_a_window_no_compositor_has_placed_yet_falls_back(self, timer):
-        timer.windowHandle = lambda: None
-
-        assert timer._member_screen() == QApplication.primaryScreen()
-
     def test_every_screen_is_walled(self, shelled):
         view, _shell = shelled
         two_screens(view)
@@ -266,8 +255,8 @@ class TestWhichScreenTheBreakTakes:
         assert view._media_host is view._wall_for(QApplication.primaryScreen())
         assert view._media_host.media is view.media_surface
 
-    def test_the_focus_starts_on_the_wall_the_member_is_at(self, shelled,
-                                                           desktop_session):
+    def test_the_focus_starts_on_the_wall_showing_what_the_break_offers(
+            self, shelled, desktop_session):
         view, _shell = shelled
         two_screens(view)
 
@@ -277,28 +266,10 @@ class TestWhichScreenTheBreakTakes:
                   if call[0] == "loadScript"]
         assert loaded
         source = open(loaded[0][1], encoding="utf-8").read()
-        wanted = view._wall_for(view._screen_taken).windowTitle()
+        wanted = view._media_host.windowTitle()
 
         assert f"var wanted = {json.dumps(wanted)};" in source
         assert wanted != view.window().windowTitle()
-
-    def test_the_break_keeps_the_screen_it_took(self, shelled):
-        view, _shell = shelled
-        enter_strict_break(view)
-        taken = view._screen_taken
-
-        view._member_screen = lambda: object()
-        view._redraw_break_surfaces()
-
-        assert view._screen_taken is taken
-
-    def test_the_next_break_asks_again(self, shelled):
-        view, _shell = shelled
-        enter_strict_break(view)
-
-        view._clear_overlays()
-
-        assert view._screen_taken is None
 
 
 class TestTheApplicationWindowIsLeftAlone:
@@ -316,7 +287,7 @@ class TestTheApplicationWindowIsLeftAlone:
 
         enter_strict_break(view)
 
-        assert view._wall_for(view._screen_taken) in view.overlays
+        assert [wall.screen_covered for wall in view.overlays] == QApplication.screens()
 
     def test_the_walls_are_not_children_of_it(self, shelled):
         view, shell = shelled
@@ -591,8 +562,22 @@ class TestAMonitorSwitchedOffAndBackOn:
         timer.screens_to_cover = lambda: [back]
         timer._rewall_for_the_outputs()
 
-        assert timer._screen_taken is not None
+        assert timer._media_host is timer.overlays[0]
         assert timer.overlays[0].isVisible() is True
+
+    def test_a_monitor_back_after_the_break_ran_out_takes_no_desktop_back(
+            self, timer, monkeypatch):
+        left, right = named_outputs(timer, monkeypatch, "DP-2", "DP-1")
+        enter_strict_break(timer)
+        timer._an_output_went(right)
+        advance(timer, timer.break_ms + 1000)
+        assert timer.kwin_pin.engaged is False
+
+        timer.screens_to_cover = lambda: [left, FakeScreen("DP-1")]
+        timer._rewall_for_the_outputs()
+
+        assert len(timer.overlays) == 2
+        assert timer.kwin_pin.engaged is False
 
     def test_a_rebuild_with_nothing_to_do_builds_nothing(self, timer, monkeypatch):
         named_outputs(timer, monkeypatch, "DP-2", "DP-1")
