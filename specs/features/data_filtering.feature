@@ -69,6 +69,11 @@ Feature: Filtering and sorting what a table shows
       Then rows after the first of August remain
       And typing the stored ISO form works too
 
+    Scenario: Times are typed the way they are read
+      When I filter on "time>8:30" or on the bare word "08:30"
+      Then the hour compares as the stored "08:30" does
+      And a bare time is a word to search for rather than a column to name
+
     Scenario: Comparisons run against the stored value, not the rendered text
       Given a row showing "9.00" calories and a row showing "312.40"
       When I filter on "kcal>300"

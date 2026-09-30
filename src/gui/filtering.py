@@ -1,4 +1,5 @@
 import re
+from operator import ge, gt, le, lt
 
 from src.domain.clock import as_stored_date
 from src.gui.commands import MEAL_SHORTCUTS
@@ -6,9 +7,15 @@ from src.gui.completion import normalize
 
 OPERATORS = (">=", "<=", "!=", ":", "=", ">", "<")
 
+_ORDERINGS = {">": gt, "<": lt, ">=": ge, "<=": le}
+
 _TERM = re.compile(r"^(?P<field>\w+)(?P<op>"
                    + "|".join(re.escape(operator) for operator in OPERATORS)
                    + r")(?P<value>.*)$")
+
+_CZECH_DATE = re.compile(r"^\d{1,2}\.\d{1,2}\.\d{4}$")
+_SHORT_HOUR = re.compile(r"^\d:\d{2}$")
+_DATE_OR_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}$|^\d{1,2}:\d{2}$|^\d{1,2}\.\d{1,2}\.\d{4}$")
 
 ALIASES = {
     "kcal": "Calories", "cal": "Calories", "cals": "Calories",
@@ -44,28 +51,38 @@ def _as_number(value):
         return None
 
 
+def _as_stored(value: str) -> str:
+    """Return a Czech date or an H:MM time as the row stores it, else unchanged."""
+    stripped = value.strip()
+    if _CZECH_DATE.match(stripped):
+        return as_stored_date(stripped)
+    return "0" + stripped if _SHORT_HOUR.match(stripped) else value
+
+
+def fold(values_by_header: dict) -> tuple:
+    """Return (row text, {header: folded cell}), the form a term compares against."""
+    by_header = {header: "" if value is None else normalize(str(value))
+                 for header, value in values_by_header.items()}
+    return " ".join(text for text in by_header.values() if text), by_header
+
+
 def resolve_field(token: str, headers) -> str:
     """Return the header a field token names, or raise."""
     folded = normalize(token)
-    alias = ALIASES.get(folded)
-    if alias is not None:
-        for candidate in ((alias,) if isinstance(alias, str) else alias):
-            for header in headers:
-                if normalize(header) == normalize(candidate):
-                    return header
+    by_fold = {normalize(header): header for header in headers}
+    named = ALIASES.get(folded, ())
+    for candidate in ((named,) if isinstance(named, str) else named) + (folded,):
+        if normalize(candidate) in by_fold:
+            return by_fold[normalize(candidate)]
 
-    for header in headers:
-        if normalize(header) == folded:
-            return header
-    matches = [header for header in headers if normalize(header).startswith(folded)]
+    matches = [header for key, header in by_fold.items() if key.startswith(folded)]
     if len(matches) == 1:
         return matches[0]
-    if len(matches) > 1:
+    if matches:
         raise FilterError(
             f"'{token}' matches {len(matches)} columns: {', '.join(matches)}")
-
-    known = ", ".join(sorted({*headers}))
-    raise FilterError(f"No column called '{token}'. Columns: {known}")
+    raise FilterError(
+        f"No column called '{token}'. Columns: {', '.join(sorted(by_fold.values()))}")
 
 
 class Term:
@@ -75,47 +92,27 @@ class Term:
         self.field = field
         self.operator = operator
         self.value = value
-        self._folded = normalize(_as_iso_if_a_date(str(value)))
+        self._folded = normalize(_as_stored(str(value)))
         self._number = _as_number(value)
+        self._meal = _MEAL_SHORTCUTS.get(self._folded) if field == "Meal Type" else None
 
-    def __repr__(self):
+    def matches(self, values_by_header: dict, folded) -> bool:
+        """Report whether a row matches, given its typed cells and their fold."""
         if self.field is None:
-            return f"Term(any ~ {self.value!r})"
-        return f"Term({self.field!r} {self.operator} {self.value!r})"
-
-    def matches(self, values_by_header: dict, folded=None) -> bool:
-        """Report whether a row matches, against the caller's cached text and cells."""
-        if self.field is None:
-            if folded is not None:
-                return self._folded in folded[0]
-            return any(self._contains(value) for value in values_by_header.values())
-        return self._compare(values_by_header.get(self.field),
-                             None if folded is None else folded[1].get(self.field))
-
-    def _contains(self, value) -> bool:
-        """Match the folded needle anywhere in the folded cell."""
+            return self._folded in folded[0]
+        value, cell = values_by_header.get(self.field), folded[1].get(self.field)
+        if self.operator in (":", "="):
+            return self._equalish(value, cell)
+        if self.operator == "!=":
+            return not self._equalish(value, cell)
         if value is None:
             return False
-        return self._folded in normalize(str(value))
+        if self._number is None:
+            return _ORDERINGS[self.operator](cell, self._folded)
+        other = _as_number(value)
+        return other is not None and _ORDERINGS[self.operator](other, self._number)
 
-    def _compare(self, value, folded_cell=None) -> bool:
-        if self.operator in (":", "="):
-            return self._equalish(value, folded_cell)
-        if self.operator == "!=":
-            return not self._equalish(value, folded_cell)
-
-        left, right = self._orderable(value, folded_cell)
-        if left is None:
-            return False
-        if self.operator == ">":
-            return left > right
-        if self.operator == "<":
-            return left < right
-        if self.operator == ">=":
-            return left >= right
-        return left <= right
-
-    def _equalish(self, value, folded_cell=None) -> bool:
+    def _equalish(self, value, cell) -> bool:
         """Match by containment on text and exactly on numbers."""
         if value is None:
             return self._folded in ("", "-", "none")
@@ -123,43 +120,24 @@ class Term:
             other = _as_number(value)
             if other is not None:
                 return other == self._number
-        folded_value = normalize(str(value)) if folded_cell is None else folded_cell
-        if self.field == "Meal Type" and self._folded in _MEAL_SHORTCUTS:
-            return folded_value == _MEAL_SHORTCUTS[self._folded]
-        return self._folded in folded_value
-
-    def _orderable(self, value, folded_cell=None):
-        """Return (cell, needle) as comparable types, or (None, None)."""
-        if value is None:
-            return None, None
-        if self._number is not None:
-            other = _as_number(value)
-            return (other, self._number) if other is not None else (None, None)
-        return (normalize(str(value)) if folded_cell is None else folded_cell), self._folded
+        if self._meal is not None:
+            return cell == self._meal
+        return self._folded in cell
 
 
 class Query:
     """A parsed filter: terms that all have to match."""
 
     def __init__(self, terms):
-        self.terms = list(terms)
-
-    def __bool__(self):
-        return bool(self.terms)
-
-    @property
-    def fields(self) -> tuple:
-        """Return the columns whose typed value some term reads."""
-        return tuple({term.field for term in self.terms if term.field is not None})
+        self.terms = tuple(terms)
+        self.fields = tuple({term.field for term in self.terms if term.field is not None})
 
     def __len__(self):
         return len(self.terms)
 
-    def __repr__(self):
-        return f"Query({self.terms!r})"
-
     def matches(self, values_by_header: dict, folded=None) -> bool:
-        """Report whether every term matches."""
+        """Report whether every term matches, folding the row where no fold is given."""
+        folded = folded or fold(values_by_header)
         return all(term.matches(values_by_header, folded) for term in self.terms)
 
 EMPTY = Query(())
@@ -167,39 +145,22 @@ EMPTY = Query(())
 
 def parse(text: str, headers) -> Query:
     """Read a filter line, or raise FilterError naming what is wrong."""
-    if not text or not text.strip():
-        return EMPTY
-
     terms = []
-    for token in text.split():
-        match = _TERM.match(token)
+    for token in (text or "").split():
+        match = None if _DATE_OR_TIME.match(token) else _TERM.match(token)
         if match is None:
             terms.append(Term(None, ":", token))
             continue
 
-        field_token, operator, value = (
-            match.group("field"), match.group("op"), match.group("value"))
+        field_token, operator, value = match.group("field", "op", "value")
         if not value:
             raise FilterError(f"'{field_token}{operator}' is missing a value.")
 
         field = resolve_field(field_token, headers)
-        if operator in (">", "<", ">=", "<=") and _as_number(value) is None \
-                and not _looks_like_a_date_or_time(value):
+        if operator in _ORDERINGS and _as_number(value) is None \
+                and not _DATE_OR_TIME.match(value):
             raise FilterError(
                 f"'{value}' is not a number or a date, so '{field} {operator}' "
                 f"cannot be compared.")
         terms.append(Term(field, operator, value))
-    return Query(terms)
-
-_CZECH_DATE = re.compile(r"^\d{1,2}\.\d{1,2}\.\d{4}$")
-_DATE_OR_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}$|^\d{1,2}:\d{2}$|^\d{1,2}\.\d{1,2}\.\d{4}$")
-
-
-def _looks_like_a_date_or_time(value: str) -> bool:
-    return bool(_DATE_OR_TIME.match(value.strip()))
-
-
-def _as_iso_if_a_date(value: str) -> str:
-    """Return a Czech date as the ISO string the row holds, else unchanged."""
-    stripped = value.strip()
-    return as_stored_date(stripped) if _CZECH_DATE.match(stripped) else value
+    return Query(terms) if terms else EMPTY

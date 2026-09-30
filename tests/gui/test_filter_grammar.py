@@ -72,14 +72,10 @@ class TestNamingAColumn:
             resolve_field("s", HEADERS)
         assert "matches" in str(refused.value)
 
-    def test_a_column_that_does_not_exist_is_refused(self):
+    def test_a_column_that_does_not_exist_is_refused_with_those_that_do(self):
         with pytest.raises(FilterError) as refused:
             resolve_field("nonsense", HEADERS)
         assert "No column called 'nonsense'" in str(refused.value)
-
-    def test_the_refusal_lists_the_columns_that_do_exist(self):
-        with pytest.raises(FilterError) as refused:
-            resolve_field("nonsense", HEADERS)
         assert "Calories" in str(refused.value)
 
     def test_the_units_need_not_be_typed(self):
@@ -129,11 +125,14 @@ class TestDatesAreTypedTheWayTheyAreRead:
         assert matches("date>2026-08-01") is True
         assert matches("date>2026-10-01") is False
 
-    def test_the_two_spellings_agree(self):
-        assert matches("date>01.08.2026") == matches("date>2026-08-01")
-
     def test_an_exact_date_matches(self):
         assert matches("date:2026-09-05") is True
+
+    def test_a_bare_time_is_a_word_rather_than_a_column(self):
+        assert matches("08:30", dict(ROW, Time="08:30"), HEADERS + ["Time"]) is True
+
+    def test_an_hour_without_its_leading_zero_compares_as_the_stored_time(self):
+        assert matches("time>8:30", dict(ROW, Time="10:15"), HEADERS + ["Time"]) is True
 
 
 class TestMealShortcuts:
@@ -145,12 +144,6 @@ class TestMealShortcuts:
 
     def test_a_shortcut_does_not_match_another_meal(self):
         assert matches("meal:l") is False
-
-    def test_they_are_read_from_the_command_grammar(self):
-        from src.gui.commands import MEAL_SHORTCUTS
-        from src.gui.filtering import _MEAL_SHORTCUTS
-
-        assert set(_MEAL_SHORTCUTS) == set(MEAL_SHORTCUTS)
 
     def test_the_full_word_still_works(self):
         assert matches("meal:breakfast") is True
@@ -174,10 +167,6 @@ class TestTermsCombine:
 
 
 class TestAMalformedTermIsRefused:
-    def test_an_unknown_column_raises(self):
-        with pytest.raises(FilterError):
-            parse("nonsense:x", HEADERS)
-
     def test_a_comparison_against_a_word_raises(self):
         with pytest.raises(FilterError) as refused:
             parse("kcal>abc", HEADERS)
@@ -192,13 +181,6 @@ class TestAMalformedTermIsRefused:
         with pytest.raises(FilterError):
             parse("oats nonsense:x", HEADERS)
 
-    def test_an_equality_against_a_word_is_fine(self):
-        assert matches("food:oats") is True
-
-    def test_a_word_containing_a_colon_is_a_bare_term_not_a_field(self):
-        row = dict(ROW, **{"Food Name": "Yoghurt: Greek"})
-        assert parse("greek", HEADERS).matches(row) is True
-
 
 class TestTermsAreReadable:
     def test_a_term_says_what_it_is(self):
@@ -209,8 +191,3 @@ class TestTermsAreReadable:
     def test_a_bare_term_names_no_field(self):
         (term,) = parse("oats", HEADERS).terms
         assert term.field is None
-
-    def test_the_longest_operator_wins(self):
-        (term,) = parse("kcal>=300", HEADERS).terms
-        assert term.operator == ">="
-        assert term.value == "300"

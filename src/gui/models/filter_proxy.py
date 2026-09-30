@@ -11,13 +11,9 @@ class FilterProxyModel(QSortFilterProxyModel):
         self._query = EMPTY
         self.setDynamicSortFilter(False)
 
-    @property
-    def query(self):
-        return self._query
-
     def set_query(self, query):
         """Apply a parsed src.gui.filtering.Query."""
-        self._query = query or EMPTY
+        self._query = query
         self.invalidateFilter()
 
     def sort(self, column, order=Qt.SortOrder.AscendingOrder):
@@ -33,27 +29,17 @@ class FilterProxyModel(QSortFilterProxyModel):
 
     def filterAcceptsRow(self, source_row, source_parent):
         model = self.sourceModel()
-        if model is None or source_row >= model.rowCount():
+        if model.is_heading(source_row):
+            return not (self._query.terms or self.sortColumn() >= 0)
+        if not self._query.terms or model.is_pending(source_row):
             return True
-
-        if getattr(model, "is_heading", None) and model.is_heading(source_row):
-            return not (self._query or self.sortColumn() >= 0)
-
-        if not self._query:
-            return True
-        if getattr(model, "is_pending", None) and model.is_pending(source_row):
-            return True
-        folded = model.folded(source_row) if hasattr(model, "folded") else None
         fields = self._query.fields
         values = model.values_of(source_row, fields) if fields else {}
-        return self._query.matches(values, folded)
+        return self._query.matches(values, model.folded(source_row))
 
     def lessThan(self, left, right):
         """Compare the values rather than their renderings."""
         model = self.sourceModel()
-        if model is None:
-            return super().lessThan(left, right)
-
         left_value = model.value_at(left.row(), left.column())
         right_value = model.value_at(right.row(), right.column())
 
@@ -71,7 +57,5 @@ class FilterProxyModel(QSortFilterProxyModel):
     def matched_rows(self):
         """Return the source rows currently showing, as NamedTuples."""
         model = self.sourceModel()
-        if model is None:
-            return []
         return [model.row_at(self.mapToSource(self.index(row, 0)))
                 for row in range(self.rowCount())]
