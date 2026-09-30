@@ -36,11 +36,10 @@ class _Watch:
     def __init__(self, on_landed):
         self.out = set()
         self.on_landed = on_landed
-        self.open = True
 
     def retire(self, worker):
         self.out.discard(worker)
-        if not self.out and not self.open:
+        if not self.out:
             self.on_landed()
 
 
@@ -48,12 +47,12 @@ class _Watch:
 def watched(on_landed):
     """Call on_landed once every worker started inside the block has delivered."""
     global _watch
-    outer, _watch = _watch, _Watch(on_landed)
-    watch = _watch
+    outer = _watch
+    watch = _watch = _Watch(on_landed)
     try:
         yield
     finally:
-        _watch, watch.open = outer, False
+        _watch = outer
     if not watch.out:
         on_landed()
 
