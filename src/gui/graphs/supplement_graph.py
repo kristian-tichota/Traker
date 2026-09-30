@@ -42,6 +42,15 @@ def log_column_for(target: dict, columns) -> str:
     return from_label if from_label in columns else None
 
 
+def _saturation_colour(pct: float) -> str:
+    """Return red under half the target, yellow short of it, green on it, magenta past it."""
+    if pct < 50:
+        return PALETTE['red']
+    if pct < 90:
+        return PALETTE['yellow']
+    return PALETTE['green'] if pct <= 120 else PALETTE['magenta']
+
+
 class SupplementGraphView(BaseGraphView):
     def __init__(self, db):
         super().__init__(db)
@@ -85,6 +94,7 @@ class SupplementGraphView(BaseGraphView):
         }
         targets = self.profile.get_supplement_targets()
         self.nutrients = []
+        self.hover_data.clear()
 
         for t in targets:
             column = log_column_for(t, col_to_log_idx)
@@ -103,19 +113,16 @@ class SupplementGraphView(BaseGraphView):
         today = datetime.date.today()
         dates = [(today - datetime.timedelta(days=i)).isoformat()
                  for i in range(self.WINDOW_DAYS - 1, -1, -1)]
+        day_of = {date: index for index, date in enumerate(dates)}
         matrix = np.zeros((len(self.nutrients), self.WINDOW_DAYS))
 
         for row in raw_logs:
-            try:
-                day_idx = dates.index(row.date)
-            except ValueError:
+            day_idx = day_of.get(row.date)
+            if day_idx is None:
                 continue
-
             for i, (_, db_idx, _, _) in enumerate(self.nutrients):
-                if db_idx < len(row):
-                    val = row[db_idx]
-                    if val is not None:
-                        matrix[i, day_idx] += float(val)
+                if row[db_idx] is not None:
+                    matrix[i, day_idx] += float(row[db_idx])
 
         y_pos = np.arange(len(self.nutrients))
         self.ax.invert_yaxis()
@@ -129,46 +136,39 @@ class SupplementGraphView(BaseGraphView):
         self.ax.axvline(100, color=PALETTE['base00'], linestyle=':', linewidth=1.5, zorder=2)
         self.ax.text(-17.5, -0.8, "7D Streak", ha='center', color=PALETTE['base01'], fontsize=8, fontname='Fira Code', weight='bold')
 
-        dot_x = np.linspace(-30, -5, 7)
-        self.hover_data.clear()
+        dot_x = np.linspace(-30, -5, self.WINDOW_DAYS)
+        bar_widths, bar_colours = [], []
 
-        for i, (name, db_idx, target, unit) in enumerate(self.nutrients):
+        for i, (name, _db_idx, target, unit) in enumerate(self.nutrients):
             daily_amounts = matrix[i]
-            avg_intake = sum(daily_amounts) / self.WINDOW_DAYS
             today_intake = daily_amounts[-1]
             pct = (today_intake / target) * 100.0 if target > 0 else 0.0
-
             self.hover_data[i] = {
                 "name": name, "target": target, "unit": unit,
-                "daily": daily_amounts, "avg": avg_intake, "today": today_intake,
-                "pct": pct, "dates": dates
+                "daily": daily_amounts, "avg": daily_amounts.sum() / self.WINDOW_DAYS,
+                "today": today_intake, "pct": pct, "dates": dates
             }
 
-            for day_idx in range(7):
-                amt = daily_amounts[day_idx]
-                color = PALETTE['green'] if amt > 0 else PALETTE['base2']
-                self.ax.scatter(dot_x[day_idx], i, color=color, s=25, zorder=5)
-
-                if day_idx == 6 and amt > 0:
-                    glow, = self.ax.plot([dot_x[6]], [i], marker='o', color=PALETTE['green'], alpha=0.6, markersize=6, zorder=4, animated=True)
-                    self.anim_nodes.append({'artist': glow, 'ax': self.ax, 'base_size': 5})
+            if today_intake > 0:
+                glow, = self.ax.plot([dot_x[-1]], [i], marker='o', color=PALETTE['green'], alpha=0.6, markersize=6, zorder=4, animated=True)
+                self.anim_nodes.append({'artist': glow, 'ax': self.ax, 'base_size': 5})
 
             bar_width = min(pct, 155.0)
-
-            if pct < 50: bar_color = PALETTE['red']
-            elif pct < 90: bar_color = PALETTE['yellow']
-            elif pct <= 120: bar_color = PALETTE['green']
-            else: bar_color = PALETTE['magenta']
-
-            self.ax.barh(i, 150, color=PALETTE['base2'], height=0.4, alpha=0.3, zorder=1)
-            self.ax.barh(i, bar_width, color=bar_color, height=0.4, alpha=0.85, zorder=3)
-
-            text_x = bar_width + 3
-            self.ax.text(text_x, i, f"{today_intake:.0f} {unit} ({pct:.0f}%)", va='center', color=PALETTE['base01'], fontsize=8, fontname='Fira Code')
+            bar_colour = _saturation_colour(pct)
+            bar_widths.append(bar_width)
+            bar_colours.append(bar_colour)
+            self.ax.text(bar_width + 3, i, f"{today_intake:.0f} {unit} ({pct:.0f}%)", va='center', color=PALETTE['base01'], fontsize=8, fontname='Fira Code')
 
             if pct > 0:
-                glow_edge, = self.ax.plot([bar_width], [i], marker='|', color=bar_color, alpha=0.6, markersize=12, markeredgewidth=2, zorder=4, animated=True)
+                glow_edge, = self.ax.plot([bar_width], [i], marker='|', color=bar_colour, alpha=0.6, markersize=12, markeredgewidth=2, zorder=4, animated=True)
                 self.anim_nodes.append({'artist': glow_edge, 'ax': self.ax, 'base_size': 10})
+
+        rows, days = np.nonzero(matrix > 0)
+        self.ax.scatter(dot_x[days], rows, color=PALETTE['green'], s=25, zorder=5)
+        rows, days = np.nonzero(matrix <= 0)
+        self.ax.scatter(dot_x[days], rows, color=PALETTE['base2'], s=25, zorder=5)
+        self.ax.barh(y_pos, 150, color=PALETTE['base2'], height=0.4, alpha=0.3, zorder=1)
+        self.ax.barh(y_pos, bar_widths, color=bar_colours, height=0.4, alpha=0.85, zorder=3)
 
         self.ax.set_title("Biological Saturation & Consistency Matrix (Today vs Target, 7-Day Streak)", color=PALETTE['base02'], fontsize=10, fontname='Fira Code', weight='bold', pad=15)
 
@@ -180,14 +180,8 @@ class SupplementGraphView(BaseGraphView):
             return
 
         idx = int(round(event.ydata))
-        if not hasattr(self, 'nutrients') or idx < 0 or idx >= len(self.nutrients):
-            return
-
-        if self._last_hovered == idx:
-            return
-
         data = self.hover_data.get(idx)
-        if not data:
+        if data is None or self._last_hovered == idx:
             return
 
         lines = [
