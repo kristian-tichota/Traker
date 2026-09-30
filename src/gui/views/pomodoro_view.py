@@ -67,12 +67,31 @@ PROGRESS_PX = 420
 
 WALL_NAME = "strictWall"
 
+STATES = ("focus", "rest", "focus_overtime", "rest_overtime")
+
+PHASE_COLOURS = {"work": "blue", "break": "green", "long_break": "violet"}
+
+
+def minutes_of(row) -> dict:
+    """Return a day summary row's minutes, keyed by state."""
+    return {state: getattr(row, f"{state}_mins") for state in STATES}
+
+
+def stress_index(seconds) -> float:
+    """Return the Daily Stress Index of the seconds spent in each state."""
+    return formulas.daily_stress_index(seconds["focus"], seconds["focus_overtime"],
+                                       seconds["rest"], seconds["rest_overtime"])
+
 
 def read_day(db):
     """Read the day summary and this member's stress overrides, in one call."""
-    summary = db.get_pomodoro_daily_summary()
-    overrides = getattr(db, "get_pomodoro_dsi_overrides", dict)()
-    return summary, overrides
+    return db.get_pomodoro_daily_summary(), db.get_pomodoro_dsi_overrides()
+
+
+def log_minute(db, heartbeat):
+    """Store one minute's heartbeat, then read the day back with it counted."""
+    db.log_pomodoro_heartbeat(heartbeat)
+    return read_day(db)
 
 
 def read_upcoming(db) -> list:
@@ -541,38 +560,20 @@ class StressCalendar(PausesWhenHidden, QWidget):
         self.hovered_date = None
         self.pinned_date = None
         self.rect_map = []
+        self._popup = None
 
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self._animate)
-
-    def refresh(self):
-        """Read the day summary for this calendar alone."""
-        run_in_background(
-            QThreadPool.globalInstance(), read_day, self._on_summary_read,
-            None, self.db)
-
-    def _on_summary_read(self, payload):
-        if not read_was_answered(self.db):
-            log.warning("Keeping the strain calendar: its read did not reach the service.")
-            return
-        self.apply_summary_data(payload)
 
     def apply_summary_data(self, payload):
         raw, overrides = payload
         self.data_map.clear()
 
         for row in raw:
-            date_str = row.date
-            focus_mins, rest_mins = row.focus_mins, row.rest_mins
-            focus_ot, rest_ot = row.focus_overtime_mins, row.rest_overtime_mins
-            dsi = formulas.daily_stress_index(
-                focus_mins * 60, focus_ot * 60, rest_mins * 60, rest_ot * 60)
-
-            self.data_map[date_str] = {
-                "dsi": dsi,
-                "active": focus_mins > 0 or rest_mins > 0 or focus_ot > 0 or rest_ot > 0,
-                "focus_mins": focus_mins,
-                "focus_ot": focus_ot
+            minutes = minutes_of(row)
+            self.data_map[row.date] = {
+                "dsi": stress_index({state: spent * 60 for state, spent in minutes.items()}),
+                "active": any(minutes.values()),
             }
 
         for override_date, val in overrides.items():
@@ -584,19 +585,8 @@ class StressCalendar(PausesWhenHidden, QWidget):
             if not math.isfinite(pinned):
                 log.warning("Ignoring a stored stress override that is not finite: %r", val)
                 continue
-
-            if override_date in self.data_map:
-                self.data_map[override_date]["override_dsi"] = pinned
-                self.data_map[override_date]["is_overridden"] = True
-            else:
-                self.data_map[override_date] = {
-                    "dsi": 0.0,
-                    "active": True,
-                    "override_dsi": pinned,
-                    "is_overridden": True,
-                    "focus_mins": 0,
-                    "focus_ot": 0
-                }
+            self.data_map.setdefault(
+                override_date, {"dsi": 0.0, "active": True})["override_dsi"] = pinned
         self.update()
 
     def _animate(self):
@@ -623,9 +613,10 @@ class StressCalendar(PausesWhenHidden, QWidget):
         popup.btn_close.setVisible(show_close)
 
     def _get_popup(self):
-        if not hasattr(self, '_popup') or self._popup is None:
+        if self._popup is None:
             self._popup = TimelinePopupWidget(self.parentWidget())
             self._popup.unpin_callback = self._on_popup_unpinned
+            self._popup.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
             self._popup.hide()
         return self._popup
 
@@ -675,7 +666,6 @@ class StressCalendar(PausesWhenHidden, QWidget):
             self.hovered_date = hit
             self._load_day_into_popup(hit, show_close=False)
 
-        popup.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._place_popup(popup, event.pos())
 
     def mousePressEvent(self, event):
@@ -696,7 +686,7 @@ class StressCalendar(PausesWhenHidden, QWidget):
     def leaveEvent(self, event):
         if not self.pinned_date:
             self.hovered_date = None
-            if hasattr(self, '_popup') and self._popup is not None:
+            if self._popup is not None:
                 self._popup.hide()
         super().leaveEvent(event)
 
@@ -712,6 +702,12 @@ class StressCalendar(PausesWhenHidden, QWidget):
         start_y = (self.height() - (2 * (cell_size + spacing))) // 2
         self.rect_map.clear()
 
+        font = painter.font()
+        font.setFamily('Fira Code')
+        font.setPixelSize(10)
+        font.setBold(True)
+        painter.setFont(font)
+
         for i in range(30):
             d = start_date + datetime.timedelta(days=i)
             d_iso = d.isoformat()
@@ -722,8 +718,8 @@ class StressCalendar(PausesWhenHidden, QWidget):
             rect = QRect(x, y, cell_size, cell_size)
             self.rect_map.append((rect, d_iso))
 
-            is_overridden = stats.get("is_overridden", False)
-            display_dsi = stats.get("override_dsi", stats.get("dsi", 0.0)) if is_overridden else stats.get("dsi", 0.0)
+            is_overridden = "override_dsi" in stats
+            display_dsi = stats.get("override_dsi", stats["dsi"])
 
             if not stats["active"]:
                 base_color = QColor(PALETTE['base2'])
@@ -741,13 +737,7 @@ class StressCalendar(PausesWhenHidden, QWidget):
             painter.drawRoundedRect(x, y, cell_size, cell_size, 2, 2)
 
             if stats["active"]:
-                text_color = QColor(PALETTE['base03'])
-                painter.setPen(QPen(text_color))
-                font = painter.font()
-                font.setFamily('Fira Code')
-                font.setPixelSize(10)
-                font.setBold(True)
-                painter.setFont(font)
+                painter.setPen(QPen(QColor(PALETTE['base03'])))
                 painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"{display_dsi:.1f}")
 
                 if is_overridden:
@@ -797,21 +787,12 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._long_breaks_used = 0
         self._long_break_day = datetime.date.today().isoformat()
 
-        self.live_focus_ms = 0
-        self.live_rest_ms = 0
-        self.live_focus_ot_ms = 0
-        self.live_rest_ot_ms = 0
-
-        self.intra_minute_focus_ms = 0
-        self.intra_minute_rest_ms = 0
-        self.intra_minute_focus_ot_ms = 0
-        self.intra_minute_rest_ot_ms = 0
+        self.live_ms = dict.fromkeys(STATES, 0)
+        self.intra_ms = dict.fromkeys(STATES, 0)
 
         self.waiting_for_work_start = True
         self.waiting_for_break_start = False
         self._over_since_ms = 0
-
-        self._handing_over = False
 
         self.last_frame_timestamp = 0
         self.last_tray_second = -1
@@ -1193,41 +1174,27 @@ class PomodoroView(ShutdownMixin, QWidget):
         hundredths = int((total_seconds - int(total_seconds)) * 100)
         return f"{mins:02d}:{secs:02d}.{hundredths:02d}"
 
-    def _reload_day(self, handing_over=False):
+    def _reload_day(self):
         """Read today once and feed both readouts of it."""
-        self._handing_over = handing_over
         run_in_background(self.threadpool, read_day, self._apply_day, None, self.db)
 
-    def _apply_day(self, payload):
-        handing_over, self._handing_over = self._handing_over, False
+    def _minute_stored(self, payload):
+        """Hand the sub-minute counters over to the day read back after a heartbeat."""
+        self._apply_day(payload, handing_over=True)
+
+    def _apply_day(self, payload, handing_over=False):
         if not read_was_answered(self.db):
             log.warning("Keeping today's totals: the summary read did not reach the service.")
             return
 
-        summary, _overrides = payload
-        self._on_historical_aggregates_loaded(summary)
-
+        today = datetime.date.today().isoformat()
+        row = next((row for row in payload[0] if row.date == today), None)
+        minutes = minutes_of(row) if row is not None else dict.fromkeys(STATES, 0)
+        self.live_ms = {state: spent * MS_PER_MINUTE for state, spent in minutes.items()}
         if handing_over:
-            self.intra_minute_focus_ms = 0
-            self.intra_minute_rest_ms = 0
-            self.intra_minute_focus_ot_ms = 0
-            self.intra_minute_rest_ot_ms = 0
+            self.intra_ms = dict.fromkeys(STATES, 0)
 
         self.stress_calendar.apply_summary_data(payload)
-
-    def _on_historical_aggregates_loaded(self, daily_summary):
-        today_str = datetime.date.today().isoformat()
-        self.live_focus_ms = 0
-        self.live_rest_ms = 0
-        self.live_focus_ot_ms = 0
-        self.live_rest_ot_ms = 0
-
-        for row in daily_summary:
-            if row.date == today_str:
-                self.live_focus_ms = row.focus_mins * MS_PER_MINUTE
-                self.live_rest_ms = row.rest_mins * MS_PER_MINUTE
-                self.live_focus_ot_ms = row.focus_overtime_mins * MS_PER_MINUTE
-                self.live_rest_ot_ms = row.rest_overtime_mins * MS_PER_MINUTE
 
     def _engine_loop(self):
         now = QDateTime.currentMSecsSinceEpoch()
@@ -1239,29 +1206,16 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.last_frame_timestamp = now
 
         current_state = self._get_current_state()
-        if current_state == 'focus':
-            self.intra_minute_focus_ms += delta_ms
-        elif current_state == 'rest':
-            self.intra_minute_rest_ms += delta_ms
-        elif current_state == 'focus_overtime':
-            self.intra_minute_focus_ot_ms += delta_ms
-        elif current_state == 'rest_overtime':
-            self.intra_minute_rest_ot_ms += delta_ms
+        self.intra_ms[current_state] += delta_ms
 
         dt_now = datetime.datetime.now()
         current_minute = dt_now.hour * 60 + dt_now.minute
 
         if current_minute != self.last_logged_minute and self.last_logged_minute != -1:
-            heartbeat_data = {
-                "date": dt_now.date().isoformat(),
-                "minute_of_day": current_minute,
-                "second": 0,
-                "state": self._get_current_state(),
-            }
-            run_in_background(
-                self.threadpool, self.db.log_pomodoro_heartbeat,
-                discard, None, heartbeat_data)
-            self._reload_day(handing_over=True)
+            run_in_background(self.threadpool, log_minute, self._minute_stored, None,
+                              self.db, {"date": dt_now.date().isoformat(),
+                                        "minute_of_day": current_minute,
+                                        "second": 0, "state": current_state})
 
         self.last_logged_minute = current_minute
 
@@ -1289,19 +1243,11 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self.lbl_timer.setText(self._format_high_precision(self.time_left_ms))
 
-        tot_f = self.live_focus_ms + self.intra_minute_focus_ms
-        tot_r = self.live_rest_ms + self.intra_minute_rest_ms
-        tot_f_ot = self.live_focus_ot_ms + self.intra_minute_focus_ot_ms
-        tot_r_ot = self.live_rest_ot_ms + self.intra_minute_rest_ot_ms
-
-        self.rows_val_labels[0].setText(self._format_high_precision(tot_f))
-        self.rows_val_labels[1].setText(self._format_high_precision(tot_r))
-        self.rows_val_labels[2].setText(self._format_high_precision(tot_f_ot))
-        self.rows_val_labels[3].setText(self._format_high_precision(tot_r_ot))
-
-        dsi = formulas.daily_stress_index(
-            tot_f / 1000.0, tot_f_ot / 1000.0, tot_r / 1000.0, tot_r_ot / 1000.0)
-        self.rows_val_labels[4].setText(f"{dsi:.2f}")
+        totals = {state: self.live_ms[state] + self.intra_ms[state] for state in STATES}
+        for label, state in zip(self.rows_val_labels, STATES):
+            label.setText(self._format_high_precision(totals[state]))
+        self.rows_val_labels[len(STATES)].setText(
+            f"{stress_index({state: ms / 1000.0 for state, ms in totals.items()}):.2f}")
 
         current_sec = int(self.time_left_ms // 1000)
         if current_sec != self.last_tray_second:
@@ -1424,9 +1370,9 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _reattribute_the_inactivity(self):
         """Reclassify the inactivity that proved the absence as rest."""
-        moved = min(self.intra_minute_focus_ms, self.idle_pause_ms)
-        self.intra_minute_focus_ms -= moved
-        self.intra_minute_rest_ot_ms += moved
+        moved = min(self.intra_ms["focus"], self.idle_pause_ms)
+        self.intra_ms["focus"] -= moved
+        self.intra_ms["rest_overtime"] += moved
 
         ended = datetime.datetime.now()
         minutes = minutes_covered(
@@ -1435,13 +1381,13 @@ class PomodoroView(ShutdownMixin, QWidget):
             return
 
         stored = len(minutes) * MS_PER_MINUTE
-        self.live_focus_ms = max(0, self.live_focus_ms - stored)
-        self.live_rest_ot_ms += stored
+        self.live_ms["focus"] = max(0, self.live_ms["focus"] - stored)
+        self.live_ms["rest_overtime"] += stored
         run_in_background(self.threadpool, rewrite_as_rest,
                           self._absence_rewritten, None, self.db, minutes)
 
     def _absence_rewritten(self, payload):
-        """Apply the long breaks already spent today."""
+        """Name the minutes the service did not store as rest, then read today again."""
         written, asked = payload
         if written < asked:
             log.warning("Today still counts %d minute(s) of an absence as focus: "

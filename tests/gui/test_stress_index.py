@@ -152,9 +152,7 @@ class TestOverrides:
             [summary_row("2026-09-05", focus=120, rest=60)], {"2026-09-05": 0.4},
         ))
 
-        day = calendar.data_map["2026-09-05"]
-        assert day["override_dsi"] == 0.4
-        assert day["is_overridden"] is True
+        assert calendar.data_map["2026-09-05"]["override_dsi"] == 0.4
 
     def test_the_day_is_marked_as_overridden_rather_than_silently_replaced(self, calendar_factory):
         calendar = calendar_factory()
@@ -196,7 +194,7 @@ class TestOverrides:
             {"2026-09-05": 0.4},
         ))
 
-        assert "is_overridden" not in calendar.data_map["2026-09-04"]
+        assert "override_dsi" not in calendar.data_map["2026-09-04"]
 
 
 class TestRefresh:
@@ -207,20 +205,6 @@ class TestRefresh:
 
         assert summary == []
         assert overrides == {}
-
-    def test_a_client_without_overrides_still_works(self, calendar_factory):
-        calendar = calendar_factory()
-
-        class OverrideFreeDb:
-            def get_pomodoro_daily_summary(self):
-                return [summary_row("2026-09-05", focus=60, rest=60)]
-
-        calendar.db = OverrideFreeDb()
-
-        summary, overrides = read_day(calendar.db)
-
-        assert overrides == {}
-        assert summary[0][1] == 60
 
     def test_applying_a_new_summary_replaces_the_previous_one(self, calendar_factory):
         calendar = calendar_factory()

@@ -113,8 +113,8 @@ class TestStateRouting:
 
         advance(timer, 250)
 
-        assert timer.intra_minute_focus_ms == pytest.approx(250, abs=50)
-        assert timer.intra_minute_rest_ms == 0
+        assert timer.intra_ms["focus"] == pytest.approx(250, abs=50)
+        assert timer.intra_ms["rest"] == 0
 
 
 class TestFreshTimer:
@@ -475,25 +475,25 @@ class TestWalkingAway:
 
     def test_the_part_minute_since_the_last_one_moves_with_them(self, timer):
         timer._toggle_timer()
-        timer.intra_minute_focus_ms = 20_000
+        timer.intra_ms["focus"] = 20_000
 
         timer.idle_source = Away(timer.idle_pause_ms)
         timer._watch_for_the_member()
 
-        assert timer.intra_minute_focus_ms == 0
-        assert timer.intra_minute_rest_ot_ms == 20_000
+        assert timer.intra_ms["focus"] == 0
+        assert timer.intra_ms["rest_overtime"] == 20_000
 
     def test_the_live_totals_move_with_the_minutes(self, timer):
         timer._toggle_timer()
-        timer.live_focus_ms = 10 * 60_000
-        timer.live_rest_ot_ms = 0
+        timer.live_ms["focus"] = 10 * 60_000
+        timer.live_ms["rest_overtime"] = 0
 
         timer.idle_source = Away(timer.idle_pause_ms)
         timer._watch_for_the_member()
 
         moved = timer.idle_pause_ms
-        assert timer.live_focus_ms == 10 * 60_000 - moved
-        assert timer.live_rest_ot_ms == moved
+        assert timer.live_ms["focus"] == 10 * 60_000 - moved
+        assert timer.live_ms["rest_overtime"] == moved
 
     def test_a_rewrite_that_did_not_land_is_named_in_the_log(self, timer, recording_db,
                                                             settled, caplog):
@@ -609,7 +609,7 @@ class TestManualActionsAndHeartbeats:
     ):
         timer._toggle_timer()
         advance(timer, 500)
-        assert timer.intra_minute_focus_ms > 0
+        assert timer.intra_ms["focus"] > 0
         timer.last_logged_minute = (timer.last_logged_minute + 1) % 1440
         start_recording(recording_db)
 
@@ -620,10 +620,10 @@ class TestManualActionsAndHeartbeats:
         assert heartbeat["state"] == "focus"
         assert heartbeat["second"] == 0
         assert "mode" not in heartbeat
-        assert timer.intra_minute_focus_ms == 0, "the sub-minute counters hand over to the store"
+        assert timer.intra_ms["focus"] == 0, "the sub-minute counters hand over to the store"
 
     def test_the_live_totals_combine_stored_minutes_with_the_sub_minute_counters(self, timer):
-        timer.live_focus_ms = 120_000
+        timer.live_ms["focus"] = 120_000
         timer._toggle_timer()
 
         advance(timer, 500)

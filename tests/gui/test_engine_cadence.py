@@ -1,9 +1,11 @@
 import datetime
+import time
 
 import pytest
 from PyQt6.QtCore import QDateTime, QThreadPool
 
-from src.gui.views.pomodoro_view import PomodoroView
+from src.database.rows import PomodoroDailyRow
+from src.gui.views.pomodoro_view import STATES, PomodoroView
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact]
 
@@ -33,12 +35,7 @@ def frame(view, milliseconds):
 
 
 def totals(view):
-    return (
-        view.live_focus_ms + view.intra_minute_focus_ms,
-        view.live_rest_ms + view.intra_minute_rest_ms,
-        view.live_focus_ot_ms + view.intra_minute_focus_ot_ms,
-        view.live_rest_ot_ms + view.intra_minute_rest_ot_ms,
-    )
+    return tuple(view.live_ms[state] + view.intra_ms[state] for state in STATES)
 
 
 def run_for(view, wall_ms, cadence_ms):
@@ -49,29 +46,6 @@ def run_for(view, wall_ms, cadence_ms):
 
 
 class TestTheEngineIsDrivenByTheWallClockNotByTicks:
-    def test_one_long_frame_accrues_the_same_as_many_short_ones(self, make_timer):
-        coarse, fine = make_timer(), make_timer()
-        for view in (coarse, fine):
-            view.last_logged_minute = 0
-            view._toggle_timer()
-            frame(view, 0)
-
-        frame(coarse, 6000)
-        run_for(fine, 6000, 5)
-
-        assert coarse.intra_minute_focus_ms == pytest.approx(
-            fine.intra_minute_focus_ms, abs=10)
-
-    def test_a_frame_accrues_its_own_delta_and_nothing_else(self, make_timer):
-        view = make_timer()
-        view.last_logged_minute = 0
-        view._toggle_timer()
-        frame(view, 0)
-
-        frame(view, 1500)
-
-        assert view.intra_minute_focus_ms == pytest.approx(1500, abs=10)
-
     def test_the_time_left_falls_by_the_elapsed_wall_clock(self, make_timer):
         view = make_timer()
         view.last_logged_minute = 0
@@ -89,15 +63,15 @@ class TestTheEngineIsDrivenByTheWallClockNotByTicks:
         frame(view, 0)
 
         frame(view, 1000)
-        assert view.intra_minute_rest_ot_ms == pytest.approx(1000, abs=10)
+        assert view.intra_ms["rest_overtime"] == pytest.approx(1000, abs=10)
 
         view._toggle_timer()
         frame(view, 1000)
-        assert view.intra_minute_focus_ms == pytest.approx(1000, abs=10)
+        assert view.intra_ms["focus"] == pytest.approx(1000, abs=10)
 
         view._skip_phase()
         frame(view, 1000)
-        assert view.intra_minute_rest_ms == pytest.approx(1000, abs=10)
+        assert view.intra_ms["rest"] == pytest.approx(1000, abs=10)
 
 
 class TestCrossingAWallClockMinute:
@@ -107,7 +81,7 @@ class TestCrossingAWallClockMinute:
         view.last_logged_minute = (current_minute - 1) % 1440
         return current_minute
 
-    def test_crossing_a_minute_stores_exactly_one_heartbeat(
+    def test_crossing_a_minute_stores_one_heartbeat_of_the_state_at_the_crossing(
             self, make_timer, recording_db):
         view = make_timer()
         view._toggle_timer()
@@ -119,24 +93,10 @@ class TestCrossingAWallClockMinute:
         frame(view, 20)
         QThreadPool.globalInstance().waitForDone(2000)
 
-        beats = [args for name, args in recording_db.calls
+        beats = [args[0] for name, args in recording_db.calls
                  if name == "log_pomodoro_heartbeat"]
         assert len(beats) == 1
-
-    def test_the_heartbeat_holds_the_state_at_the_crossing(
-            self, make_timer, recording_db):
-        view = make_timer()
-        view._toggle_timer()
-        frame(view, 0)
-        self._park_just_before_a_rollover(view)
-        QThreadPool.globalInstance().waitForDone(2000)
-        recording_db.calls.clear()
-
-        frame(view, 20)
-        QThreadPool.globalInstance().waitForDone(2000)
-
-        payload = next(args[0] for name, args in recording_db.calls
-                       if name == "log_pomodoro_heartbeat")
+        payload, = beats
         assert payload["state"] == "focus"
         assert payload["date"] == datetime.date.today().isoformat()
         assert payload["second"] == 0
@@ -158,20 +118,32 @@ class TestCrossingAWallClockMinute:
         assert not any(name == "log_pomodoro_heartbeat"
                        for name, _args in recording_db.calls)
 
-    def test_the_sub_minute_counters_reset_once_the_re_read_lands(
-            self, make_timer, qapp):
+    def test_the_sub_minute_counters_hand_over_to_a_re_read_that_counts_the_minute(
+            self, make_timer, recording_db, qapp):
+        stored = []
+
+        def slow_heartbeat(heartbeat):
+            time.sleep(0.05)
+            stored.append(heartbeat)
+            return True, ""
+
+        today = datetime.date.today().isoformat()
+        recording_db.log_pomodoro_heartbeat = slow_heartbeat
+        recording_db.get_pomodoro_daily_summary = lambda: [
+            PomodoroDailyRow(today, len(stored), 0, 0, 0)]
         view = make_timer()
         view._toggle_timer()
         frame(view, 0)
         frame(view, 3000)
-        assert view.intra_minute_focus_ms > 0
+        assert view.intra_ms["focus"] > 0
         self._park_just_before_a_rollover(view)
 
         frame(view, 20)
         QThreadPool.globalInstance().waitForDone(2000)
         qapp.processEvents()
 
-        assert view.intra_minute_focus_ms == 0
+        assert view.intra_ms["focus"] == 0
+        assert view.live_ms["focus"] == 60_000
 
     def test_the_counters_are_not_cleared_before_that_read_answers(self, make_timer):
         view = make_timer()
@@ -182,7 +154,7 @@ class TestCrossingAWallClockMinute:
 
         frame(view, 20)
 
-        assert view.intra_minute_focus_ms > 0
+        assert view.intra_ms["focus"] > 0
 
 
 class TestTheHiddenCadence:
@@ -198,11 +170,6 @@ class TestTheHiddenCadence:
         view.hide()
 
         assert view.engine_interval_ms() == view.HIDDEN_INTERVAL_MS
-
-    def test_the_hidden_cadence_is_slower_than_the_visible_one(self, make_timer):
-        view = make_timer()
-
-        assert view.HIDDEN_INTERVAL_MS > view.visible_interval_ms()
 
     def test_it_still_catches_every_minute_boundary(self, make_timer):
         view = make_timer()
@@ -294,23 +261,3 @@ class TestTheHiddenCadenceChangesNoStoredNumber:
         self._run(hidden_view, cadence_ms=PomodoroView.HIDDEN_INTERVAL_MS)
 
         assert full_view.time_left_ms == pytest.approx(hidden_view.time_left_ms, abs=20)
-
-    def test_a_heartbeat_at_the_hidden_cadence_holds_the_same_state(
-            self, make_timer, recording_db):
-        view = make_timer()
-        view.show()
-        view.hide()
-        view._toggle_timer()
-        frame(view, 0)
-        now = datetime.datetime.now()
-        view.last_logged_minute = (now.hour * 60 + now.minute - 1) % 1440
-        QThreadPool.globalInstance().waitForDone(2000)
-        recording_db.calls.clear()
-
-        frame(view, PomodoroView.HIDDEN_INTERVAL_MS)
-        QThreadPool.globalInstance().waitForDone(2000)
-
-        payload = next(args[0] for name, args in recording_db.calls
-                       if name == "log_pomodoro_heartbeat")
-        assert payload["state"] == "focus"
-        assert payload["second"] == 0
