@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
 
-from src.database.rows import BeverageLogRow, DailyTotals
+from src.database.rows import BeverageLogRow, DailyTotals, ExerciseLogRow
 from src.gui.graphs.caffeine_graph import CaffeineGraphView
+from src.gui.graphs.exercise_graph import timelines_by_name
 from src.gui.graphs.food_graph import FoodGraphView
 
 pytestmark = pytest.mark.gui
@@ -318,3 +319,27 @@ class TestTheCalorieChartCanNetOffTraining:
         food_graph.set_calorie_series("gross")
 
         assert food_graph.nets_training is False
+
+
+def logged(date, name, weight=60.0):
+    return ExerciseLogRow.from_server(
+        [1, date, name, None, 5, 5, 5, 0, 0, weight, 8.0, "Legs", "Reps"])
+
+
+class TestATimelineIsReadByName:
+    ROWS = [logged("2026-09-03", "Back Squat", 70.0), logged("2026-09-02", "Bench Press"),
+            logged("2026-09-01", "back squat", 65.0), logged("2026-09-02", None)]
+
+    def test_only_the_named_movement_is_read_oldest_first(self):
+        timeline = timelines_by_name(self.ROWS, ["Back Squat"])["Back Squat"]
+
+        assert [(date, weight) for date, _v, _o, _s, weight, _r in timeline] == [
+            ("2026-09-01", 65.0), ("2026-09-03", 70.0)]
+
+    def test_an_orphan_or_unrequested_name_reads_as_nothing(self):
+        assert timelines_by_name(self.ROWS, ["Deadlift", None]) == {"Deadlift": []}
+
+    def test_a_point_carries_what_the_hover_says(self):
+        (point,) = timelines_by_name([logged("2026-09-01", "Plank")], ["Plank"])["Plank"]
+
+        assert point[1:4] == (900.0, logged("2026-09-01", "Plank").one_rep_max, "5,5,5")
