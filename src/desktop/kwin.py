@@ -2,25 +2,19 @@ import json
 import logging
 import os
 
+from src.desktop import files
+from src.desktop.session import KWIN, session_call
+
 log = logging.getLogger(__name__)
 
-SERVICE = "org.kde.KWin"
-OBJECT = "/Scripting"
-INTERFACE = "org.kde.kwin.Scripting"
-
 PLUGIN_NAME = "traker-strict-break"
+HOME_PLUGIN_NAME = "traker-window-home"
 
 
-def _default_script_path():
-    """Return a real on-disk path for the script, outliving the call."""
+def _cache_path(name):
+    """Return a path in the cache, because KWin reads a script off disk."""
     cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    return os.path.join(cache, "traker", "strict-break.js")
-
-
-def _home_script_path():
-    """Return a path beside the break's, because KWin reads a script off disk."""
-    cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    return os.path.join(cache, "traker", "window-home.js")
+    return os.path.join(cache, "traker", name)
 
 
 def _release_path(script_path):
@@ -28,8 +22,9 @@ def _release_path(script_path):
     root, extension = os.path.splitext(script_path)
     return f"{root}-release{extension or '.js'}"
 
+
 _SHARED = """
-    var target = "__APP_ID__";
+    var target = __APP_ID__;
     var wallPrefix = __WALL__;
     var wallOutputs = __WALLS__;
 
@@ -69,48 +64,9 @@ _SHARED = """
         return false;
     }
 
-    function allDesktops() {
-        try {
-            var all = workspace.desktops;
-            if (all && all.length) return all;
-        } catch (e) {}
-        return null;
-    }
-
-    function allActivities() {
-        try {
-            var all = workspace.activities;
-            if (all && all.length) return all;
-        } catch (e) {}
-        return null;
-    }
-
-    function onEveryDesktop(w) {
-        try { if (w.onAllDesktops === true) return true; } catch (e) {}
-        try {
-            if (typeof w.desktops === "undefined") return false;
-            if (w.desktops.length === 0) return true;
-            var all = allDesktops();
-            return all !== null && w.desktops.length >= all.length;
-        } catch (e) {}
-        return false;
-    }
-
-    function onEveryActivity(w) {
-        try {
-            if (typeof w.activities === "undefined") return true;
-            if (w.activities.length === 0) return true;
-            var all = allActivities();
-            return all !== null && w.activities.length >= all.length;
-        } catch (e) {}
-        return true;
-    }
-
-    function captionKey(w) {
-        var caption = String(w.caption || "");
-        if (wallOutputs[caption] !== undefined) return caption;
-        var deduped = caption.replace(/ <[0-9]+>$/, "");
-        return wallOutputs[deduped] !== undefined ? deduped : caption;
+    function connect(signal, handler) {
+        try { if (signal && typeof signal.connect === "function") signal.connect(handler); }
+        catch (e) {}
     }
 
     function outputs() {
@@ -128,14 +84,6 @@ _SHARED = """
             try { if (String(all[i].name || "") === name) return all[i]; } catch (e) {}
         }
         return null;
-    }
-
-    function sameBox(one, two) {
-        try {
-            return one && two && one.x === two.x && one.y === two.y
-                   && one.width === two.width && one.height === two.height;
-        } catch (e) {}
-        return false;
     }
 
     function onOutput(w, output) {
@@ -181,14 +129,6 @@ _SHARED = """
             if (full) w.fullScreen = true;
         } catch (e) {}
     }
-
-    function describe(w, name) {
-        try {
-            if (typeof w[name] === "undefined") return "(absent)";
-            return String(w[name]);
-        } catch (e) {}
-        return "(refused)";
-    }
 """
 
 _SCRIPT = """// Traker: keep a strict break where the member is.
@@ -198,12 +138,32 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     var holding = false;
     var adjusting = false;
 
-    function active() {
-        if (typeof workspace.activeWindow !== "undefined") return workspace.activeWindow;
-        return workspace.activeClient;
+    function ours() { return windows().filter(isBreak); }
+
+    function onEveryDesktop(w) {
+        try { return w.onAllDesktops === true; } catch (e) {}
+        return false;
     }
 
-    function ours() { return windows().filter(isBreak); }
+    function onEveryActivity(w) {
+        try { return w.activities === undefined || w.activities.length === 0; } catch (e) {}
+        return true;
+    }
+
+    function captionKey(w) {
+        var caption = String(w.caption || "");
+        if (wallOutputs[caption] !== undefined) return caption;
+        var deduped = caption.replace(/ <[0-9]+>$/, "");
+        return wallOutputs[deduped] !== undefined ? deduped : caption;
+    }
+
+    function describe(w, name) {
+        try {
+            if (typeof w[name] === "undefined") return "(absent)";
+            return String(w[name]);
+        } catch (e) {}
+        return "(refused)";
+    }
 
     function frontWindow(mine) {
         var i;
@@ -225,24 +185,6 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
         placeOn(w, outputNamed(wallOutputs[captionKey(w)]));
     }
 
-    function holdEverywhere(w) {
-        if (!onEveryDesktop(w)) call(w, "setOnAllDesktops", true);
-        if (!onEveryDesktop(w)) { try { w.onAllDesktops = true; } catch (e) {} }
-        if (!onEveryDesktop(w)) { try { w.desktops = []; } catch (e) {} }
-        if (!onEveryDesktop(w)) {
-            var desktops = allDesktops();
-            if (desktops !== null) { try { w.desktops = desktops; } catch (e) {} }
-        }
-
-        if (!onEveryActivity(w)) call(w, "setOnAllActivities", true);
-        if (!onEveryActivity(w)) call(w, "setOnActivities", []);
-        if (!onEveryActivity(w)) { try { w.activities = []; } catch (e) {} }
-        if (!onEveryActivity(w)) {
-            var activities = allActivities();
-            if (activities !== null) { try { w.activities = activities; } catch (e) {} }
-        }
-    }
-
     function follow(w) {
         if (!onEveryDesktop(w)) {
             try { w.desktops = [workspace.currentDesktop]; } catch (e) {}
@@ -255,7 +197,6 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     }
 
     function take(w) {
-        holdEverywhere(w);
         follow(w);
         if (!isWall(w)) return;
         try { w.keepAbove = true; } catch (e) {}
@@ -268,14 +209,10 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     function reportOnce(w) {
         if (reported.indexOf(w) !== -1) return;
         reported.push(w);
-        var desktops = allDesktops();
-        var activities = allActivities();
         print("traker: holding '" + String(w.caption || "") + "'"
               + " class=" + describe(w, "resourceName")
               + " popup=" + describe(w, "popupWindow")
               + " wall=" + isWall(w)
-              + " of=" + (desktops === null ? "?" : desktops.length) + "desktops/"
-              + (activities === null ? "?" : activities.length) + "activities"
               + " wanted=" + (wallOutputs[captionKey(w)] || "(any)")
               + " on=" + outputOf(w)
               + " everyDesktop=" + onEveryDesktop(w)
@@ -298,14 +235,11 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     }
 
     function activate(w) {
-        if (!w) return;
         try {
             if (typeof workspace.activeWindow !== "undefined") workspace.activeWindow = w;
             else workspace.activeClient = w;
         } catch (e) {}
-        try {
-            if (typeof workspace.raiseWindow === "function") workspace.raiseWindow(w);
-        } catch (e) {}
+        raise(w);
     }
 
     function hold() {
@@ -322,7 +256,8 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
             }
             raise(front);
 
-            var current = active();
+            var current = typeof workspace.activeWindow !== "undefined"
+                ? workspace.activeWindow : workspace.activeClient;
             if (current && isWall(current)) return;
             activate(front);
         } finally {
@@ -330,42 +265,26 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
         }
     }
 
-    var heldDesktop = null;
-    var heldActivity = null;
+    var held = {};
     var restoring = false;
-
-    function remember() {
-        try { heldDesktop = workspace.currentDesktop; } catch (e) {}
-        try { heldActivity = workspace.currentActivity; } catch (e) {}
-    }
-
     var said = {};
 
-    function refuse(what, held) {
-        if (!refuseSwitch || restoring || held === null) return false;
-        var now = null;
-        try { now = workspace[what]; } catch (e) { return false; }
-        if (now === held) return false;
+    function refuse(what) {
+        if (!refuseSwitch || restoring || !(what in held)) return;
+        try { if (workspace[what] === held[what]) return; } catch (e) { return; }
         restoring = true;
-        try { workspace[what] = held; } catch (e) {}
+        try { workspace[what] = held[what]; } catch (e) {}
         restoring = false;
         if (!said[what]) {
             said[what] = true;
             var back = false;
-            try { back = workspace[what] === held; } catch (e) {}
+            try { back = workspace[what] === held[what]; } catch (e) {}
             print("traker: refusing " + what + " changes during a break, back=" + back);
         }
-        return true;
     }
 
-    function onDesktopChanged() {
-        refuse("currentDesktop", heldDesktop);
-        hold();
-    }
-
-    function onActivityChanged() {
-        refuse("currentActivity", heldActivity);
-        hold();
+    function switched(what) {
+        return function () { refuse(what); hold(); };
     }
 
     function watch(w) {
@@ -382,14 +301,10 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
         watch(w);
     }
 
-    function connect(signal, handler) {
-        if (signal && typeof signal.connect === "function") signal.connect(handler);
-    }
-
     connect(workspace.windowAdded || workspace.clientAdded, onAdded);
     connect(workspace.windowActivated || workspace.clientActivated, hold);
-    connect(workspace.currentDesktopChanged, onDesktopChanged);
-    connect(workspace.currentActivityChanged, onActivityChanged);
+    connect(workspace.currentDesktopChanged, switched("currentDesktop"));
+    connect(workspace.currentActivityChanged, switched("currentActivity"));
     connect(workspace.screensChanged, hold);
     connect(workspace.numberScreensChanged, hold);
 
@@ -397,7 +312,8 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     for (var n = 0; n < present.length; n++) {
         if (isBreak(present[n])) watch(present[n]);
     }
-    remember();
+    try { held.currentDesktop = workspace.currentDesktop; } catch (e) {}
+    try { held.currentActivity = workspace.currentActivity; } catch (e) {}
     hold();
     print("traker: strict break holding app id '" + target + "'");
 })();
@@ -429,8 +345,6 @@ _RELEASE_SCRIPT = """// Traker: give back what a strict break held.
     print("traker: strict break gave back " + given + " window(s)");
 })();
 """
-
-HOME_PLUGIN_NAME = "traker-window-home"
 
 _HOME_SCRIPT = """// Traker: keep the application's own window on one output.
 (function () {""" + _SHARED + """
@@ -474,11 +388,6 @@ _HOME_SCRIPT = """// Traker: keep the application's own window on one output.
         place(w, why);
     }
 
-    function connect(signal, handler) {
-        try { if (signal && typeof signal.connect === "function") signal.connect(handler); }
-        catch (e) {}
-    }
-
     function watch(w) {
         if (!isHome(w) || watched.indexOf(w) !== -1) return;
         watched.push(w);
@@ -520,7 +429,7 @@ def _fill(template, app_id, focus_caption="", wall_prefix="",
           wall_outputs=None, refuse_switch=False, output="", standing=False):
     """Substitute the session names into one script source."""
     return (template
-            .replace("__APP_ID__", str(app_id).lower())
+            .replace("__APP_ID__", json.dumps(str(app_id).lower()))
             .replace("__CAPTION__", json.dumps(str(focus_caption or "")))
             .replace("__WALL__", json.dumps(str(wall_prefix or "")))
             .replace("__WALLS__", json.dumps(dict(wall_outputs or {})))
@@ -546,43 +455,17 @@ def release_source(app_id, wall_prefix="", standing=False):
     return _fill(_RELEASE_SCRIPT, app_id, wall_prefix=wall_prefix,
                  standing=standing)
 
-CALL_TIMEOUT_MS = 1000
-
 
 def _session_caller(method, *args):
-    from PyQt6.QtDBus import QDBus, QDBusConnection, QDBusMessage
-
-    bus = QDBusConnection.sessionBus()
-    if not bus.isConnected():
-        return False, None
-
-    message = QDBusMessage.createMethodCall(SERVICE, OBJECT, INTERFACE, method)
-    if args:
-        message.setArguments(list(args))
-
-    reply = bus.call(message, QDBus.CallMode.Block, CALL_TIMEOUT_MS)
-    if reply.type() != QDBusMessage.MessageType.ReplyMessage:
-        log.debug("KWin refused %s: %s", method, reply.errorMessage())
-        return False, None
-
-    answered = reply.arguments()
-    return True, (answered[0] if answered else None)
+    return session_call(KWIN, "/Scripting", "org.kde.kwin.Scripting", method, *args)
 
 
-def run_script(source, path, plugin=PLUGIN_NAME, caller=None):
-    """Write one script, load it and start it."""
-    call = caller or _session_caller
+def _start(call, source, path, plugin):
+    """Write one script, load it and start it: (started, what KWin answered)."""
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(source)
+        files.write(path, source)
     except OSError as e:
         return False, f"could not write {path}: {e}"
-
-    reached, _ = call("unloadScript", plugin)
-    if not reached:
-        return False, ("no org.kde.kwin.Scripting on this session: KWin did "
-                       "not answer unloadScript at all")
 
     reached, script_id = call("loadScript", path, plugin)
     if not reached:
@@ -591,22 +474,32 @@ def run_script(source, path, plugin=PLUGIN_NAME, caller=None):
         return False, (f"KWin answered {script_id} for loadScript, which means "
                        f"a script called {plugin!r} is already loaded")
 
-    reached, _ = call("start")
-    if not reached:
+    if not call("start")[0]:
         call("unloadScript", plugin)
         return False, "KWin loaded the script and refused to start it"
     return True, f"loaded as {plugin} (id {script_id})"
 
 
+def _reported(started, why) -> bool:
+    log.log(logging.INFO if started else logging.WARNING, "KWin script: %s", why)
+    return started
+
+
 def unload_script(plugin=PLUGIN_NAME, caller=None) -> bool:
-    reached, _ = (caller or _session_caller)("unloadScript", plugin)
-    return reached
+    """Unload one script, reporting whether KWin answered at all."""
+    return (caller or _session_caller)("unloadScript", plugin)[0]
 
 
-def release_stale_hold() -> bool:
-    """Drop a script a killed client left behind."""
-    reached, _ = _session_caller("unloadScript", PLUGIN_NAME)
-    return reached
+release_stale_hold = unload_script
+
+
+def run_script(source, path, plugin=PLUGIN_NAME, caller=None):
+    """Unload a stale script of the same name, then write, load and start this one."""
+    call = caller or _session_caller
+    if not unload_script(plugin, call):
+        return False, ("no org.kde.kwin.Scripting on this session: KWin did "
+                       "not answer unloadScript at all")
+    return _start(call, source, path, plugin)
 
 
 class WindowScreen:
@@ -617,59 +510,29 @@ class WindowScreen:
         self.caption = str(caption or "")
         self.output = str(output or "").strip()
         self._call = caller or _session_caller
-        self.script_path = script_path or _home_script_path()
-        self._engaged = False
-
-    @property
-    def engaged(self) -> bool:
-        return self._engaged
+        self.script_path = script_path or _cache_path("window-home.js")
+        self.engaged = False
 
     def engage(self) -> bool:
-        # A script KWin loaded for a client that has died stays loaded; this also probes for KWin.
-        reached, _ = self._call("unloadScript", HOME_PLUGIN_NAME)
-        self._engaged = False
-        if not reached:
+        if not self.release():
             log.debug("No KWin scripting interface: the window stays on "
                       "whatever output the compositor gave it.")
             return False
-
         if not (self.app_id and self.caption and self.output):
             return False
-
-        source = home_source(self.app_id, self.caption, self.output)
-        try:
-            os.makedirs(os.path.dirname(self.script_path), exist_ok=True)
-            with open(self.script_path, "w", encoding="utf-8") as f:
-                f.write(source)
-        except OSError as e:
-            log.warning("Could not write %s: %s", self.script_path, e)
-            return False
-
-        reached, script_id = self._call("loadScript", self.script_path,
-                                        HOME_PLUGIN_NAME)
-        if not reached:
-            return False
-        if isinstance(script_id, int) and script_id < 0:
-            log.warning("KWin would not load %s.", self.script_path)
-            return False
-
-        reached, _ = self._call("start")
-        if not reached:
-            self._call("unloadScript", HOME_PLUGIN_NAME)
-            return False
-
-        self._engaged = True
-        log.info("KWin is keeping Traker's window on %s.", self.output)
-        return True
+        self.engaged = _reported(*_start(
+            self._call, home_source(self.app_id, self.caption, self.output),
+            self.script_path, HOME_PLUGIN_NAME))
+        return self.engaged
 
     def release(self) -> bool:
-        reached, _ = self._call("unloadScript", HOME_PLUGIN_NAME)
-        self._engaged = False
-        return reached
+        """Unload the script, a crashed run's too, reporting whether KWin answered."""
+        self.engaged = False
+        return unload_script(HOME_PLUGIN_NAME, self._call)
 
 
 class KWinPin:
-    """Holds a strict break on every desktop and activity, for its length."""
+    """Holds a strict break's windows in front, and where the member is, for its length."""
 
     def __init__(self, app_id, caller=None, script_path=None, focus_caption="",
                  wall_prefix="", wall_outputs=None, refuse_switch=False):
@@ -679,13 +542,9 @@ class KWinPin:
         self.wall_outputs = dict(wall_outputs or {})
         self.refuse_switch = bool(refuse_switch)
         self._call = caller or _session_caller
-        self.script_path = script_path or _default_script_path()
+        self.script_path = script_path or _cache_path("strict-break.js")
         self.release_path = _release_path(self.script_path)
-        self._engaged = False
-
-    @property
-    def engaged(self) -> bool:
-        return self._engaged
+        self.engaged = False
 
     def engage(self, focus_caption=None, wall_outputs=None) -> bool:
         if focus_caption is not None:
@@ -693,78 +552,26 @@ class KWinPin:
         if wall_outputs is not None:
             self.wall_outputs = dict(wall_outputs)
 
+        self.engaged = False
         if not self.app_id:
             log.debug("No app id to hold: not asking KWin for anything.")
             return False
-
-        if not self._unload():
-            log.debug("No KWin scripting interface: the break holds one desktop only.")
+        if not unload_script(PLUGIN_NAME, self._call):
+            log.debug("No KWin scripting interface: no script holds the break.")
             return False
 
-        self._engaged = False
-
-        if not self._write(self.script_path,
-                           script_source(self.app_id, self.focus_caption,
-                                         self.wall_prefix, self.wall_outputs,
-                                         self.refuse_switch)):
-            return False
-
-        reached, script_id = self._call("loadScript", self.script_path, PLUGIN_NAME)
-        if not reached:
-            return False
-        if isinstance(script_id, int) and script_id < 0:
-            log.warning("KWin would not load %s.", self.script_path)
-            return False
-
-        reached, _ = self._call("start")
-        if not reached:
-            self._unload()
-            return False
-
-        self._engaged = True
-        log.info("KWin is holding the strict break on every desktop.")
-        return True
+        self.engaged = _reported(*_start(
+            self._call, script_source(self.app_id, self.focus_caption, self.wall_prefix,
+                                      self.wall_outputs, self.refuse_switch),
+            self.script_path, PLUGIN_NAME))
+        return self.engaged
 
     def release(self, standing=False) -> bool:
-        """Unload the script, then give back what it held."""
-        answered = self._unload()
-        self._engaged = False
-        if answered:
-            self._give_back(standing)
+        """Unload the script, then run the undo once, leaving a standing wall in front."""
+        self.engaged = False
+        answered = unload_script(PLUGIN_NAME, self._call)
+        if answered and self.app_id and _reported(*_start(
+                self._call, release_source(self.app_id, self.wall_prefix, standing),
+                self.release_path, PLUGIN_NAME)):
+            unload_script(PLUGIN_NAME, self._call)
         return answered
-
-    def _give_back(self, standing=False) -> bool:
-        """Run the undo once, leaving a standing wall in front."""
-        if not self.app_id:
-            return False
-
-        if not self._write(self.release_path,
-                           release_source(self.app_id, self.wall_prefix, standing)):
-            return False
-
-        reached, script_id = self._call("loadScript", self.release_path, PLUGIN_NAME)
-        if not reached:
-            return False
-        if isinstance(script_id, int) and script_id < 0:
-            log.warning("KWin would not load %s: a window it held keeps the "
-                        "properties the break gave it.", self.release_path)
-            return False
-
-        reached, _ = self._call("start")
-        self._unload()
-        return reached
-
-    def _unload(self) -> bool:
-        """Report whether KWin was reached."""
-        reached, _ = self._call("unloadScript", PLUGIN_NAME)
-        return reached
-
-    def _write(self, path, source) -> bool:
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(source)
-        except OSError as e:
-            log.warning("Could not write the strict-break script %s: %s", path, e)
-            return False
-        return True

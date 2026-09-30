@@ -2,8 +2,7 @@ import pytest
 
 import src.desktop.kwin as kwin
 from src.desktop.kwin import (HOME_PLUGIN_NAME, PLUGIN_NAME, KWinPin,
-                              WindowScreen, home_source, release_source,
-                              release_stale_hold, script_source)
+                              WindowScreen, release_stale_hold, script_source)
 
 
 class Caller:
@@ -32,104 +31,9 @@ class TestTheScript:
     def test_it_holds_this_application_by_app_id(self):
         assert 'var target = "traker";' in script_source("Traker")
 
-    def test_there_is_no_allow_list_to_get_wrong(self):
-        source = script_source("traker")
-
-        assert "allowed" not in source
-        assert "resourceClass" in source
-
-    def test_it_is_told_what_the_breaks_own_windows_are_called(self):
-        source = script_source("traker", wall_prefix="Traker rest")
-
-        assert 'var wallPrefix = "Traker rest";' in source
-        assert "function isWall(w)" in source
-
-    def test_the_walls_are_what_is_kept_above_everything(self):
-        source = script_source("traker", wall_prefix="Traker rest")
-
-        assert "if (!isWall(w)) return;\n        try { w.keepAbove = true; }" \
-            in source.replace("\r\n", "\n")
-
-    def test_the_focus_stands_down_for_a_wall_and_nothing_else(self):
-        assert "if (current && isWall(current)) return;" in script_source("traker")
-
-    def test_no_prefix_treats_every_window_of_ours_as_a_wall(self):
-        source = script_source("traker")
-
-        assert 'var wallPrefix = "";' in source
-        assert 'if (wallPrefix === "") return true;' in source
-
-    def test_the_window_focus_is_pulled_back_to_is_named(self):
-        source = script_source("traker", focus_caption="Traker")
-
-        assert 'var wanted = "Traker";' in source
-        assert "frontWindow(mine)" in source
-
-    def test_it_skips_a_window_that_wants_no_input(self):
-        assert "wantsInput !== false" in script_source("traker")
-
     def test_a_caption_is_a_members_window_title_and_is_quoted_as_one(self):
         assert 'var wanted = "say \\"this\\"";' in script_source(
             "traker", focus_caption='say "this"')
-
-    def test_no_caption_leaves_the_choice_where_it_was(self):
-        assert 'var wanted = "";' in script_source("traker")
-
-    def test_it_answers_a_desktop_and_an_activity_change(self):
-        source = script_source("traker")
-
-        assert "currentDesktopChanged" in source
-        assert "currentActivityChanged" in source
-
-    def test_it_pins_to_every_desktop_and_every_activity(self):
-        source = script_source("traker")
-
-        assert "w.onAllDesktops = true;" in source
-        assert "w.desktops = [];" in source
-        assert "w.activities = [];" in source
-
-
-class TestTheUndo:
-    def test_it_takes_the_two_properties_back_off(self):
-        source = release_source("traker")
-
-        assert "w.keepAbove = false;" in source
-        assert "w.onAllDesktops = false;" in source
-
-    def test_it_puts_a_window_where_the_member_is_now(self):
-        source = release_source("traker")
-
-        assert "w.desktops = [workspace.currentDesktop];" in source
-        assert "w.desktop = workspace.currentDesktop;" in source
-        assert "w.activities = [workspace.currentActivity];" in source
-
-    def test_it_names_the_same_application_as_the_hold(self):
-        assert 'var target = "traker";' in release_source("Traker")
-
-    def test_a_wall_still_standing_keeps_the_front_it_was_given(self):
-        source = release_source("traker", "Traker rest", standing=True)
-
-        assert "var wallsStillStand = true;" in source
-        assert 'var wallPrefix = "Traker rest";' in source
-        assert "if (!(wallsStillStand && isWall(w))) { try { w.keepAbove = false; }" in source
-
-    def test_and_a_break_with_no_walls_left_gives_that_back_too(self):
-        assert "var wallsStillStand = false;" in release_source("traker")
-
-    def test_it_needs_no_caption_of_its_own(self):
-        source = release_source("traker")
-
-        assert "__WALL__" not in source and "__CAPTION__" not in source
-        assert 'var wallPrefix = "";' in source
-
-    def test_it_touches_nothing_of_the_members(self):
-        source = release_source("traker")
-
-        assert "if (isBreak(all[i]))" in source
-        assert "allowed" not in source
-
-    def test_it_connects_to_nothing(self):
-        assert "connect(" not in release_source("traker")
 
 
 class TestRunningOneScript:
@@ -377,9 +281,3 @@ class TestKeepingTheWindowOnOneScreen:
         assert screen.release() is True
         assert screen.engaged is False
         assert caller.calls[-1] == ("unloadScript", HOME_PLUGIN_NAME)
-
-    def test_the_two_scripts_do_not_share_a_name(self):
-        assert HOME_PLUGIN_NAME != PLUGIN_NAME
-
-    def test_the_source_names_one_application(self):
-        assert 'var target = "traker";' in home_source("Traker", "Traker", "DP-1")

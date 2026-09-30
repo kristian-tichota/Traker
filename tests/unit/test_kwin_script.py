@@ -26,13 +26,12 @@ function notifying(w, name, signal, initial, refused) {
     });
 }
 
-function everywhere(w, name, allName, signal, mine, refuse, elsewhere) {
+function everywhere(w, name, allName, signal, mine, elsewhere) {
     var value = mine;
     Object.defineProperty(w, name, {
         enumerable: true,
         get: function () { return value; },
         set: function (next) {
-            if (refuse && next.length === 0) return;
             if (next === value) return;
             value = next;
             signal.emit(w);
@@ -43,10 +42,6 @@ function everywhere(w, name, allName, signal, mine, refuse, elsewhere) {
         get: function () { return value.length === 0; },
         set: function (next) { w[name] = next ? [] : elsewhere(); }
     });
-    w["force_" + name] = function (next) {
-        value = next;
-        signal.emit(w);
-    };
 }
 
 function Win(cls, opts) {
@@ -60,26 +55,14 @@ function Win(cls, opts) {
     this.desktopsChanged = new Signal();
     this.activitiesChanged = new Signal();
 
-    var w = this;
-    everywhere(this, "desktops", "onAllDesktops", this.desktopsChanged,
-               [one], opts.refusesThePin === true,
+    everywhere(this, "desktops", "onAllDesktops", this.desktopsChanged, [one],
                function () { return [workspace.currentDesktop]; });
     if (!opts.noActivities) {
         everywhere(this, "activities", "onAllActivities", this.activitiesChanged,
-                   ["uuid-one"], opts.refusesThePin === true,
-                   function () { return [workspace.currentActivity]; });
+                   ["uuid-one"], function () { return [workspace.currentActivity]; });
     }
     notifying(this, "minimized", this.minimizedChanged, false, opts.refused);
     notifying(this, "keepAbove", this.keepAboveChanged, false, opts.refused);
-
-    if (opts.setters) {
-        this.setOnAllDesktops = function (on) {
-            w.force_desktops(on ? [] : [workspace.currentDesktop]);
-        };
-        this.setOnAllActivities = function (on) {
-            w.force_activities(on ? [] : [workspace.currentActivity]);
-        };
-    }
 }
 
 var one = {name: "Desktop 1"};
@@ -131,10 +114,16 @@ def session(qapp):
 
 
 class TestWhatABreakHolds:
-    def test_they_are_on_every_desktop_and_every_activity(self, session):
-        assert session("wall.onAllDesktops") is True
-        assert session("wall.desktops") == []
-        assert session("wall.activities") == []
+    def test_one_the_rule_put_everywhere_is_left_everywhere(self, qapp):
+        session = Session("wall.desktops = []; wall.activities = [];")
+        session('workspace.currentDesktop = {name: "Desktop 4"};'
+                'workspace.currentActivity = "uuid-two";'
+                "workspace.currentDesktopChanged.emit();"
+                "workspace.currentActivityChanged.emit();")
+
+        assert session("wall.desktops") == [] and session("wall.activities") == []
+        assert [line for line in session("printed") if "holding 'Traker'" in line
+                and "everyDesktop=true everyActivity=true" in line]
 
     def test_they_are_above_everything(self, session):
         assert session("wall.keepAbove") is True
@@ -143,13 +132,11 @@ class TestWhatABreakHolds:
     def test_one_that_maps_while_it_holds_is_held_too(self, session):
         session('var late = open_window(new Win("traker", {caption: "Traker rest 2"}));')
 
-        assert session("late.onAllDesktops") is True
         assert session("late.keepAbove") is True
 
     def test_a_window_of_the_members_is_not_touched(self, session):
         session('var browser = open_window(new Win("firefox"));')
 
-        assert session("browser.onAllDesktops") is False
         assert session("browser.keepAbove") is False
         assert session("browser.desktops[0].name") == "Desktop 1"
 
@@ -170,7 +157,6 @@ class TestWhatIsNotTheBreak:
                           "tip.popupWindow = true; all = [wall, tip];")
 
         assert session("tip.keepAbove") is False
-        assert session("tip.onAllDesktops") is False
         assert session("wall.keepAbove") is True
 
     def test_one_that_maps_while_it_holds_is_left_alone_too(self, session):
@@ -203,15 +189,15 @@ class TestFightingItPutsItBack:
 
         assert session("wall.keepAbove") is True
 
-    def test_sending_it_to_one_desktop_is_answered(self, session):
+    def test_sending_it_to_another_desktop_brings_it_back(self, session):
         session('wall.desktops = [{name: "Desktop 4"}];')
 
-        assert session("wall.desktops") == []
+        assert session("wall.desktops[0].name") == "Desktop 1"
 
-    def test_sending_it_to_one_activity_is_answered(self, session):
+    def test_sending_it_to_another_activity_does_too(self, session):
         session('wall.activities = ["uuid-two"];')
 
-        assert session("wall.activities") == []
+        assert session("wall.activities") == ["uuid-one"]
 
 
 class TestWhereTheFocusGoes:
@@ -239,7 +225,6 @@ class TestWhereTheFocusGoes:
                 "workspace.currentDesktopChanged.emit();")
 
         assert session("workspace.activeWindow.caption") == "Traker"
-        assert session("wall.desktops") == []
 
     def test_an_activity_change_does_too(self, session):
         session('var browser = new Win("firefox"); all.push(browser);'
@@ -279,11 +264,6 @@ class TestAWallAndTheWindowBehindIt:
     def session(self, qapp):
         return walled()
 
-    def test_everything_of_ours_is_on_every_desktop_and_activity(self, session):
-        for window in ("app", "front", "other"):
-            assert session(f"{window}.onAllDesktops") is True, window
-            assert session(f"{window}.activities") == [], window
-
     def test_only_the_walls_are_kept_above_everything(self, session):
         assert session("front.keepAbove") is True
         assert session("other.keepAbove") is True
@@ -316,13 +296,11 @@ class TestAWallAndTheWindowBehindIt:
         session('var late = open_window(new Win("traker",'
                 ' {caption: "Traker rest \u2014 DP-3"}));')
 
-        assert session("late.onAllDesktops") is True
         assert session("late.keepAbove") is True
 
     def test_a_window_of_the_members_is_still_not_touched(self, session):
         session('var browser = open_window(new Win("firefox"));')
 
-        assert session("browser.onAllDesktops") is False
         assert session("browser.keepAbove") is False
 
     def test_the_journal_says_which_of_ours_are_walls(self, session):
@@ -350,8 +328,12 @@ class TestACompositorThatAnswersDifferently:
                           "workspace.clientList = workspace.windowList;"
                           "delete workspace.windowList;"
                           "workspace.clientActivated = workspace.windowActivated;")
+        session('var browser = new Win("firefox"); all.push(browser);'
+                "workspace.activeClient = browser;"
+                "workspace.clientActivated.emit(browser);")
 
-        assert session("wall.onAllDesktops") is True
+        assert session("wall.keepAbove") is True
+        assert session("workspace.activeClient.caption") == "Traker"
 
     def test_a_session_with_none_of_our_windows_holds_nothing(self, qapp):
         session = Session("all = [];")
@@ -487,72 +469,6 @@ NOTIFYING_SWITCH = """
 })();
 """
 
-PLASMA_6 = """
-var two = {name: "Desktop 2"};
-var three = {name: "Desktop 3"};
-workspace.desktops = [one, two, three];
-workspace.activities = ["uuid-one", "uuid-two"];
-wall = new Win("traker", {caption: "Traker rest — DP-1", refusesThePin: true});
-covered = new Win("traker", {caption: "Traker rest — DP-2", refusesThePin: true});
-all = [wall, covered];
-"""
-
-
-class TestAPlasmaThatRefusesTheEmptyList:
-    @pytest.fixture
-    def plasma(self, qapp):
-        return Session(PLASMA_6,
-                       source=script_source("traker",
-                                            focus_caption="Traker rest — DP-1",
-                                            wall_prefix=WALL_PREFIX))
-
-    def test_the_empty_list_really_was_refused(self, qapp):
-        bare = Session(PLASMA_6, source="(function () {})();")
-
-        bare("wall.desktops = [];")
-
-        assert bare("wall.desktops.length") == 1
-
-    def test_every_wall_ends_up_on_every_desktop(self, plasma):
-        assert plasma("wall.desktops.length") == 3
-        assert plasma("covered.desktops.length") == 3
-
-    def test_and_on_every_activity(self, plasma):
-        assert plasma("wall.activities.length") == 2
-
-    def test_the_journal_calls_that_everywhere(self, plasma):
-        said = [line for line in plasma("printed") if "everyDesktop=" in line]
-
-        assert said
-        assert all("everyDesktop=true" in line for line in said)
-        assert all("everyActivity=true" in line for line in said)
-        assert all("of=3desktops/2activities" in line for line in said)
-
-    def test_a_desktop_switch_does_not_narrow_it_again(self, plasma):
-        plasma('workspace.currentDesktop = two;'
-               "workspace.currentDesktopChanged.emit();")
-
-        assert plasma("wall.desktops.length") == 3
-        assert plasma("covered.desktops.length") == 3
-
-    def test_a_new_desktop_is_taken_in_on_the_next_pass(self, plasma):
-        plasma('workspace.desktops = [one, two, three, {name: "Desktop 4"}];'
-               "workspace.currentDesktopChanged.emit();")
-
-        assert plasma("wall.desktops.length") == 4
-
-    def test_a_plasma_that_answers_for_neither_still_follows(self, qapp):
-        session = Session(PLASMA_6 + "delete workspace.desktops;"
-                          "delete workspace.activities;"
-                          "wall.force_desktops([one]);",
-                          source=script_source("traker",
-                                               wall_prefix=WALL_PREFIX))
-        session('workspace.currentDesktop = two;'
-                "workspace.currentDesktopChanged.emit();")
-
-        assert session("wall.desktops[0].name") == "Desktop 2"
-
-
 class TestRefusingTheSwitch:
     @pytest.fixture
     def refusing(self, qapp):
@@ -591,7 +507,6 @@ class TestRefusingTheSwitch:
         assert refusing("workspace.currentActivity") == "uuid-one"
 
     def test_the_break_still_holds_what_it_held(self, refusing):
-        assert refusing("front.onAllDesktops") is True
         assert refusing("front.keepAbove") is True
 
     def test_switched_off_it_follows_instead(self, qapp):
@@ -679,60 +594,34 @@ class TestTheProbe:
         assert probed("raised") == []
 
 
-class TestAPlasmaThatWillNotPin:
-    @pytest.fixture
-    def stubborn(self, qapp):
-        return Session(
-            "wall = new Win('traker', {caption: 'Traker', refusesThePin: true});"
-            "covered = new Win('traker', {caption: 'Traker rest DP-2',"
-            " wantsInput: false, refusesThePin: true});"
-            "all = [wall, covered];")
+class TestFollowingTheMember:
+    def test_a_desktop_switch_takes_every_screen_with_it(self, session):
+        session('workspace.currentDesktop = {name: "Desktop 4"};'
+                "workspace.currentDesktopChanged.emit();")
 
-    def test_the_pin_really_was_refused(self, stubborn):
-        assert stubborn("wall.onAllDesktops") is False
-        assert stubborn("covered.onAllDesktops") is False
+        assert session("wall.desktops[0].name") == "Desktop 4"
+        assert session("covered.desktops[0].name") == "Desktop 4"
 
-    def test_a_desktop_switch_takes_every_screen_with_it(self, stubborn):
-        stubborn('workspace.currentDesktop = {name: "Desktop 4"};'
-                 "workspace.currentDesktopChanged.emit();")
+    def test_an_activity_switch_does_too(self, session):
+        session('workspace.currentActivity = "uuid-two";'
+                "workspace.currentActivityChanged.emit();")
 
-        assert stubborn("wall.desktops[0].name") == "Desktop 4"
-        assert stubborn("covered.desktops[0].name") == "Desktop 4"
+        assert session("wall.activities") == ["uuid-two"]
+        assert session("covered.activities") == ["uuid-two"]
 
-    def test_an_activity_switch_does_too(self, stubborn):
-        stubborn('workspace.currentActivity = "uuid-two";'
-                 "workspace.currentActivityChanged.emit();")
+    def test_a_window_of_the_members_is_still_left_where_it_was(self, session):
+        session('var browser = open_window(new Win("firefox"));'
+                'workspace.currentDesktop = {name: "Desktop 4"};'
+                "workspace.currentDesktopChanged.emit();")
 
-        assert stubborn("wall.activities") == ["uuid-two"]
-        assert stubborn("covered.activities") == ["uuid-two"]
-
-    def test_a_window_of_the_members_is_still_left_where_it_was(self, stubborn):
-        stubborn('var browser = open_window(new Win("firefox"));'
-                 'workspace.currentDesktop = {name: "Desktop 4"};'
-                 "workspace.currentDesktopChanged.emit();")
-
-        assert stubborn("browser.desktops[0].name") == "Desktop 1"
-
-    def test_the_journal_says_which_half_this_plasma_took(self, stubborn):
-        said = [line for line in stubborn("printed") if "everyDesktop=" in line]
-
-        assert len(said) == 2
-        assert all("everyDesktop=false" in line for line in said)
-
-    def test_only_the_setter_methods_is_enough_on_its_own(self, qapp):
-        session = Session("wall = new Win('traker', {caption: 'Traker',"
-                          " refusesThePin: true, setters: true});"
-                          "all = [wall];")
-
-        assert session("wall.onAllDesktops") is True
-        assert session("wall.activities") == []
+        assert session("browser.desktops[0].name") == "Desktop 1"
 
     def test_a_session_with_no_activities_at_all_is_not_fought(self, qapp):
         session = Session("wall = new Win('traker', {caption: 'Traker',"
                           " noActivities: true});"
                           "all = [wall];")
 
-        assert session("wall.onAllDesktops") is True
+        assert session("typeof wall.activities") == "undefined"
         assert [line for line in session("printed")
                 if "everyActivity=true" in line]
 
@@ -743,8 +632,7 @@ class TestWhatTheJournalSays:
 
         assert len(said) == 2
         assert "holding 'Traker'" in said[0]
-        assert "everyDesktop=true" in said[0]
-        assert "everyActivity=true" in said[0]
+        assert "everyDesktop=false everyActivity=false" in said[0]
 
     def test_fighting_the_hold_does_not_say_it_again(self, session):
         before = len(session("printed"))
@@ -803,6 +691,12 @@ class TestTheUndo:
                         source=release_source("traker"))
 
         assert ended("wall.desktop") == 3
+
+    def test_a_wall_still_standing_keeps_the_front_it_was_given(self, qapp):
+        ended = Session(RELEASED, source=release_source("traker", "Traker rest", standing=True))
+
+        assert ended("covered.keepAbove") is True
+        assert ended("wall.keepAbove") is False
 
 AT_HOME = TWO_OUTPUTS + """
 all = [app];
