@@ -197,8 +197,6 @@ def test_idle_cpu_of_the_whole_window(qapp, live_client, settled):
 
     restored = []
     for timer in window.findChildren(QTimer):
-        if timer is window._reveal_poll:
-            continue
         restored.append((timer, timer.interval(), timer.isActive()))
         timer.start(30)
     timer_engine = window.views.get("pomodoro")

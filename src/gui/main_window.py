@@ -1,10 +1,11 @@
 import logging
 import os
+from functools import partial
 from importlib import import_module
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
                              QLabel, QSizePolicy, QSystemTrayIcon)
-from PyQt6.QtCore import Qt, QSize, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QFont
 
 from src.gui.views.food_views import FoodView
@@ -32,7 +33,7 @@ from src.desktop import rest_queue
 from src.gui.commands import (BREAK_LONG, COMMANDS, QUEUE_ADD, QUEUE_CLEAR,
                               QUEUE_REMOVE, RESET, CommandError, resolve)
 from src.gui.filtering import FilterError
-from src.gui.workers import run_in_background
+from src.gui.workers import run_in_background, watched
 from src.database import REQUEST_TIMEOUT_S
 from src.config import PALETTE
 from src.profile import UserProfile, get_qt_key
@@ -283,8 +284,7 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(self.status_row)
 
         self.tab_animator = TabFadeManager(self.tabs, duration=180)
-        self._reveal_poll = QTimer(self)
-        self._reveal_poll.timeout.connect(self._on_reveal_poll)
+        self._veils = 0
         self.status_pulser = StatusBarPulser(
             status_bar=self.status_bar,
             base_bg_hex=PALETTE['base2'],
@@ -380,8 +380,6 @@ class MainWindow(QMainWindow):
             self.mark_all_tabs_stale()
         self.status_pulser.pulse(PALETTE['cyan'])
         self.status_bar.setText(" Real-time sync: Catalog definitions updated.")
-
-    REVEAL_POLL_MS = 16
 
     SHUTDOWN_GRACE_MS = (REQUEST_TIMEOUT_S * 1000) + 500
 
@@ -671,28 +669,25 @@ class MainWindow(QMainWindow):
         self._refresh_tab(index, veil=False)
 
     def _refresh_tab(self, index, veil: bool):
-        """Dispatch the refresh of tab index, veiled or in place."""
+        """Dispatch the refresh of tab index, veiled until its reads land or in place."""
         widget = self.tabs.widget(index)
         self.dirty_tabs.discard(index)
         if not hasattr(widget, "refresh"):
             return
-
-        if veil:
-            self.tab_animator.cover(index)
-            self.status_bar.setText(" Reading…")
-        widget.refresh()
-        if veil:
-            self._settle_tab_when_read(index, widget)
-
-    def _settle_tab_when_read(self, index, widget):
-        """Reveal the tab once its refresh has landed."""
-        self._reveal_poll.start(self.REVEAL_POLL_MS)
-
-    def _on_reveal_poll(self):
-        """Uncover the visible tab once nothing is still being read for it."""
-        if QThreadPool.globalInstance().activeThreadCount() > 0:
+        if not veil:
+            widget.refresh()
             return
-        self._reveal_poll.stop()
+
+        self.tab_animator.cover(index)
+        self.status_bar.setText(" Reading…")
+        self._veils += 1
+        with watched(partial(self._on_tab_read, self._veils)):
+            widget.refresh()
+
+    def _on_tab_read(self, veil):
+        """Uncover the tab once the reads its refresh started have all delivered."""
+        if veil != self._veils:
+            return
         self.tab_animator.reveal()
         if self.status_bar.text() == " Reading…":
             self.status_bar.setText("")

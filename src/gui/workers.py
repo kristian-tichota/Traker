@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-
 import logging
 import traceback
+from contextlib import contextmanager
+
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal, pyqtSlot
 
 log = logging.getLogger(__name__)
@@ -10,6 +10,8 @@ _in_flight = set()
 
 _reaper = None
 
+_watch = None
+
 
 class _Reaper(QObject):
     """Releases a finished worker, on the GUI thread."""
@@ -17,6 +19,8 @@ class _Reaper(QObject):
     @pyqtSlot(object)
     def retire(self, worker):
         _in_flight.discard(worker)
+        if worker.watch is not None:
+            worker.watch.retire(worker)
 
 
 def _reaper_instance() -> "_Reaper":
@@ -24,6 +28,34 @@ def _reaper_instance() -> "_Reaper":
     if _reaper is None:
         _reaper = _Reaper()
     return _reaper
+
+
+class _Watch:
+    """The workers one watched() block started, and whom to tell once they land."""
+
+    def __init__(self, on_landed):
+        self.out = set()
+        self.on_landed = on_landed
+        self.open = True
+
+    def retire(self, worker):
+        self.out.discard(worker)
+        if not self.out and not self.open:
+            self.on_landed()
+
+
+@contextmanager
+def watched(on_landed):
+    """Call on_landed once every worker started inside the block has delivered."""
+    global _watch
+    outer, _watch = _watch, _Watch(on_landed)
+    watch = _watch
+    try:
+        yield
+    finally:
+        _watch, watch.open = outer, False
+    if not watch.out:
+        on_landed()
 
 
 class WorkerSignals(QObject):
@@ -39,6 +71,7 @@ class DbWorker(QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
+        self.watch = None
 
     @pyqtSlot()
     def run(self):
@@ -61,6 +94,9 @@ def run_in_background(pool, fn, on_result, on_error=None, *args, **kwargs) -> Db
 
     worker.signals.finished.connect(_reaper_instance().retire)
     _in_flight.add(worker)
+    if _watch is not None:
+        worker.watch = _watch
+        _watch.out.add(worker)
     pool.start(worker)
     return worker
 
@@ -71,4 +107,4 @@ def discard(_outcome):
 
 def _log_worker_error(failure):
     error, formatted = failure
-    logging.getLogger(__name__).error("Background call failed: %s\n%s", error, formatted)
+    log.error("Background call failed: %s\n%s", error, formatted)

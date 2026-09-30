@@ -50,7 +50,6 @@ class TestTheFadeFollowsTheData:
         assert window.tab_animator.covering
 
         settled()
-        window._on_reveal_poll()
 
         assert window.tab_animator.anim.endValue() == 0
 
@@ -103,7 +102,6 @@ class TestAnInFlightReadIsNotAnEmptyLog:
         assert "Reading" in window.status_bar.text()
 
         settled()
-        window._on_reveal_poll()
 
         assert "Reading" not in window.status_bar.text()
 
@@ -115,21 +113,29 @@ class TestAnInFlightReadIsNotAnEmptyLog:
 
         window.status_bar.setText(" Saved.")
         settled()
-        window._on_reveal_poll()
 
         assert window.status_bar.text() == " Saved."
 
-    def test_the_poll_stops_once_nothing_is_in_flight(self, window, settled):
+    def test_the_veil_waits_for_the_tabs_own_read(self, window, recording_db, settled):
+        import threading
+
+        release = threading.Event()
+        rows = recording_db.get_food_logs
+        recording_db.get_food_logs = lambda since=None: release.wait(5.0) and rows(since)
         target = index_of(window, "food")
         window.dirty_tabs = {target}
         window._on_tab_changed(target)
+        try:
+            settled(50)
 
+            assert "Reading" in window.status_bar.text()
+        finally:
+            release.set()
         settled()
-        window._on_reveal_poll()
 
-        assert not window._reveal_poll.isActive()
+        assert "Reading" not in window.status_bar.text()
 
-    def test_the_poll_keeps_waiting_while_work_is_still_out(self, window):
+    def test_work_the_tab_did_not_start_does_not_hold_the_veil(self, window, qapp):
         import threading
         import time
 
@@ -138,21 +144,19 @@ class TestAnInFlightReadIsNotAnEmptyLog:
         from src.gui.workers import discard, run_in_background
 
         pool = QThreadPool.globalInstance()
-        target = index_of(window, "food")
-        window.dirty_tabs = {target}
-        window._on_tab_changed(target)
-
         release = threading.Event()
         run_in_background(pool, release.wait, discard, None, 5.0)
         try:
+            target = index_of(window, "food")
+            window.dirty_tabs = {target}
+            window._on_tab_changed(target)
             deadline = time.monotonic() + 5.0
-            while pool.activeThreadCount() == 0 and time.monotonic() < deadline:
+            while "Reading" in window.status_bar.text() and time.monotonic() < deadline:
+                qapp.processEvents()
                 time.sleep(0.001)
-            assert pool.activeThreadCount() > 0, "the held worker never started"
 
-            window._on_reveal_poll()
-
-            assert window._reveal_poll.isActive()
+            assert "Reading" not in window.status_bar.text()
+            assert pool.activeThreadCount() > 0, "the unrelated worker is still out"
         finally:
             release.set()
             pool.waitForDone(5000)
@@ -424,7 +428,6 @@ class TestTheVeilDrivesTheArc:
         window._on_tab_changed(target)
 
         settled()
-        window._on_reveal_poll()
 
         assert not window.tab_animator.overlay.spinner._timer.isActive()
 

@@ -32,7 +32,6 @@ def window(qapp, live_client, settled):
     built.resize(1200, 800)
     built.show()
     settled()
-    built._on_reveal_poll()
     yield built
     built.close()
     built.deleteLater()
@@ -43,7 +42,6 @@ def food_tab(qapp, window, settled):
     index = window.tab_indices["food"]
     window.tabs.setCurrentIndex(index)
     settled()
-    window._on_reveal_poll()
     deadline = time.perf_counter() + 5.0
     while window.tab_animator.covering and time.perf_counter() < deadline:
         qapp.processEvents()
@@ -151,7 +149,6 @@ def test_the_arc_comes_off_when_the_chart_arrives(qapp, window, settled):
     index = window.tab_indices["food_graphs"]
     window.tabs.setCurrentIndex(index)
     settled()
-    window._on_reveal_poll()
     deadline = time.perf_counter() + 5.0
     while window.tab_animator.covering and time.perf_counter() < deadline:
         qapp.processEvents()

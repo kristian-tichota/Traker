@@ -62,7 +62,6 @@ class TestTheModeIsNamedForAsLongAsItIsActive:
 
         window._on_tab_changed(target)
         settled()
-        window._on_reveal_poll()
 
         assert window.status_bar.text() == ""
         assert "NORMAL" in window.mode_label.text()
