@@ -17,6 +17,22 @@ UNDER_RAMP_GAINING_KCAL = 600.0
 
 OVERSHOOT_RAMPS = {"salt": 3.0, "caffeine": 40.0}
 
+SWEEP_PX = 200.0
+
+
+def _sweep(colour: QColor, lighter: int, start: float, stop: float) -> QLinearGradient:
+    """Return a repeating gradient from start to stop, lit halfway along."""
+    gradient = QLinearGradient()
+    gradient.setStart(start, 0)
+    gradient.setFinalStop(stop, 0)
+    gradient.setSpread(QLinearGradient.Spread.RepeatSpread)
+    lit = colour.lighter(lighter)
+    lit.setAlpha(colour.alpha())
+    gradient.setColorAt(0.0, colour)
+    gradient.setColorAt(0.5, lit)
+    gradient.setColorAt(1.0, colour)
+    return gradient
+
 
 class AnimatedProgressBar(PausesWhenHidden, QWidget):
     """A bar that eases towards its value at 33 Hz while visible."""
@@ -177,70 +193,30 @@ class AnimatedProgressBar(PausesWhenHidden, QWidget):
         if self.max_val <= 0: return
 
         if self.metric_type == "calories":
-            net_val = max(0.0, self.displayed_value - self.displayed_burned_value)
-            net_fill_w = bar_w * min(net_val / self.max_val, 1.0)
-            gross_fill_w = bar_w * min(self.displayed_value / self.max_val, 1.0)
-            burn_w = max(0.0, gross_fill_w - net_fill_w)
-            fill_w = net_fill_w
+            fill_w = bar_w * min(self._net_value() / self.max_val, 1.0)
+            burn_w = max(0.0, bar_w * min(self.displayed_value / self.max_val, 1.0) - fill_w)
+            is_warning = self._net_value() - self.target_val > ON_TARGET_KCAL
         else:
             fill_w = bar_w * min(self.displayed_value / self.max_val, 1.0)
             burn_w = 0.0
+            is_warning = (self.metric_type in OVERSHOOT_RAMPS
+                          and self.displayed_value > self.target_val)
 
+        pulse_intensity = math.sin(self.pulse_time * (1.2 if is_warning else 0.5))
         base_color = self._get_bar_color()
-
-        is_warning = False
-        if self.metric_type == "calories":
-            net_val = max(0.0, self.displayed_value - self.displayed_burned_value)
-            if (net_val - self.target_val) > 200.0: is_warning = True
-        elif self.metric_type in ["salt", "caffeine"] and self.displayed_value > self.target_val:
-            is_warning = True
-
-        pulse_speed = 1.2 if is_warning else 0.5
-        pulse_intensity = math.sin(self.pulse_time * pulse_speed)
-
-        if is_warning: alpha = int(160 + 50 * pulse_intensity)
-        else: alpha = int(140 + 30 * pulse_intensity)
-
-        base_color.setAlpha(alpha)
+        base_color.setAlpha(int(160 + 50 * pulse_intensity) if is_warning
+                            else int(140 + 30 * pulse_intensity))
 
         if fill_w > 0:
-            grad = QLinearGradient()
-            grad_width = 200.0
-
-            offset = bar_x + (self.anim_offset * grad_width)
-
-            grad.setStart(offset, 0)
-            grad.setFinalStop(offset - grad_width, 0)
-            grad.setSpread(QLinearGradient.Spread.RepeatSpread)
-
-            lighter = base_color.lighter(115)
-            lighter.setAlpha(alpha)
-            grad.setColorAt(0.0, base_color)
-            grad.setColorAt(0.5, lighter)
-            grad.setColorAt(1.0, base_color)
-
-            painter.setBrush(QBrush(grad))
+            offset = bar_x + (self.anim_offset * SWEEP_PX)
+            painter.setBrush(QBrush(_sweep(base_color, 115, offset, offset - SWEEP_PX)))
             painter.drawRoundedRect(QRectF(bar_x, 0, fill_w, h), 2, 2)
 
-        if self.metric_type == "calories" and burn_w > 0:
+        if burn_w > 0:
             burn_color = QColor(PALETTE['orange'])
-            burn_alpha = int(130 + 30 * pulse_intensity)
-            burn_color.setAlpha(burn_alpha)
-
-            burn_grad = QLinearGradient()
-            grad_width = 200.0
-            burn_offset = (bar_x + fill_w + burn_w) - (self.anim_offset * grad_width)
-            burn_grad.setStart(burn_offset, 0)
-            burn_grad.setFinalStop(burn_offset + grad_width, 0)
-            burn_grad.setSpread(QLinearGradient.Spread.RepeatSpread)
-
-            burn_lighter = burn_color.lighter(125)
-            burn_lighter.setAlpha(burn_alpha)
-            burn_grad.setColorAt(0.0, burn_color)
-            burn_grad.setColorAt(0.5, burn_lighter)
-            burn_grad.setColorAt(1.0, burn_color)
-
-            painter.setBrush(QBrush(burn_grad))
+            burn_color.setAlpha(int(130 + 30 * pulse_intensity))
+            offset = (bar_x + fill_w + burn_w) - (self.anim_offset * SWEEP_PX)
+            painter.setBrush(QBrush(_sweep(burn_color, 125, offset, offset + SWEEP_PX)))
             painter.drawRoundedRect(QRectF(bar_x + fill_w, 0, burn_w, h), 2, 2)
 
         painter.setPen(QPen(QColor(PALETTE['base01']), 1))
