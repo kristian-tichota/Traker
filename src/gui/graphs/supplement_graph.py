@@ -40,7 +40,7 @@ def log_column_for(target: dict, columns) -> str:
 
 
 def _saturation_colour(pct: float) -> str:
-    """Return red under half the target, yellow short of it, green on it, magenta past it."""
+    """Return the bar colour for pct of target: red, yellow, green, then magenta."""
     if pct < 50:
         return PALETTE['red']
     if pct < 90:
