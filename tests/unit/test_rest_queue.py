@@ -124,5 +124,10 @@ class TestWhereItLives:
 
         assert rest_queue.path_for(profile) == os.path.expanduser("~/q.m3u")
 
+    def test_a_queue_key_that_is_not_a_table_gets_the_default(self, write_profile):
+        profile = write_profile('[strict_break]\nqueue = "/tmp/mine.m3u"\n')
+
+        assert rest_queue.path_for(profile) == rest_queue.DEFAULT_PATH
+
     def test_a_profile_that_says_nothing_gets_the_default(self, user_profile):
         assert rest_queue.path_for(user_profile) == rest_queue.DEFAULT_PATH
