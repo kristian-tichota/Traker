@@ -26,17 +26,6 @@ class DBAnalyticsMixin:
         return {date: activity.burn_kcal(point["breakdown"], weight)
                 for date, point in self.get_activity_heatmap_data(since).items()}
 
-    def get_exercise_history_by_name(self, exercise_name: str):
-        """Return one point per logged session of this movement, oldest first."""
-        timeline = []
-        for row in self.get_exercise_logs():
-            if not row.name or row.name.lower() != exercise_name.lower():
-                continue
-            timeline.append((row.date, row.volume, row.one_rep_max,
-                             row.sets_display, row.weight_kg, row.rpe))
-        timeline.sort(key=lambda point: point[0])
-        return timeline
-
     def get_activity_heatmap_data(self, since: str = None):
         """Return MET-hours above the member's own baseline, per day."""
         profile = UserProfile()
@@ -45,29 +34,15 @@ class DBAnalyticsMixin:
         tax_multiplier = activity.neat_tax_multiplier(neat_tax_percent)
 
         points = {}
-
-        def breakdown_for(date):
-            if date not in points:
-                points[date] = {"breakdown": {}}
-            return points[date]["breakdown"]
-
         for row in self.get_exercise_logs(since=since):
-            entry = breakdown_for(row.date)
-
-            if row.active_sets == 0:
-                continue
-
-            met_hours = activity.strength_met_hours(
-                row.active_sets, row.muscle_group, row.rpe, activity_level, tax_multiplier
-            )
-            entry["Exercise_MET_hrs"] = entry.get("Exercise_MET_hrs", 0.0) + met_hours
-
+            entry = points.setdefault(row.date, {"breakdown": {}})["breakdown"]
+            worked = row.active_sets
+            if worked:
+                entry["Exercise_MET_hrs"] = entry.get("Exercise_MET_hrs", 0.0) + activity.strength_met_hours(
+                    worked, row.muscle_group, row.rpe, activity_level, tax_multiplier)
         for row in self.get_mobility_logs(since=since):
-            entry = breakdown_for(row.date)
-            met_hours = activity.mobility_met_hours(
+            entry = points.setdefault(row.date, {"breakdown": {}})["breakdown"]
+            entry["Mobility"] = entry.get("Mobility", 0.0) + activity.mobility_met_hours(
                 float(row.duration_mins or 0.0), float(row.mets or 0.0),
-                activity_level, tax_multiplier,
-            )
-            entry["Mobility"] = entry.get("Mobility", 0.0) + met_hours
-
+                activity_level, tax_multiplier)
         return points

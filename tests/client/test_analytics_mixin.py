@@ -91,81 +91,29 @@ class TestDailyAggregates:
         assert StubLogSource().get_daily_aggregates() == []
 
 
-class TestExerciseHistory:
-    def test_only_the_named_movement_is_returned(self):
-        source = StubLogSource(exercise=[
-            exercise_row("2026-09-05", name="Overhead Press"),
-            exercise_row("2026-09-05", name="Plank", metric_type="Seconds"),
-        ])
-
-        timeline = source.get_exercise_history_by_name("Overhead Press")
-
-        assert len(timeline) == 1
-
-    def test_the_lookup_ignores_capitalisation(self):
-        source = StubLogSource(exercise=[exercise_row("2026-09-05")])
-
-        assert len(source.get_exercise_history_by_name("overhead press")) == 1
-
-    def test_an_orphaned_row_matches_nothing(self):
-        source = StubLogSource(exercise=[exercise_row("2026-09-05", name=None)])
-
-        assert source.get_exercise_history_by_name("Overhead Press") == []
-
-    def test_the_timeline_is_ordered_oldest_first(self):
-        source = StubLogSource(exercise=[
-            exercise_row("2026-09-05"), exercise_row("2026-09-01"), exercise_row("2026-09-03"),
-        ])
-
-        dates = [point[0] for point in source.get_exercise_history_by_name("Overhead Press")]
-        assert dates == ["2026-09-01", "2026-09-03", "2026-09-05"]
-
+class TestExerciseRowReadings:
     @pytest.mark.exact
     def test_volume_and_estimate_for_repetition_work(self):
-        source = StubLogSource(exercise=[exercise_row("2026-09-05", sets=(7, 7, 7, 0, 0))])
+        row = exercise_row("2026-09-05", sets=(7, 7, 7, 0, 0))
 
-        (date, volume, onerm, sets_str, weight, rpe) = source.get_exercise_history_by_name(
-            "Overhead Press"
-        )[0]
-
-        assert volume == pytest.approx(21 * 30.0)
-        assert onerm == pytest.approx(30.0 / (1.0278 - 0.0278 * 7))
-        assert (weight, rpe) == (30.0, 7.0)
+        assert row.volume == pytest.approx(21 * 30.0)
+        assert row.one_rep_max == pytest.approx(30.0 / (1.0278 - 0.0278 * 7))
 
     def test_trailing_empty_sets_are_trimmed_from_the_label(self):
-        source = StubLogSource(exercise=[exercise_row("2026-09-05", sets=(10, 8, 0, 0, 0))])
-
-        assert source.get_exercise_history_by_name("Overhead Press")[0][3] == "10,8"
+        assert exercise_row("2026-09-05", sets=(10, 8, 0, 0, 0)).sets_display == "10,8"
 
     def test_a_row_with_no_sets_is_labelled_zero(self):
-        source = StubLogSource(exercise=[exercise_row("2026-09-05", sets=(0, 0, 0, 0, 0))])
-
-        assert source.get_exercise_history_by_name("Overhead Press")[0][3] == "0"
+        assert exercise_row("2026-09-05", sets=(0, 0, 0, 0, 0)).sets_display == "0"
 
     def test_time_based_work_reports_no_volume_and_no_maximum(self):
-        source = StubLogSource(exercise=[exercise_row(
-            "2026-09-05", sets=(60, 45, 0, 0, 0), weight=0.0,
-            metric_type="Seconds", name="Plank",
-        )])
-
-        (point,) = source.get_exercise_history_by_name("Plank")
-        _, volume, onerm, sets_str, _, _ = point
-
-        assert volume == 0.0
-        assert onerm == 0.0
-        assert sets_str == "60,45", "the sets themselves are still shown"
-
-    def test_it_agrees_with_the_exercise_tab(self):
         row = exercise_row("2026-09-05", sets=(60, 45, 0, 0, 0), weight=0.0,
                            metric_type="Seconds", name="Plank")
-        source = StubLogSource(exercise=[row])
 
-        (point,) = source.get_exercise_history_by_name("Plank")
+        assert (row.volume, row.one_rep_max, row.onerm) == (0.0, 0.0, "N/A")
+        assert row.sets_display == "60,45", "the sets themselves are still shown"
 
-        assert point[1] == row.volume
-        assert point[3] == row.sets_display
-        assert row.onerm == "N/A"
 
+class TestActivityHeatmap:
     def test_a_harder_effort_contributes_more(self, profile_path):
         def burn(rpe):
             source = StubLogSource(exercise=[exercise_row("2026-09-05", rpe=rpe, muscle_group="Legs")])
@@ -239,36 +187,6 @@ class TestExerciseHistory:
 
 
 class TestTheMixinThroughTheRealClient:
-    PLANK = {"date": "2026-09-05", "ex_name": "Plank", "set1": 60, "set2": 45,
-             "set3": 0, "set4": 0, "set5": 0, "weight_kg": 0.0, "rpe": 6.0}
-
-    def test_time_based_work_reaches_the_seconds_branch_through_the_real_client(
-        self, db_client, seeded_catalog, member_a
-    ):
-        member_a.post("/api/logs/exercise", json=self.PLANK)
-
-        (point,) = db_client.get_exercise_history_by_name("Plank")
-        _, volume, onerm, sets_str, _, _ = point
-
-        assert volume == 0.0, "time-based work has no volume"
-        assert onerm == pytest.approx(0.0), "and no one-rep maximum"
-        assert sets_str == "60,45"
-
-    def test_repetition_work_still_charts_volume_and_the_estimate(
-        self, db_client, seeded_catalog, member_a
-    ):
-        member_a.post("/api/logs/exercise", json={
-            "date": "2026-09-05", "ex_name": "Overhead Press",
-            "set1": 7, "set2": 7, "set3": 7, "set4": 0, "set5": 0,
-            "weight_kg": 30.0, "rpe": 8.0,
-        })
-
-        (point,) = db_client.get_exercise_history_by_name("Overhead Press")
-        _, volume, onerm, _, _, _ = point
-
-        assert volume == pytest.approx(21 * 30.0)
-        assert onerm == pytest.approx(30.0 / (1.0278 - 0.0278 * 7))
-
     def test_the_heatmap_reads_the_muscle_group_off_the_clients_row(
         self, db_client, seeded_catalog, member_a, profile_path
     ):
