@@ -93,7 +93,8 @@ def reload_profile() -> None:
 
 def _generate_default_profile():
     """Write a full default document, with every section the application reads."""
-    from src.config import LOCAL_SERVER_URL, PALETTE
+    from src.config import (CAFFEINE_HALF_LIFE, LOCAL_SERVER_URL, PALETTE,
+                            SLEEP_CAFFEINE_THRESHOLD)
 
     os.makedirs(os.path.dirname(PROFILE_PATH), exist_ok=True)
     default_toml = f"""# ==========================================
@@ -129,7 +130,7 @@ plans = false               # training cycles
 chores = false              # the household chore board
 
 [biometrics]
-weight_kg = 75.0
+weight_kg = {DEFAULT_WEIGHT_KG}
 height_cm = 180.0
 age = 30
 gender = "M"
@@ -140,15 +141,15 @@ gender = "M"
 goal_type = "maintain_weight"
 daily_adjustment_kcal = {DEFAULT_DAILY_ADJUSTMENT_KCAL:g}
 tick_markers = {DEFAULT_TICK_MARKERS}
-overflow_buffer = 500
-protein_multiplier = 2.0
-salt_g = 5.0
-activity_level = 1.55
-neat_tax_percent = 15.0
+overflow_buffer = {DEFAULT_OVERFLOW_BUFFER:g}
+protein_multiplier = {DEFAULT_PROTEIN_MULTIPLIER}
+salt_g = {DEFAULT_SALT_G}
+activity_level = {DEFAULT_ACTIVITY_LEVEL}
+neat_tax_percent = {DEFAULT_NEAT_TAX_PERCENT}
 
 sleep_time = "23:00"
-caffeine_half_life = 5.0
-max_sleep_caffeine = 20.0
+caffeine_half_life = {CAFFEINE_HALF_LIFE}
+max_sleep_caffeine = {SLEEP_CAFFEINE_THRESHOLD}
 
 # The one focus/break split, used all day. There are no timer modes.
 [timer]
@@ -387,12 +388,9 @@ class UserProfile:
         if window_key in windows:
             return bool(windows[window_key])
 
-        superseded = LEGACY_WINDOW_KEYS.get(window_key, ())
-        present = [windows[key] for key in superseded if key in windows]
-        if present:
-            return any(bool(value) for value in present)
-
-        return bool(default)
+        present = [windows[key] for key in LEGACY_WINDOW_KEYS.get(window_key, ())
+                   if key in windows]
+        return any(present) if present else bool(default)
 
     def get_metric(self, section: str, key: str, default=None):
         """Return one key of a section, a dotted section naming a nested table."""
@@ -422,20 +420,14 @@ class UserProfile:
                      "split now. Write a [timer] section to change it, and "
                      "[timer] strict = true for the enforced break.")
 
-        return {
-            "focus_mins": self._whole("focus_mins", DEFAULT_FOCUS_MINS),
-            "break_mins": self._whole("break_mins", DEFAULT_BREAK_MINS),
-            "long_break_mins": self._whole("long_break_mins",
-                                           DEFAULT_LONG_BREAK_MINS),
-            "long_breaks_per_day": int(self.number(
-                "timer", "long_breaks_per_day", DEFAULT_LONG_BREAKS_PER_DAY,
-                low=0)),
-            "strict": bool(self.get_metric("timer", "strict", False)),
-        }
-
-    def _whole(self, key: str, default: int) -> int:
-        """Return one timer duration, in whole minutes and at least one."""
-        return int(self.number("timer", key, default, low=1))
+        split = {key: int(self.number("timer", key, default, low=low))
+                 for key, default, low in (
+                     ("focus_mins", DEFAULT_FOCUS_MINS, 1),
+                     ("break_mins", DEFAULT_BREAK_MINS, 1),
+                     ("long_break_mins", DEFAULT_LONG_BREAK_MINS, 1),
+                     ("long_breaks_per_day", DEFAULT_LONG_BREAKS_PER_DAY, 0))}
+        split["strict"] = bool(self.get_metric("timer", "strict", False))
+        return split
 
     def get_current_regime(self) -> str:
         """Return the regime the schedule says is running now, or "Unscheduled"."""
@@ -519,15 +511,10 @@ class UserProfile:
         ]
 
 
+_KEY_NAMES = {"ESC": "Escape", "ESCAPE": "Escape", "ENTER": "Return",
+              "RETURN": "Return", "TAB": "Tab"}
+
+
 def get_qt_key(key_str: str, default_key: Qt.Key) -> Qt.Key:
     val = str(key_str).strip().upper()
-    if val in ["ESC", "ESCAPE"]:
-        return Qt.Key.Key_Escape
-    if val in ["ENTER", "RETURN"]:
-        return Qt.Key.Key_Return
-    if val == "TAB":
-        return Qt.Key.Key_Tab
-    try:
-        return getattr(Qt.Key, f"Key_{val}")
-    except AttributeError:
-        return default_key
+    return getattr(Qt.Key, f"Key_{_KEY_NAMES.get(val, val)}", default_key)
