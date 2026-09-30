@@ -240,9 +240,16 @@ class TestReplacingTheRows:
         model.modelAboutToBeReset.connect(lambda: resets.append("about"))
         model.modelReset.connect(lambda: resets.append("done"))
 
-        model.set_rows([ROW])
+        model.set_rows([ROW, ORPHANED])
 
         assert resets == ["about", "done"]
+
+    def test_a_refresh_that_changed_nothing_does_not_reset(self, model):
+        resets = []
+        model.modelReset.connect(lambda: resets.append("done"))
+
+        assert model.set_rows([ROW]) is False
+        assert resets == []
 
     def test_an_empty_answer_empties_the_table(self, model):
         model.set_rows([])
@@ -359,11 +366,11 @@ class TestWhichRowsARefreshChanged:
         assert model.changed_rows() == frozenset()
 
     def test_a_row_whose_stored_value_is_None_is_not_read_as_absent(self, model):
-        model.set_rows([ROW, ORPHANED])
+        model.set_rows([ORPHANED])
 
-        model.set_rows([ROW, ORPHANED])
+        model.set_rows([ORPHANED, ROW])
 
-        assert model.changed_rows() == frozenset()
+        assert model.changed_rows() == frozenset({1})
 
 
 class TestTheWashOnAChangedRow:

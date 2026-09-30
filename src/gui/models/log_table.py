@@ -270,8 +270,11 @@ class LogTableModel(QAbstractTableModel):
             self.table_idx, row_id, self._headers[index.column()], str(value).strip())
         return True
 
-    def set_rows(self, rows):
+    def set_rows(self, rows) -> bool:
+        """Hold rows, reporting whether they differ from the rows already held."""
         incoming = list(rows)
+        if self._populated and incoming == self._rows:
+            return False
         changed = self._changes_in(incoming)
         self.beginResetModel()
         self._rows = incoming
@@ -289,6 +292,7 @@ class LogTableModel(QAbstractTableModel):
         self._changed_rows = changed
         self._populated = True
         self.endResetModel()
+        return True
 
     def _changes_in(self, incoming):
         """Return the positions in incoming that are new here or hold a new value."""

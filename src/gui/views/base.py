@@ -171,7 +171,8 @@ class BaseManagedView(ShutdownMixin, QWidget):
         model = self._table_models[table_idx]
         widget = self._table_widgets[table_idx]
         keep = self._cursor_identity(widget)
-        model.set_rows(data)
+        if not model.set_rows(data):
+            return
         widget.measure_columns_once()
         self._restore_cursor(widget, keep)
         self._table_glows[table_idx].start()
