@@ -42,4 +42,4 @@ QT_QPA_PLATFORM=offscreen uv run python -c "..."    # a five-line reproduction s
 uv run python scripts/walk_the_app.py               # the broadest check available
 ```
 
-The walk runs a real server, client and window over a temporary database. Two constraints apply before adding to it: a tab nobody has switched to is never refreshed, so the test MUST switch to the tab under test first; and the status line races the sync stream's echo, so an assertion MUST check that `Fail` is absent rather than match a confirmation's exact words.
+The walk runs a real server, client and window over a temporary database. A tab nobody has switched to is never refreshed, so a check added to it MUST switch to the tab under test first. The sync stream's echo of the member's own write leaves the status line alone, so a confirmation's words survive to be read.
