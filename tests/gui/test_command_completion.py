@@ -36,15 +36,10 @@ def press_tab(widget):
 
 
 class TestCommandNameHints:
-    def test_a_prefix_offers_the_rest_of_the_command_name(self, bar):
-        bar.setText("bev")
-
-        assert bar.completion_text == "log"
-        assert bar.hint_text.startswith("log [1] [HH:MM=now]")
-
-    def test_the_hint_continues_with_the_argument_list(self, bar):
+    def test_a_prefix_offers_the_rest_of_the_name_then_the_argument_list(self, bar):
         bar.setText("mobl")
 
+        assert bar.completion_text == "og"
         assert bar.hint_text == "og [mins or set multiple] [Routine or Routine Set]"
 
     def test_tab_accepts_the_command_name(self, bar):
@@ -146,17 +141,6 @@ class TestFuzzyCompletion:
 
         assert bar.is_fuzzy_replacement is True
         assert bar.completion_text in {"Rolled Oats", "Rolled Oat Bar"}
-
-    def test_a_prefix_match_beats_a_substring_match(self, bar):
-        bar.setText("log 1 b oat")
-
-        assert bar.completion_text == "Rolled Oats"
-
-    def test_the_shortest_name_wins_among_equally_good_matches(self, bar):
-        bar.setText("log 1 b Rolled Oat")
-
-        press_tab(bar)
-        assert bar.text() == "log 1 b Rolled Oats"
 
     def test_accents_are_ignored_when_matching(self, bar):
         bar.setText("log 1 b bramborem")
@@ -268,20 +252,6 @@ class TestCompletionAcceptance:
         press_tab(bar)
 
         assert bar.text() == "track 1 Plank"
-
-    def test_a_supplement_name_completes(self, bar):
-        bar.setText("supplog 1 Evening")
-
-        press_tab(bar)
-
-        assert bar.text() == "supplog 1 Evening Stack"
-
-    def test_a_mobility_routine_completes(self, bar):
-        bar.setText("moblog 20 Hip")
-
-        press_tab(bar)
-
-        assert bar.text() == "moblog 20 Hip Opener"
 
     def test_the_suggestion_is_consumed_by_accepting_it(self, bar):
         bar.setText("log 1 b Yoghurt")

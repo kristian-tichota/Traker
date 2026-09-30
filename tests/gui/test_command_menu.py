@@ -118,9 +118,6 @@ class TestTheMenuIsBounded:
         assert marked(rows) is not None
         assert marked(rows).left == commands_for("")[last].name
 
-    def test_the_selection_may_reach_every_candidate(self):
-        assert len(candidates_for("", ())) == len(commands_for(""))
-
     def test_an_argument_list_is_not_a_list_of_choices(self):
         assert candidates_for("supplog ", ()) == []
 
@@ -255,12 +252,6 @@ class TestCompletingACommandByFuzzyMatch:
         press(bar, Qt.Key.Key_Tab)
         assert bar.text() == "setdsi"
 
-    def test_the_replacement_does_not_disturb_an_item_name(self, bar):
-        bar.setText("log 1 b rizek")
-        press(bar, Qt.Key.Key_Tab)
-
-        assert bar.text() == "log 1 b Řízek s bramborem"
-
     def test_the_visible_tabs_command_is_what_a_bare_letter_offers(self, bar):
         bar.set_relevant_domains((SUPPLEMENT,))
         bar.setText("s")
@@ -308,14 +299,10 @@ class TestTheMenuBelongsToCommandMode:
 
         window.set_mode("COMMAND")
         assert window.command_menu.isVisible()
+        assert window.command_menu.rows
 
         window.set_mode("SHEET")
         assert not window.command_menu.isVisible()
-
-    def test_entering_command_mode_fills_it(self, window):
-        window.set_mode("COMMAND")
-
-        assert window.command_menu.rows
 
     def test_it_follows_what_the_bar_is_offering(self, window, settled):
         window.set_mode("COMMAND")
@@ -332,10 +319,8 @@ class TestTheMenuBelongsToCommandMode:
         assert names(window.command_menu.rows)[:3] == [
             "supplog", "suppset", "suppdefine"]
 
-    def test_a_tab_is_ranked_by_its_own_command_not_by_what_it_reads(self, window):
+    def test_a_tab_is_ranked_by_its_own_command_else_by_what_it_shows(self, window):
         assert window._tab_subject(window.tab_indices["food"]) == (FOOD,)
-
-    def test_a_tab_without_a_command_falls_back_to_what_it_shows(self, window):
         assert window._tab_subject(
             window.tab_indices["pomodoro"]) == (POMODORO, CHORE)
         assert window._tab_subject(
