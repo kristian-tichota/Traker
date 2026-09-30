@@ -20,7 +20,14 @@ def _iso_moment(value):
     if parsed.time() == datetime.time.min and len(value.strip()) <= 10:
         raise ValueError("a date alone carries no moment")
 
+
+def _named(value):
+    if not value.strip():
+        raise ValueError("a name cannot be blank")
+
+
 _CHECKS = {
+    "name": (_named, "a name"),
     "date": (_iso_date, "a date as YYYY-MM-DD"),
     "anchor": (_iso_date, "a date as YYYY-MM-DD"),
     "time": (_clock_time, "a time as HH:MM"),

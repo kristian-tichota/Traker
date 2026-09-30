@@ -55,6 +55,14 @@ class TestAValueThatMustNotBeStored:
         assert response.status_code == 400
         assert member_a.get("/api/catalog/beverage").get_json() == []
 
+    @pytest.mark.parametrize("path, body", [
+        ("/api/catalog/beverage", {"name": "  ", "caffeine_mg": 0, "antioxidants_mg": 0}),
+        ("/api/chores", {"name": "", "period_days": 7, "anchor": "2026-09-11"}),
+        ("/api/plans", {"name": " ", "start_date": "2026-09-14", "weeks": 1}),
+    ])
+    def test_a_blank_name_is_refused(self, member_a, path, body):
+        assert member_a.post(path, json=body).status_code == 400
+
     def test_a_fraction_in_a_whole_number_column_is_refused_rather_than_cut(self, member_a):
         chore = {"name": "Vacuum", "anchor": "2026-09-11"}
 

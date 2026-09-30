@@ -113,8 +113,6 @@ def add_plan():
     conn = get_db()
     values = checked_payload(conn, "training_plans", d,
                              ("name", "start_date", "weeks", "notes"))
-    if not values["name"].strip():
-        raise BadValue("A training plan needs a name.")
 
     sessions = d.get("sessions") or []
     if not isinstance(sessions, list):

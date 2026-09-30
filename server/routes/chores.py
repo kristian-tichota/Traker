@@ -48,8 +48,6 @@ def add_chore():
     values = checked_payload(conn, "chores", payload, CHORE_COLUMNS)
 
     name = values["name"] = values["name"].strip()
-    if not name:
-        raise BadValue("A chore needs a name.")
 
     with conn:
         insert("chores", [values])
