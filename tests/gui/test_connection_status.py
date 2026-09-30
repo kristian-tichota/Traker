@@ -38,7 +38,6 @@ class _RecordingCache:
 
 class WindowStandIn:
     _on_connection_changed = MainWindow._on_connection_changed
-    _invalidate_reads = MainWindow._invalidate_reads
 
     def __init__(self):
         self.status_bar = FakeStatusBar()

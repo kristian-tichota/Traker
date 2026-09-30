@@ -84,12 +84,11 @@ def resolve_app_icon() -> QIcon:
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QColor(PALETTE.get("base02", "#073642")))
-    painter.setPen(QPen(QColor(PALETTE.get("green", "#859900")), 3))
+    painter.setBrush(QColor(PALETTE['base02']))
+    painter.setPen(QPen(QColor(PALETTE['green']), 3))
     painter.drawRoundedRect(4, 4, 56, 56, 12, 12)
-    painter.setPen(QColor(PALETTE.get("green", "#859900")))
-    font = QFont("Fira Code", 26, QFont.Weight.Bold)
-    painter.setFont(font)
+    painter.setPen(QColor(PALETTE['green']))
+    painter.setFont(QFont("Fira Code", 26, QFont.Weight.Bold))
     painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "T")
     painter.end()
     return QIcon(pixmap)
@@ -241,25 +240,25 @@ class MainWindow(QMainWindow):
         self.command_menu.hide()
 
     def _build_command_bar(self, main_layout):
-        self.command_layout = QHBoxLayout()
+        command_layout = QHBoxLayout()
         self.command_prefix = QLabel(":")
         self.command_prefix.setStyleSheet(
             f"color: {PALETTE['green']}; font-weight: bold; font-size: 14px;")
         self.command_line = CommandLineEdit(self.db)
-        self.command_layout.addWidget(self.command_prefix)
-        self.command_layout.addWidget(self.command_line)
-        main_layout.addLayout(self.command_layout)
+        command_layout.addWidget(self.command_prefix)
+        command_layout.addWidget(self.command_line)
+        main_layout.addLayout(command_layout)
 
     def _build_filter_bar(self, main_layout):
         """Build the filter bar, under the command bar and hidden until "/"."""
-        self.filter_layout = QHBoxLayout()
+        filter_layout = QHBoxLayout()
         self.filter_prefix = QLabel("/")
         self.filter_prefix.setStyleSheet(
             f"color: {PALETTE['violet']}; font-weight: bold; font-size: 14px;")
         self.filter_line = FilterLineEdit()
-        self.filter_layout.addWidget(self.filter_prefix)
-        self.filter_layout.addWidget(self.filter_line)
-        main_layout.addLayout(self.filter_layout)
+        filter_layout.addWidget(self.filter_prefix)
+        filter_layout.addWidget(self.filter_line)
+        main_layout.addLayout(filter_layout)
         self.filter_prefix.hide()
         self.filter_line.hide()
         self._filter_open = False
@@ -267,9 +266,9 @@ class MainWindow(QMainWindow):
 
     def _build_status_row(self, main_layout):
         """Build the status row: the mode on the left, the last message on the right."""
-        self.status_row = QHBoxLayout()
-        self.status_row.setContentsMargins(0, 0, 0, 0)
-        self.status_row.setSpacing(0)
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(0, 0, 0, 0)
+        status_row.setSpacing(0)
 
         self.mode_label = QLabel()
         self.status_bar = QLabel()
@@ -279,9 +278,9 @@ class MainWindow(QMainWindow):
                 f"color: {PALETTE['base01']}; padding: 3px;")
         self.status_bar.setSizePolicy(QSizePolicy.Policy.Ignored,
                                       QSizePolicy.Policy.Preferred)
-        self.status_row.addWidget(self.mode_label)
-        self.status_row.addWidget(self.status_bar, 1)
-        main_layout.addLayout(self.status_row)
+        status_row.addWidget(self.mode_label)
+        status_row.addWidget(self.status_bar, 1)
+        main_layout.addLayout(status_row)
 
         self.tab_animator = TabFadeManager(self.tabs, duration=180)
         self._veils = 0
@@ -335,12 +334,6 @@ class MainWindow(QMainWindow):
         else:
             self.mark_all_tabs_stale()
 
-    def _invalidate_reads(self, domains):
-        """Drop the client's cached reads for these domains, or all of them."""
-        invalidate = getattr(self.db, "invalidate", None)
-        if invalidate is not None:
-            invalidate(domains)
-
     def mark_domains_stale(self, domains):
         """Mark the tabs reading domains out of date and redraw the visible one."""
         keys = tabs_reading(domains)
@@ -358,25 +351,24 @@ class MainWindow(QMainWindow):
     def _on_connection_changed(self, online, reason):
         if online:
             self.command_line.invalidate_catalog_cache()
-            self._invalidate_reads(None)
+            self.db.invalidate(None)
             self.mark_all_tabs_stale()
             self.status_bar.setText(" Household service reachable again.")
-            self.status_pulser.pulse(PALETTE.get('green', '#859900'))
+            self.status_pulser.pulse(PALETTE['green'])
         else:
             self.status_bar.setText(
                 f" Household service unreachable — tables may be empty for that reason, "
                 f"not because there is nothing logged. ({reason})"
             )
-            self.status_pulser.pulse(PALETTE.get('red', '#dc322f'))
+            self.status_pulser.pulse(PALETTE['red'])
 
     def _on_remote_catalog_update(self, data):
         self.command_line.invalidate_catalog_cache()
-        domain = domain_of_table((data or {}).get("table", "")) if isinstance(data, dict) else None
+        domain = domain_of_table(data.get("table", ""))
+        self.db.invalidate((domain,) if domain else None)
         if domain:
-            self._invalidate_reads((domain,))
             self.mark_domains_stale((domain,))
         else:
-            self._invalidate_reads(None)
             self.mark_all_tabs_stale()
         self.status_pulser.pulse(PALETTE['cyan'])
         self.status_bar.setText(" Real-time sync: Catalog definitions updated.")
@@ -386,8 +378,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Shut the client down, unless a strict break is holding the screens."""
         timer = self.views.get("pomodoro")
-        holding = getattr(timer, "holds_the_screens", None)
-        if callable(holding) and holding():
+        if timer is not None and timer.holds_the_screens():
             log.info("Refusing to quit: a strict break is holding the screens.")
             event.ignore()
             return
@@ -396,14 +387,12 @@ class MainWindow(QMainWindow):
         if connection is not None:
             connection.on_change = None
 
-        if hasattr(self, 'sync_listener') and self.sync_listener:
+        if self.sync_listener is not None:
             self.sync_listener.stop()
             self.sync_listener = None
 
         for view in self.views.values():
-            shutdown = getattr(view, "shutdown", None)
-            if callable(shutdown):
-                shutdown()
+            view.shutdown()
 
         if self.tray_icon:
             self.tray_icon.hide()
@@ -495,14 +484,18 @@ class MainWindow(QMainWindow):
         self.command_line.setCursorPosition(len(text))
         self.set_mode("COMMAND")
 
+    @staticmethod
+    def _focus_first_table(widget) -> bool:
+        """Put the keyboard on widget's first table, reporting whether it has one."""
+        tables = widget.findChildren(VimTableView) if widget else []
+        if tables:
+            tables[0].focus_first_cell()
+        return bool(tables)
+
     def enter_sheet(self):
         """Put the keyboard on the visible tab's first table and name the mode."""
-        widget = self.tabs.currentWidget()
-        tables = widget.findChildren(VimTableView) if widget else []
-        if not tables:
-            return
-        tables[0].focus_first_cell()
-        self.set_mode("SHEET")
+        if self._focus_first_table(self.tabs.currentWidget()):
+            self.set_mode("SHEET")
 
     def filterable_view(self):
         """Return the visible tab, where it has a table to filter."""
@@ -559,12 +552,9 @@ class MainWindow(QMainWindow):
 
     def _commit_filter(self):
         """Keep the filter and drop into the sheet on the first match."""
-        view = self._filtered_view
-        if view is None:
+        if self._filtered_view is None:
             return
-        tables = view.findChildren(VimTableView)
-        if tables:
-            tables[0].focus_first_cell()
+        self._focus_first_table(self._filtered_view)
         self.set_mode("SHEET")
 
     def _remember_sheet_table(self, table):
@@ -725,7 +715,7 @@ class MainWindow(QMainWindow):
 
     def _report_failure(self, reason):
         self.status_bar.setText(f" Execution Fail: {reason}")
-        self.status_pulser.pulse(PALETTE.get('red', '#dc322f'))
+        self.status_pulser.pulse(PALETTE['red'])
 
     def _show_optimistically(self, command, payload):
         """Put the row just written on screen, at once."""
@@ -785,7 +775,7 @@ class MainWindow(QMainWindow):
         self.command_line.clear()
         self.return_to_normal()
         self.status_bar.setText(message or command.confirm(payload))
-        self.status_pulser.pulse(PALETTE.get('blue', '#268bd2'))
+        self.status_pulser.pulse(PALETTE['blue'])
 
     def _invoke_command(self, command, payload):
         """Perform the write on a pool thread."""
@@ -809,7 +799,7 @@ class MainWindow(QMainWindow):
 
         self.status_bar.setText(
             message if command.reports_result else command.confirm(payload))
-        self.status_pulser.pulse(PALETTE.get('blue', '#268bd2'))
+        self.status_pulser.pulse(PALETTE['blue'])
 
     def _on_command_raised(self, failure):
         """Handle a client method that raised instead of returning a refusal."""
