@@ -4,7 +4,7 @@ from PyQt6.QtGui import QBrush, QColor, QFont
 from src.config import PALETTE
 from src.domain.clock import as_displayed_date
 from src.gui.animations import blend
-from src.gui.completion import normalize
+from src.gui.filtering import fold
 
 PENDING_TEXT = "…"
 
@@ -81,6 +81,7 @@ class LogTableModel(QAbstractTableModel):
                  date_headers=DATE_HEADERS):
         super().__init__(parent)
         self._headers = list(headers)
+        self._column_of = {header: column for column, header in enumerate(self._headers)}
         self._mapping = dict(mapping)
         self.table_idx = table_idx
         self._rows = []
@@ -117,11 +118,6 @@ class LogTableModel(QAbstractTableModel):
         """Return the raw value behind a cell, for a reader that cannot use the text."""
         return self._value_at(row_index, column)
 
-    def values_by_header(self, row_index) -> dict:
-        """Return one row as {header: typed value}, as a filter reads it."""
-        return {self._headers[column]: self._value_at(row_index, column)
-                for column in range(len(self._headers))}
-
     def fold_all(self, rows=None):
         """Fold every row, without touching Qt."""
         rows = self._rows if rows is None else rows
@@ -136,17 +132,13 @@ class LogTableModel(QAbstractTableModel):
 
     def _fold_row(self, row_index, rows=None):
         row = (self._rows if rows is None else rows)[row_index]
-        by_header = {}
-        for column, header in enumerate(self._headers):
-            value = _cell(row, column)
-            by_header[header] = "" if value is None else normalize(str(value))
-        whole = " ".join(text for text in by_header.values() if text)
-        return whole, by_header
+        return fold({header: _cell(row, column) for column, header in enumerate(self._headers)})
 
     def values_of(self, row_index, headers):
         """Return only these columns of a row, typed."""
-        return {header: self._value_at(row_index, self._headers.index(header))
-                for header in headers if header in self._headers}
+        row = self._rows[row_index]
+        return {header: _cell(row, self._column_of[header])
+                for header in headers if header in self._column_of}
 
     def folded(self, row_index):
         """Return (row text, {header: folded cell}) for matching, cached."""
