@@ -104,40 +104,26 @@ class DatabaseClient(DBAnalyticsMixin):
         body = self._fetch(path, params)
         return [] if body is None else body
 
-    def _post(self, path: str, payload: dict):
+    def _send(self, verb: str, path: str, **kwargs):
+        """Write to path and return (success, message, response)."""
         try:
-            r = requests.post(f"{self.base_url}{path}", headers=self.headers, json=payload, timeout=REQUEST_TIMEOUT_S)
+            r = getattr(requests, verb)(f"{self.base_url}{path}", headers=self.headers,
+                                        timeout=REQUEST_TIMEOUT_S, **kwargs)
         except RequestException as e:
-            log.warning("POST %s failed: %s", path, e)
-            self.connection.record_failure(str(e))
-            return False, str(e)
-        self.connection.record_success()
-        if r.status_code >= 400:
-            return False, _refusal(r)
-        self.invalidate(domain_for_path(path))
-        return True, "Success"
-
-    def _delete(self, path: str):
-        success, message, _payload = self._delete_with_body(path)
-        return success, message
-
-    def _delete_with_body(self, path: str):
-        """Delete and return whatever the answer carried."""
-        try:
-            r = requests.delete(f"{self.base_url}{path}", headers=self.headers, timeout=REQUEST_TIMEOUT_S)
-        except RequestException as e:
-            log.warning("DELETE %s failed: %s", path, e)
+            log.warning("%s %s failed: %s", verb.upper(), path, e)
             self.connection.record_failure(str(e))
             return False, str(e), None
         self.connection.record_success()
         if r.status_code >= 400:
-            return False, _refusal(r), None
-        try:
-            payload = r.json()
-        except ValueError:
-            payload = None
+            return False, _refusal(r), r
         self.invalidate(domain_for_path(path))
-        return True, "Success", payload
+        return True, "Success", r
+
+    def _post(self, path: str, payload: dict):
+        return self._send("post", path, json=payload)[:2]
+
+    def _delete(self, path: str):
+        return self._send("delete", path)[:2]
 
     def get_setting(self, key: str, default_val: str) -> str:
         data = self._get(f"/api/settings/{key}", params={"default": default_val})
@@ -204,11 +190,13 @@ class DatabaseClient(DBAnalyticsMixin):
 
     def delete_item_by_name(self, name: str):
         """Remove an item from every catalog that holds it, and say how many."""
-        success, message, payload = self._delete_with_body(f"/api/catalog/items/{name}")
+        success, message, r = self._send("delete", f"/api/catalog/items/{name}")
         if not success:
             return False, message
-
-        removed = payload.get("removed") if isinstance(payload, dict) else None
+        try:
+            removed = r.json().get("removed")
+        except (ValueError, AttributeError):
+            removed = None
         if not isinstance(removed, int):
             return True, f" Removed '{name}'."
         catalogs = "catalog" if removed == 1 else "catalogs"
@@ -279,22 +267,8 @@ class DatabaseClient(DBAnalyticsMixin):
         db_col = column_mapping.get(col_name)
         if not db_col:
             return False, "Target database column lookup mapping failed."
-        try:
-            r = requests.patch(
-                f"{self.base_url}/api/logs/{table}/{row_id}",
-                headers=self.headers,
-                json={"col": db_col, "val": new_val},
-                timeout=REQUEST_TIMEOUT_S
-            )
-        except RequestException as e:
-            log.warning("PATCH /api/logs/%s/%s failed: %s", table, row_id, e)
-            self.connection.record_failure(str(e))
-            return False, str(e)
-        self.connection.record_success()
-        if r.status_code >= 400:
-            return False, _refusal(r)
-        self.invalidate(domain_for_path(f"/api/logs/{table}/{row_id}"))
-        return True, "Success"
+        return self._send("patch", f"/api/logs/{table}/{row_id}",
+                          json={"col": db_col, "val": new_val})[:2]
 
     def get_chores(self):
         """Return the board: every chore, its cadence and its last completion."""
