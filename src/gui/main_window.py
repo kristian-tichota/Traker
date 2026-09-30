@@ -6,7 +6,7 @@ from importlib import import_module
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
                              QLabel, QSizePolicy, QSystemTrayIcon)
 from PyQt6.QtCore import Qt, QSize, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QFont
+from PyQt6.QtGui import QIcon
 
 from src.gui.views.food_views import FoodView
 from src.gui.views.beverage_view import BeveragesView
@@ -66,32 +66,17 @@ def tab_shortcut_keys(also_reserved: str = "") -> str:
     return "".join(c for c in TAB_SHORTCUT_ALPHABET if c not in blocked)
 
 
-def resolve_app_icon() -> QIcon:
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    candidate_paths = [
-        os.path.join(base_dir, "assets", "icon.svg"),
-        os.path.join(base_dir, "assets", "icon.png"),
-        os.path.join(os.getcwd(), "assets", "icon.svg"),
-        os.path.join(os.getcwd(), "assets", "icon.png"),
-    ]
-    for path in candidate_paths:
-        if os.path.exists(path):
-            icon = QIcon(path)
-            if not icon.isNull():
-                return icon
+ASSETS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
 
-    pixmap = QPixmap(64, 64)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QColor(PALETTE['base02']))
-    painter.setPen(QPen(QColor(PALETTE['green']), 3))
-    painter.drawRoundedRect(4, 4, 56, 56, 12, 12)
-    painter.setPen(QColor(PALETTE['green']))
-    painter.setFont(QFont("Fira Code", 26, QFont.Weight.Bold))
-    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "T")
-    painter.end()
-    return QIcon(pixmap)
+
+def resolve_app_icon() -> QIcon:
+    """Return the application icon, from the SVG or else the PNG in assets/."""
+    for name in ("icon.svg", "icon.png"):
+        icon = QIcon(os.path.join(ASSETS_DIR, name))
+        if not icon.isNull():
+            return icon
+    return QIcon()
 
 
 class MainWindow(QMainWindow):
