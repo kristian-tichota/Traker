@@ -91,7 +91,7 @@ class MpvScreen(QOpenGLWidget):
             self.player.event_callback("end-file")(self._file_ended)
 
     def _start_mpv(self):
-        """Return one player, or None with player_error set."""
+        """Return one player confined to this widget, or None with player_error set."""
         try:
             import mpv
         except (ImportError, OSError) as error:
@@ -100,26 +100,15 @@ class MpvScreen(QOpenGLWidget):
             return None
 
         try:
-            return self._build_player(mpv)
+            return mpv.MPV(vo="libmpv", hwdec="auto-safe", keep_open="yes",
+                           input_default_bindings=False, input_vo_keyboard=False,
+                           osc=False, osd_level=0, log_handler=_say_what_mpv_said,
+                           loglevel="warn")
         except (OSError, RuntimeError, ValueError, SystemError,
                 AttributeError, mpv.ArgumentError) as error:
             self.player_error = f"mpv would not start: {error}"
             log.warning("No video in a break: %s", self.player_error)
             return None
-
-    def _build_player(self, mpv):
-        """Build the player a break pane drives, with mpv confined to it."""
-        return mpv.MPV(
-            vo="libmpv",
-            hwdec="auto-safe",
-            keep_open="yes",
-            input_default_bindings=False,
-            input_vo_keyboard=False,
-            osc=False,
-            osd_level=0,
-            log_handler=_say_what_mpv_said,
-            loglevel="warn",
-        )
 
     def initializeGL(self):
         """Hand mpv this widget's framebuffer, once it has one."""
@@ -131,7 +120,7 @@ class MpvScreen(QOpenGLWidget):
         self._context = mpv.MpvRenderContext(
             self.player, "opengl",
             opengl_init_params={"get_proc_address": self._proc_address})
-        self._context.update_cb = self._mpv_wants_a_frame
+        self._context.update_cb = self.frame_ready.emit
         self._load_what_is_waiting()
 
     def play(self, path, start_seconds=0.0):
@@ -141,7 +130,7 @@ class MpvScreen(QOpenGLWidget):
 
     def _load_what_is_waiting(self):
         """Hand mpv the file, once both it and the context exist."""
-        if self._context is None or self._pending is None or self.player is None:
+        if self._context is None or self._pending is None:
             return
         path, start = self._pending
         self._pending = None
@@ -153,10 +142,6 @@ class MpvScreen(QOpenGLWidget):
         if str(reason).endswith("ERROR"):
             self.playback_failed.emit(str(getattr(event.data, "error", "")
                                           or "this file could not be played"))
-
-    def _mpv_wants_a_frame(self):
-        """Handle mpv's render thread reporting a frame."""
-        self.frame_ready.emit()
 
     def paintGL(self):
         """Draw whatever mpv has into the framebuffer Qt provided."""
@@ -1023,19 +1008,13 @@ class LibraryPane(QWidget, _MarkedList):
             self.layout().addWidget(self._message)
 
 
+PANES = {DOCUMENT: DocumentPane, DECK: DeckPane, BOOK: BookPane, SHELF: LibraryPane,
+         PAGE: PagePane}
+
+
 def build_pane(activity, start_at=0, parent=None) -> QWidget:
-    """Build the pane for what this activity is."""
-    if activity.kind == DOCUMENT:
-        return DocumentPane(activity.path, start_at, parent)
-    if activity.kind == DECK:
-        return DeckPane(activity.path, start_at, parent)
-    if activity.kind == BOOK:
-        return BookPane(activity.path, start_at, parent)
-    if activity.kind == SHELF:
-        return LibraryPane(activity.path, start_at, parent)
-    if activity.kind == PAGE:
-        return PagePane(activity.path, start_at, parent)
-    return VideoPane(activity.path, start_at, parent)
+    """Build the pane for what this activity is, a video where it is nothing else."""
+    return PANES.get(activity.kind, VideoPane)(activity.path, start_at, parent)
 
 
 class MediaSurface(QWidget):
@@ -1093,12 +1072,10 @@ class MediaSurface(QWidget):
         pane = self.panes.get(activity.kind)
         if pane is None:
             pane = self._build_pane(activity, start_at, parent=self.stack)
-            changed = getattr(pane, "changed", None)
-            if changed is not None:
-                changed.connect(self.pane_changed)
-            chosen = getattr(pane, "chosen", None)
-            if chosen is not None:
-                chosen.connect(self.file_chosen)
+            for name, relay in (("changed", self.pane_changed), ("chosen", self.file_chosen)):
+                signal = getattr(pane, name, None)
+                if signal is not None:
+                    signal.connect(relay)
             self.panes[activity.kind] = pane
             self.stack.addWidget(pane)
         else:
@@ -1111,8 +1088,6 @@ class MediaSurface(QWidget):
         if self.progress is not None:
             self.progress.setVisible(activity.kind not in (SHELF, PAGE))
             self.show_progress()
-        self._place_the_overlays()
-        self.update_display()
         return pane
 
     def set_keys(self, hints):
