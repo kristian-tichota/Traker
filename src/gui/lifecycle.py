@@ -7,11 +7,6 @@ def stop_timers(widget) -> None:
         timer.stop()
 
 
-def _shutdown_super(instance, owner):
-    """Return the next shutdown() up the MRO, or None."""
-    return getattr(super(owner, instance), "shutdown", None)
-
-
 class LatchesShutdown:
     """The _shut_down flag the two mixins below both set, and both read."""
 
@@ -21,16 +16,16 @@ class LatchesShutdown:
         """Report whether shutdown() has latched, so teardown restarts nothing."""
         return self._shut_down
 
+    def shutdown(self):
+        self._shut_down = True
+
 
 class ShutdownMixin(LatchesShutdown):
     """Gives a view a shutdown() that stops its timers."""
 
     def shutdown(self):
-        self._shut_down = True
+        super().shutdown()
         stop_timers(self)
-        inherited = _shutdown_super(self, ShutdownMixin)
-        if inherited is not None:
-            inherited()
 
 
 class PausesWhenHidden(LatchesShutdown):
@@ -64,8 +59,5 @@ class PausesWhenHidden(LatchesShutdown):
         self.pause_animation()
 
     def shutdown(self):
-        self._shut_down = True
+        super().shutdown()
         self.pause_animation()
-        inherited = _shutdown_super(self, PausesWhenHidden)
-        if inherited is not None:
-            inherited()
