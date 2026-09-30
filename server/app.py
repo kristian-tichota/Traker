@@ -5,7 +5,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, jsonify
+from flask import Flask
 from waitress import serve
 from server import db_session
 from server.database import db_service
@@ -24,19 +24,19 @@ log = logging.getLogger(__name__)
 
 def create_app():
     app = Flask(__name__)
-    db_session.init_app(app)
+    app.teardown_appcontext(db_session.release_db)
 
     @app.errorhandler(sqlite3.IntegrityError)
     @app.errorhandler(BadRequest)
     def refused(error):
         """Answer a refused request, or a constraint the store refused, with its reason."""
-        return jsonify({"error": str(error)}), getattr(error, "status", 400)
+        return {"error": str(error)}, getattr(error, "status", 400)
 
     @app.errorhandler(sqlite3.Error)
     def store_failed(error):
         """Answer a store failure that is not a constraint violation."""
         log.exception("The store could not complete a request: %s", error)
-        return jsonify({"error": "The household store could not complete that request."}), 500
+        return {"error": "The household store could not complete that request."}, 500
 
     app.register_blueprint(system_bp, url_prefix="/api")
     app.register_blueprint(catalog_bp, url_prefix="/api/catalog")
@@ -46,6 +46,7 @@ def create_app():
     app.register_blueprint(records_bp, url_prefix="/api/logs")
     app.register_blueprint(pomodoro_bp, url_prefix="/api/pomodoro")
     return app
+
 
 if __name__ == "__main__":
     from src.logging_setup import configure as configure_logging

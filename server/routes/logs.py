@@ -1,13 +1,13 @@
-from flask import Blueprint, jsonify, g, request
+from flask import Blueprint, g
 
 from server import sets
 from server.auth import require_auth
 from server.database import AD_HOC_CATEGORY
-from server.db_session import get_db
+from server.db_session import get_db, insert, named, rows
 from server.events import catalog_updated
 from server.payload import BadPayload, BadValue, Conflict, read_payload
-from server.validation import (checked_columns, checked_payload,
-                               validate_column_value)
+from server.tables import SUPPLEMENT_DOSES
+from server.validation import checked_columns, checked_payload, since_date
 
 logs_bp = Blueprint("logs", __name__)
 
@@ -15,19 +15,26 @@ FOOD_AMOUNTS = ("servings", "grams")
 
 AD_HOC_SERVING_G = 100.0
 
-_GRAMS = "COALESCE(l.grams, l.servings * f.serving_size)"
+_GRAMS = "COALESCE(l.grams, l.servings * i.serving_size)"
 
 _SERVINGS = ("CASE WHEN l.servings IS NOT NULL THEN l.servings "
-             "WHEN f.serving_size > 0 THEN l.grams / f.serving_size END")
+             "WHEN i.serving_size > 0 THEN l.grams / i.serving_size END")
+
+_FOOD_COLUMNS = (
+    f"l.id, l.estimated, l.date, l.meal_type, i.name, {_SERVINGS}, {_GRAMS}, s.name, "
+    + ", ".join(f"i.{nutrient} * {_GRAMS} / 100.0" for nutrient in (
+        "energy", "protein", "carbs_total", "carbs_sugars", "fat_total", "fat_saturated",
+        "salt", "fibre")))
 
 
-def _since_clause():
-    """Return the optional ?since= bound, as (sql, params)."""
-    since = request.args.get("since")
-    if not since:
-        return "", ()
-    validate_column_value("date", since)
-    return " AND l.date >= ?", (since,)
+def _ledger(domain: str, columns: str, order: str = "l.date DESC, l.id DESC") -> list:
+    """Return this member's rows of one domain's log, from the optional ?since= on."""
+    spec = sets.spec_for(domain)
+    return rows(f"SELECT {columns} FROM {spec.log_table} l "
+                f"LEFT JOIN {spec.catalog_table} i ON l.{spec.log_item_column} = i.id "
+                f"LEFT JOIN item_sets s ON l.set_id = s.id "
+                f"WHERE l.user_id = ? AND l.date >= ? ORDER BY {order}",
+                (g.user_id, since_date()))
 
 
 def _name(spec, name):
@@ -38,14 +45,6 @@ def _name(spec, name):
     return name
 
 
-def _catalog_id(conn, table: str, name):
-    """Return the catalog id for name, or None, deciding nothing."""
-    row = conn.execute(
-        f"SELECT id FROM {table} WHERE name = ? COLLATE NOCASE", (name,)
-    ).fetchone()
-    return row["id"] if row else None
-
-
 def _unknown_name(spec, name):
     """Return the refusal for a name that is neither an item nor a set."""
     return BadValue(
@@ -53,25 +52,21 @@ def _unknown_name(spec, name):
         f"is no {spec.word} by that name either.")
 
 
-def _insert_log_row(conn, spec, item_id, fixed: dict, values: dict):
+def _log_item(conn, spec, item_id, fixed: dict, values: dict):
     """Write one ordinary log row."""
-    columns = [*fixed, spec.log_item_column, *values]
-    placeholders = ", ".join("?" * (len(columns) + 1))
     with conn:
-        conn.execute(
-            f"INSERT INTO {spec.log_table} (user_id, {', '.join(columns)}) "
-            f"VALUES ({placeholders})",
-            (g.user_id, *fixed.values(), item_id, *values.values()))
+        insert(spec.log_table, [{"user_id": g.user_id, **fixed,
+                                 spec.log_item_column: item_id, **values}])
 
 
-def _log_set(conn, spec, set_row, multiplier, fixed: dict):
-    """Write one log row per component of a set."""
+def _log_set(conn, spec, set_row, multiplier, fixed: dict) -> int:
+    """Write one log row per component of a set, and return how many."""
     expanded = sets.expansion(conn, spec, set_row["id"], multiplier)
     if not expanded:
         raise BadValue(
             f"{spec.word.capitalize()} '{set_row['name']}' has no components yet.")
 
-    rows = []
+    written = []
     for item_id, item_name, amounts in expanded:
         try:
             checked = checked_columns(conn, spec.log_table, amounts)
@@ -79,59 +74,33 @@ def _log_set(conn, spec, set_row, multiplier, fixed: dict):
             raise BadValue(
                 f"{set_row['name']} x{multiplier:g} is more than {item_name} can "
                 f"be logged as: {bad_amount}") from None
-        rows.append(checked)
-
-    columns = ["user_id", *fixed, spec.log_item_column, "set_id",
-               *spec.log_amount_columns]
-    placeholders = ", ".join("?" * len(columns))
-    values = [
-        (g.user_id, *fixed.values(), item_id, set_row["id"],
-         *(checked[column] for column in spec.log_amount_columns))
-        for (item_id, _name, _raw), checked in zip(expanded, rows)
-    ]
+        written.append({"user_id": g.user_id, **fixed, spec.log_item_column: item_id,
+                        "set_id": set_row["id"], **checked})
     with conn:
-        conn.executemany(
-            f"INSERT INTO {spec.log_table} ({', '.join(columns)}) "
-            f"VALUES ({placeholders})", values)
-    return len(values)
+        insert(spec.log_table, written)
+    return len(written)
 
 
 def _log_item_or_set(conn, spec, name, fixed: dict, amount: float):
     """Log amount of name, whichever of the two namespaces holds it."""
-    (amount_column,) = spec.log_amount_columns
     name = _name(spec, name)
-    item_id = _catalog_id(conn, spec.catalog_table, name)
-    if item_id is not None:
-        _insert_log_row(conn, spec, item_id, fixed, {amount_column: amount})
-        return jsonify({"status": "success", "rows": 1})
+    item = named(spec.catalog_table, name)
+    if item is not None:
+        (amount_column,) = spec.log_amount_columns
+        _log_item(conn, spec, item["id"], fixed, {amount_column: amount})
+        return {"status": "success", "rows": 1}
 
     named_set = sets.find(conn, spec.domain, name)
     if named_set is None:
         raise _unknown_name(spec, name)
     written = _log_set(conn, spec, named_set, amount, fixed)
-    return jsonify({"status": "success", "rows": written,
-                    "set": named_set["name"]})
+    return {"status": "success", "rows": written, "set": named_set["name"]}
 
 
 @logs_bp.route("/food", methods=["GET"])
 @require_auth
 def get_food_logs():
-    since_sql, since_params = _since_clause()
-    nutrients = ", ".join(
-        f"(f.{column} * {_GRAMS} / 100.0) AS {alias}" for column, alias in (
-            ("energy", "cal"), ("protein", "prot"), ("carbs_total", "carb"),
-            ("carbs_sugars", "sugar"), ("fat_total", "fat"),
-            ("fat_saturated", "sat_fat"), ("salt", "salt"), ("fibre", "fibre"),
-        ))
-    q = f"""SELECT l.id, l.estimated, l.date, l.meal_type, f.name,
-                  {_SERVINGS} AS servings, {_GRAMS} AS grams, s.name AS set_name,
-                  {nutrients}
-           FROM food_logs l LEFT JOIN food_items f ON l.food_item_id = f.id
-           LEFT JOIN item_sets s ON l.set_id = s.id
-           WHERE l.user_id = ?{since_sql} ORDER BY l.date DESC, l.id DESC"""
-    conn = get_db()
-    rows = conn.execute(q, (g.user_id, *since_params)).fetchall()
-    return jsonify([list(r) for r in rows])
+    return _ledger("food", _FOOD_COLUMNS)
 
 
 def _food_amount(payload) -> str:
@@ -156,14 +125,11 @@ def add_food_log():
     spec = sets.spec_for("food")
     name = _name(spec, d["food_name"])
     fixed = {"date": v["date"], "meal_type": v["meal_type"]}
-    item = conn.execute(
-        "SELECT id, category FROM food_items WHERE name = ? COLLATE NOCASE", (name,)
-    ).fetchone()
+    item = named("food_items", name, "id, category")
     if item is not None:
-        estimated = 1 if (item["category"] or "") == AD_HOC_CATEGORY else 0
-        _insert_log_row(conn, spec, item["id"], fixed,
-                        {amount: v[amount], "estimated": estimated})
-        return jsonify({"status": "success", "rows": 1, "estimated": bool(estimated)})
+        estimated = int(item["category"] == AD_HOC_CATEGORY)
+        _log_item(conn, spec, item["id"], fixed, {amount: v[amount], "estimated": estimated})
+        return {"status": "success", "rows": 1, "estimated": bool(estimated)}
 
     meal_set = sets.find(conn, "food", name)
     if meal_set is None:
@@ -174,8 +140,8 @@ def add_food_log():
             f"rather than in grams — its ingredients are already in grams.")
 
     written = _log_set(conn, spec, meal_set, v["servings"], fixed)
-    return jsonify({"status": "success", "rows": written,
-                    "meal_set": meal_set["name"], "set": meal_set["name"]})
+    return {"status": "success", "rows": written,
+            "meal_set": meal_set["name"], "set": meal_set["name"]}
 
 
 @logs_bp.route("/food/quick", methods=["POST"])
@@ -195,12 +161,10 @@ def add_quick_food_log():
     if energy <= 0:
         raise BadValue("An estimate needs more than zero calories.")
 
-    held = conn.execute(
-        "SELECT name, category FROM food_items WHERE name = ? COLLATE NOCASE", (name,)
-    ).fetchone()
+    held = named("food_items", name, "name, category")
     if held is not None:
         how = ("log it with :log — it is already an estimate"
-               if (held["category"] or "") == AD_HOC_CATEGORY
+               if held["category"] == AD_HOC_CATEGORY
                else "log it with :log, or give this estimate another name")
         raise Conflict(f"'{held['name']}' is already a food, so {how}.")
     if sets.find(conn, "food", name) is not None:
@@ -221,23 +185,15 @@ def add_quick_food_log():
         """, (g.user_id, v["date"], v["meal_type"], cursor.lastrowid))
 
     catalog_updated(table="food_items", action="insert", name=name)
-    return jsonify({"status": "success", "rows": 1, "estimated": True,
-                    "energy_kcal": energy})
+    return {"status": "success", "rows": 1, "estimated": True, "energy_kcal": energy}
 
 
 @logs_bp.route("/beverage", methods=["GET"])
 @require_auth
 def get_beverage_logs():
-    since_sql, since_params = _since_clause()
-    q = f"""SELECT l.id, l.date, l.time, b.name, s.name AS set_name, l.servings,
-                  (b.antioxidants_mg * l.servings) as anti,
-                  (b.caffeine_mg * l.servings) as caff
-           FROM beverage_logs l LEFT JOIN beverage_items b ON l.beverage_item_id = b.id
-           LEFT JOIN item_sets s ON l.set_id = s.id
-           WHERE l.user_id = ?{since_sql} ORDER BY l.date DESC, l.time DESC"""
-    conn = get_db()
-    rows = conn.execute(q, (g.user_id, *since_params)).fetchall()
-    return jsonify([list(r) for r in rows])
+    return _ledger("beverage", "l.id, l.date, l.time, i.name, s.name, l.servings, "
+                               "i.antioxidants_mg * l.servings, i.caffeine_mg * l.servings",
+                   order="l.date DESC, l.time DESC")
 
 
 @logs_bp.route("/beverage", methods=["POST"])
@@ -253,16 +209,9 @@ def add_beverage_log():
 @logs_bp.route("/exercise", methods=["GET"])
 @require_auth
 def get_exercise_logs():
-    since_sql, since_params = _since_clause()
-    q = f"""SELECT l.id, l.date, e.name, st.name AS set_name, l.set1, l.set2,
-                  l.set3, l.set4, l.set5, l.weight_kg, l.rpe, e.muscle_group,
-                  e.metric_type
-           FROM exercise_logs l LEFT JOIN exercise_items e ON l.exercise_item_id = e.id
-           LEFT JOIN item_sets st ON l.set_id = st.id
-           WHERE l.user_id = ?{since_sql} ORDER BY l.date DESC, l.id DESC"""
-    conn = get_db()
-    rows = conn.execute(q, (g.user_id, *since_params)).fetchall()
-    return jsonify([list(r) for r in rows])
+    return _ledger("exercise", "l.id, l.date, i.name, s.name, l.set1, l.set2, l.set3, "
+                               "l.set4, l.set5, l.weight_kg, l.rpe, i.muscle_group, "
+                               "i.metric_type")
 
 
 @logs_bp.route("/exercise", methods=["POST"])
@@ -270,23 +219,23 @@ def get_exercise_logs():
 def add_exercise_log():
     d = read_payload("date", "ex_name", "weight_kg", "rpe")
     conn = get_db()
-    scheme = sets.spec_for("exercise").log_amount_columns
-    v = checked_payload(conn, "exercise_logs", d, ("date",) + scheme,
-                        defaults={column: 0 for column in scheme})
-
     spec = sets.spec_for("exercise")
+    scheme = spec.log_amount_columns
+    v = checked_payload(conn, "exercise_logs", d, ("date",) + scheme,
+                        defaults=dict.fromkeys(scheme, 0))
+
     name = _name(spec, d["ex_name"])
-    item_id = _catalog_id(conn, "exercise_items", name)
-    if item_id is None:
+    item = named("exercise_items", name)
+    if item is None:
         if sets.find(conn, "exercise", name) is not None:
             raise BadValue(
                 f"'{name}' is a workout, which carries its own sets and "
                 f"loads. Log it with :wlog.")
         raise _unknown_name(spec, name)
 
-    _insert_log_row(conn, spec, item_id, {"date": v["date"]},
-                    {column: v[column] for column in scheme})
-    return jsonify({"status": "success", "rows": 1})
+    _log_item(conn, spec, item["id"], {"date": v["date"]},
+              {column: v[column] for column in scheme})
+    return {"status": "success", "rows": 1}
 
 
 @logs_bp.route("/exercise/workout", methods=["POST"])
@@ -303,24 +252,14 @@ def add_workout_log():
     if workout is None:
         raise BadValue(f"No workout called '{name}'.")
     written = _log_set(conn, spec, workout, 1.0, {"date": v["date"]})
-    return jsonify({"status": "success", "rows": written, "set": workout["name"]})
+    return {"status": "success", "rows": written, "set": workout["name"]}
 
 
 @logs_bp.route("/supplement", methods=["GET"])
 @require_auth
 def get_supplement_logs():
-    since_sql, since_params = _since_clause()
-    q = f"""SELECT l.id, l.date, s.name, st.name AS set_name, l.servings,
-                  (s.b12_mcg * l.servings), (s.iodine_mcg * l.servings), (s.creatine_g * l.servings),
-                  (s.d3_iu * l.servings), (s.k2_mcg * l.servings), (s.dha_mg * l.servings),
-                  (s.epa_mg * l.servings), (s.calcium_mg * l.servings), (s.magnesium_mg * l.servings),
-                  (s.zinc_mg * l.servings), (s.c_mg * l.servings), (s.l_theanine_mg * l.servings)
-           FROM supplement_logs l LEFT JOIN supplement_items s ON l.supplement_item_id = s.id
-           LEFT JOIN item_sets st ON l.set_id = st.id
-           WHERE l.user_id = ?{since_sql} ORDER BY l.date DESC, l.id DESC"""
-    conn = get_db()
-    rows = conn.execute(q, (g.user_id, *since_params)).fetchall()
-    return jsonify([list(r) for r in rows])
+    return _ledger("supplement", "l.id, l.date, i.name, s.name, l.servings, " + ", ".join(
+        f"i.{dose} * l.servings" for dose in SUPPLEMENT_DOSES))
 
 
 @logs_bp.route("/supplement", methods=["POST"])
@@ -336,14 +275,7 @@ def add_supplement_log():
 @logs_bp.route("/mobility", methods=["GET"])
 @require_auth
 def get_mobility_logs():
-    since_sql, since_params = _since_clause()
-    q = f"""SELECT l.id, l.date, m.name, s.name AS set_name, l.duration_mins, m.mets
-           FROM mobility_logs l LEFT JOIN mobility_items m ON l.mobility_item_id = m.id
-           LEFT JOIN item_sets s ON l.set_id = s.id
-           WHERE l.user_id = ?{since_sql} ORDER BY l.date DESC, l.id DESC"""
-    conn = get_db()
-    rows = conn.execute(q, (g.user_id, *since_params)).fetchall()
-    return jsonify([list(r) for r in rows])
+    return _ledger("mobility", "l.id, l.date, i.name, s.name, l.duration_mins, i.mets")
 
 
 @logs_bp.route("/mobility", methods=["POST"])

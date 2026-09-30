@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import request, jsonify, g
+from flask import request, g
 from server.db_session import get_db
 
 
@@ -12,14 +12,14 @@ def require_auth(f):
         token = auth_header.strip() or request.headers.get("X-API-Key", "").strip()
 
         if not token:
-            return jsonify({"error": "Missing authentication token"}), 401
+            return {"error": "Missing authentication token"}, 401
 
         user = get_db().execute(
             "SELECT id, username FROM users WHERE api_token = ?", (token,)
         ).fetchone()
 
         if not user:
-            return jsonify({"error": "Invalid API token"}), 403
+            return {"error": "Invalid API token"}, 403
 
         g.user_id = user["id"]
         g.username = user["username"]

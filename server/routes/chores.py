@@ -1,14 +1,10 @@
-import logging
-
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g
 
 from server.auth import require_auth
-from server.db_session import get_db
+from server.db_session import get_db, insert, named, rows
 from server.events import catalog_updated
 from server.payload import BadValue, read_payload
-from server.validation import checked_payload, validate_column_value
-
-log = logging.getLogger(__name__)
+from server.validation import checked_payload, since_date
 
 chores_bp = Blueprint("chores", __name__)
 
@@ -26,13 +22,11 @@ _BOARD_SQL = """
 """
 
 
-def _chore_by_name(conn, name):
+def _chore_by_name(name):
     """Return the chore a member typed, or a refusal naming it."""
     if not isinstance(name, str) or not name.strip():
         raise BadValue("Name a chore to mark done.")
-    row = conn.execute(
-        "SELECT id, name FROM chores WHERE name = ? COLLATE NOCASE",
-        (name.strip(),)).fetchone()
+    row = named("chores", name.strip(), "id, name")
     if row is None:
         raise BadValue(f"There is no chore called '{name}'.")
     return row
@@ -42,8 +36,7 @@ def _chore_by_name(conn, name):
 @require_auth
 def get_chores():
     """Return every chore with its last completion."""
-    conn = get_db()
-    return jsonify([dict(row) for row in conn.execute(_BOARD_SQL)])
+    return [dict(row) for row in get_db().execute(_BOARD_SQL)]
 
 
 @chores_bp.route("", methods=["POST"])
@@ -54,17 +47,15 @@ def add_chore():
     conn = get_db()
     values = checked_payload(conn, "chores", payload, CHORE_COLUMNS)
 
-    name = str(values.get("name", "")).strip()
+    name = values["name"] = values["name"].strip()
     if not name:
         raise BadValue("A chore needs a name.")
-    values["name"] = name
 
     with conn:
-        conn.execute(f"INSERT INTO chores ({', '.join(values)}) "
-                     f"VALUES ({', '.join('?' * len(values))})", tuple(values.values()))
+        insert("chores", [values])
 
     catalog_updated(table="chores", action="chore", name=name)
-    return jsonify({"status": "success", "name": name}), 201
+    return {"status": "success", "name": name}, 201
 
 
 @chores_bp.route("/done", methods=["POST"])
@@ -73,7 +64,7 @@ def complete_chore():
     """Record one chore as done on one day."""
     payload = read_payload("name", "date")
     conn = get_db()
-    chore = _chore_by_name(conn, payload["name"])
+    chore = _chore_by_name(payload["name"])
     values = checked_payload(conn, "chore_completions", payload, ("date",))
 
     with conn:
@@ -85,23 +76,14 @@ def complete_chore():
 
     if not repeated:
         catalog_updated(table="chore_completions", action="chore_done", name=chore["name"])
-    return jsonify({"status": "success", "name": chore["name"],
-                    "date": values["date"], "repeated": repeated})
+    return {"status": "success", "name": chore["name"], "date": values["date"],
+            "repeated": repeated}
 
 
 @chores_bp.route("/completions", methods=["GET"])
 @require_auth
 def get_completions():
     """Return the shared history, most recent first, optionally bounded."""
-    since = request.args.get("since")
-    clause, params = "", ()
-    if since:
-        validate_column_value("date", since)
-        clause, params = " WHERE d.date >= ?", (since,)
-
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT d.id, d.date, c.name, d.done_by "
-        "FROM chore_completions d JOIN chores c ON c.id = d.chore_id"
-        f"{clause} ORDER BY d.date DESC, d.id DESC", params)
-    return jsonify([list(row) for row in rows])
+    return rows("SELECT d.id, d.date, c.name, d.done_by "
+                "FROM chore_completions d JOIN chores c ON c.id = d.chore_id "
+                "WHERE d.date >= ? ORDER BY d.date DESC, d.id DESC", (since_date(),))

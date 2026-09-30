@@ -1,15 +1,12 @@
-import logging
+from flask import Blueprint
 
-from flask import Blueprint, jsonify
 from server.auth import require_auth
-from server.db_session import get_db
+from server.db_session import get_db, insert, named
 from server.events import catalog_updated
 from server.payload import BadValue, Conflict, NotFound, read_payload
 from server import sets as item_sets
 from server.tables import CATALOG_DOMAINS
 from server.validation import checked_columns, require_known_columns
-
-log = logging.getLogger(__name__)
 
 catalog_bp = Blueprint("catalog", __name__)
 
@@ -24,10 +21,7 @@ def _catalog_table(domain):
 @catalog_bp.route("/<domain>", methods=["GET"])
 @require_auth
 def get_catalog(domain):
-    table = _catalog_table(domain)
-    conn = get_db()
-    rows = conn.execute(f"SELECT * FROM {table}").fetchall()
-    return jsonify([dict(r) for r in rows])
+    return [dict(row) for row in get_db().execute(f"SELECT * FROM {_catalog_table(domain)}")]
 
 
 @catalog_bp.route("/<domain>", methods=["POST"])
@@ -38,15 +32,10 @@ def add_catalog_item(domain):
 
     conn = get_db()
     require_known_columns(table, data)
-    values = checked_columns(conn, table, data)
-
-    col_names = ", ".join(values)
-    placeholders = ", ".join(f":{col}" for col in values)
-
     with conn:
-        conn.execute(f"INSERT INTO {table} ({col_names}) VALUES ({placeholders})", values)
+        insert(table, [checked_columns(conn, table, data)])
     catalog_updated(domain=domain, table=table, action="insert")
-    return jsonify({"status": "success"})
+    return {"status": "success"}
 
 
 @catalog_bp.route("/items/<path:name>", methods=["DELETE"])
@@ -75,7 +64,7 @@ def delete_item_by_name(name):
         raise NotFound(f"No catalog item named '{name}'.")
 
     catalog_updated(action="delete", name=name)
-    return jsonify({"status": "success", "removed": removed})
+    return {"status": "success", "removed": removed}
 
 
 def _set_domain(domain):
@@ -89,8 +78,7 @@ def _set_domain(domain):
 @catalog_bp.route("/sets/<domain>", methods=["GET"])
 @require_auth
 def get_sets(domain):
-    spec = _set_domain(domain)
-    return jsonify([list(r) for r in item_sets.listing(get_db(), spec)])
+    return [list(row) for row in item_sets.listing(get_db(), _set_domain(domain))]
 
 
 def _component_amounts(conn, spec, entry, item_name):
@@ -103,7 +91,7 @@ def _component_amounts(conn, spec, entry, item_name):
         values = checked_columns(conn, spec.components_table, given)
     except BadValue as bad_amount:
         raise BadValue(f"{item_name}: {bad_amount}") from None
-    if spec.has_single_amount and (values["amount"] is None or values["amount"] <= 0):
+    if spec.has_single_amount and values["amount"] <= 0:
         raise BadValue(
             f"{item_name} needs an amount in {spec.unit} greater than zero.")
     return values
@@ -127,9 +115,7 @@ def add_set(domain):
 
     conn = get_db()
 
-    clash = conn.execute(
-        f"SELECT name FROM {spec.catalog_table} WHERE name = ? COLLATE NOCASE", (name,)
-    ).fetchone()
+    clash = named(spec.catalog_table, name, "name")
     if clash:
         raise BadValue(
             f"'{clash['name']}' is already a {spec.domain} item. A {spec.word} needs "
@@ -148,28 +134,20 @@ def add_set(domain):
         item_name = entry.get("item_name")
         if not isinstance(item_name, str) or not item_name.strip():
             raise BadValue(f"Each component needs a {spec.domain} name.")
-        row = conn.execute(
-            f"SELECT id, name FROM {spec.catalog_table} WHERE name = ? COLLATE NOCASE",
-            (item_name.strip(),)
-        ).fetchone()
+        row = named(spec.catalog_table, item_name.strip(), "id, name")
         if row is None:
             raise BadValue(f"{spec.domain.capitalize()} '{item_name}' not found in catalog.")
         if row["id"] in resolved:
             raise BadValue(f"'{row['name']}' is listed twice. Give one amount per component.")
         resolved[row["id"]] = _component_amounts(conn, spec, entry, row["name"])
 
-    columns = ["set_id", spec.item_column, *spec.amount_columns]
-    placeholders = ", ".join("?" * len(columns))
     with conn:
-        cursor = conn.execute(
-            "INSERT INTO item_sets (domain, name) VALUES (?, ?)", (spec.domain, name))
-        conn.executemany(
-            f"INSERT INTO {spec.components_table} ({', '.join(columns)}) "
-            f"VALUES ({placeholders})",
-            [(cursor.lastrowid, item_id,
-              *(amounts.get(column, 0) for column in spec.amount_columns))
-             for item_id, amounts in resolved.items()])
+        set_id = insert("item_sets", [{"domain": spec.domain, "name": name}])
+        insert(spec.components_table, [
+            {"set_id": set_id, spec.item_column: item_id,
+             **dict.fromkeys(spec.amount_columns, 0), **amounts}
+            for item_id, amounts in resolved.items()])
 
     catalog_updated(table=spec.components_table, action="insert", domain=spec.domain,
                     name=name)
-    return jsonify({"status": "success", "components": len(resolved)})
+    return {"status": "success", "components": len(resolved)}

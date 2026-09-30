@@ -1,5 +1,7 @@
 import datetime
 
+from flask import request
+
 from server.payload import BadValue
 from server.tables import coerce_value, mutable_columns, non_negative_columns
 
@@ -37,6 +39,13 @@ def validate_column_value(column: str, value) -> None:
         raise BadValue(
             f"'{value}' is not {expected}, which is what {column} stores"
         ) from None
+
+
+def since_date() -> str:
+    """Return the ?since= date bound, or the empty string that bounds nothing."""
+    since = request.args.get("since") or ""
+    validate_column_value("date", since or None)
+    return since
 
 
 def validate_column_bound(table_name: str, column: str, value) -> None:

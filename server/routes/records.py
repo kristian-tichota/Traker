@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, g
+from flask import Blueprint, g
 
 from server.auth import require_auth
 from server.db_session import get_db
@@ -39,7 +39,7 @@ def delete_record(table_name, row_id):
 
     if spec.is_catalog:
         catalog_updated(table=table_name, action="delete", id=row_id)
-    return jsonify({"status": "success"})
+    return {"status": "success"}
 
 
 @records_bp.route("/<table_name>/<int:row_id>", methods=["PATCH"])
@@ -81,4 +81,4 @@ def update_record(table_name, row_id):
 
     if spec.is_catalog:
         catalog_updated(table=table_name, action="update", id=row_id, col=db_col)
-    return jsonify({"status": "success"})
+    return {"status": "success"}

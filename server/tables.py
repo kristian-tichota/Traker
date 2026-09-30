@@ -27,6 +27,9 @@ def _spec(name, is_catalog, columns, row_editable=True, non_negative=(), exclusi
 
 CATALOG_DOMAINS = {domain: spec.catalog_table for domain, spec in SET_SPECS.items()}
 
+SUPPLEMENT_DOSES = ("b12_mcg", "iodine_mcg", "creatine_g", "d3_iu", "k2_mcg", "dha_mg",
+                    "epa_mg", "calcium_mg", "magnesium_mg", "zinc_mg", "c_mg", "l_theanine_mg")
+
 _REGISTRY = {
     spec.name: spec
     for spec in (
@@ -40,14 +43,8 @@ _REGISTRY = {
             "plane_of_motion", "joint_mechanics", "equipment_type",
             "unilateral_bilateral", "metric_type",
         }),
-        _spec("supplement_items", True, {
-            "name", "b12_mcg", "iodine_mcg", "creatine_g", "d3_iu", "k2_mcg",
-            "dha_mg", "epa_mg", "calcium_mg", "magnesium_mg", "zinc_mg",
-            "c_mg", "l_theanine_mg",
-        }, non_negative={
-            "b12_mcg", "iodine_mcg", "creatine_g", "d3_iu", "k2_mcg", "dha_mg",
-            "epa_mg", "calcium_mg", "magnesium_mg", "zinc_mg", "c_mg", "l_theanine_mg",
-        }),
+        _spec("supplement_items", True, {"name", *SUPPLEMENT_DOSES},
+              non_negative=SUPPLEMENT_DOSES),
         _spec("mobility_items", True, {"name", "mets", "notes"}),
 
         _spec("item_sets", True, {"name"}),
