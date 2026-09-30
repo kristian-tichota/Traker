@@ -50,9 +50,7 @@ def heading_over(rows):
 
 def grouped_by_set(rows):
     """Return rows with a heading inserted over each logged set."""
-    if not rows:
-        return list(rows)
-    cls = type(rows[0])
+    cls = type(rows[0]) if rows else None
     set_field = getattr(cls, "SET_FIELD", None)
     if set_field is None:
         return list(rows)
