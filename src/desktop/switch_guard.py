@@ -2,19 +2,13 @@ import logging
 
 from PyQt6.QtCore import QObject, pyqtSlot
 
-from src.desktop.session import session_call
+from src.desktop.session import (ACTIVITIES, ACTIVITIES_PATH, ACTIVITIES_SERVICE, KWIN,
+                                 KWIN_PATH, session_call)
 
 log = logging.getLogger(__name__)
 
-KWIN = "org.kde.KWin"
 DESKTOPS_PATH = "/VirtualDesktopManager"
 DESKTOPS = "org.kde.KWin.VirtualDesktopManager"
-KWIN_PATH = "/KWin"
-KWIN_IFACE = "org.kde.KWin"
-
-ACTIVITIES_SERVICE = "org.kde.ActivityManager"
-ACTIVITIES_PATH = "/ActivityManager/Activities"
-ACTIVITIES = "org.kde.ActivityManager.Activities"
 
 PROPERTIES = "org.freedesktop.DBus.Properties"
 
@@ -25,18 +19,14 @@ def _subscribe(service, path, interface, signal, slot) -> bool:
     from PyQt6.QtDBus import QDBusConnection
 
     bus = QDBusConnection.sessionBus()
-    if not bus.isConnected():
-        return False
-    return bool(bus.connect(service, path, interface, signal, slot))
+    return bus.isConnected() and bool(bus.connect(service, path, interface, signal, slot))
 
 
 def _unsubscribe(service, path, interface, signal, slot) -> bool:
     from PyQt6.QtDBus import QDBusConnection
 
     bus = QDBusConnection.sessionBus()
-    if not bus.isConnected():
-        return False
-    return bool(bus.disconnect(service, path, interface, signal, slot))
+    return bus.isConnected() and bool(bus.disconnect(service, path, interface, signal, slot))
 
 
 class SwitchGuard(QObject):
@@ -140,7 +130,7 @@ class SwitchGuard(QObject):
         if reached and answer is not None:
             return answer
         reached, answer = self._call(KWIN, KWIN_PATH, PROPERTIES, "Get",
-                                     KWIN_IFACE, "currentDesktop")
+                                     KWIN, "currentDesktop")
         return answer if reached else None
 
     def _write_desktop(self, where) -> bool:
@@ -151,8 +141,7 @@ class SwitchGuard(QObject):
                                     DESKTOPS, "current", QDBusVariant(where))
             if reached:
                 return True
-        reached, _ = self._call(KWIN, KWIN_PATH, KWIN_IFACE,
-                                "setCurrentDesktop", where)
+        reached, _ = self._call(KWIN, KWIN_PATH, KWIN, "setCurrentDesktop", where)
         return reached
 
     def _read_activity(self):

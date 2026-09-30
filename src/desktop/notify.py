@@ -1,6 +1,6 @@
 import logging
 
-from src.desktop.session import session_call
+from src.desktop.session import session_call, session_send
 
 log = logging.getLogger(__name__)
 
@@ -18,26 +18,14 @@ _session_call = session_call
 
 def notify(summary, body, *, timeout_ms=15000,
            sound_name="dialog-warning", sound_file="", icon="clock"):
-    from PyQt6.QtDBus import QDBusConnection, QDBusMessage
-
-    bus = QDBusConnection.sessionBus()
-    if not bus.isConnected():
-        log.debug("No session bus: nothing to warn on.")
-        return False
-
     hints = {"desktop-entry": DESKTOP_ENTRY}
     if sound_name:
         hints["sound-name"] = sound_name
     if sound_file:
         hints["sound-file"] = sound_file
 
-    message = QDBusMessage.createMethodCall(SERVICE, OBJECT, INTERFACE, "Notify")
-    message.setArguments([
-        APP_NAME, _unsigned(0), icon, summary, body,
-        _no_actions(), hints, int(timeout_ms),
-    ])
-
-    sent = bus.send(message)
+    sent = session_send(SERVICE, OBJECT, INTERFACE, "Notify", APP_NAME, _unsigned(0), icon,
+                        summary, body, _no_actions(), hints, int(timeout_ms))
     if not sent:
         log.debug("The notification could not be put on the bus.")
     return sent

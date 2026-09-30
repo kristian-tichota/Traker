@@ -4,13 +4,12 @@ import logging
 from PyQt6.QtCore import QTimer
 
 from src.desktop import kde_config
-from src.desktop.session import session_call
+from src.desktop.session import KWIN, session_call
 from src.domain.clock import minutes_of_day, within_window
 from src.profile import UserProfile
 
 log = logging.getLogger(__name__)
 
-SERVICE = "org.kde.KWin"
 EFFECTS_PATH = "/Effects"
 EFFECTS = "org.kde.kwin.Effects"
 
@@ -25,7 +24,6 @@ DEFAULT_FROM = "20:00"
 DEFAULT_TO = "06:00"
 DEFAULT_INTENSITY = 1.0
 
-# KWin rolls an intensity of zero over to full; off is the effect unloaded.
 MIN_INTENSITY = 0.05
 
 TICK_MS = 60_000
@@ -88,7 +86,7 @@ class NightFilter:
         """Write the setting down and then ask for it."""
         self._persist(grey, intensity)
         method = "loadEffect" if grey else "unloadEffect"
-        reached, took = self._call(SERVICE, EFFECTS_PATH, EFFECTS, method, EFFECT)
+        reached, took = self._call(KWIN, EFFECTS_PATH, EFFECTS, method, EFFECT)
         if not reached:
             log.info("No KWin to take the screens' colour away; nothing here "
                      "applies on this session.")
@@ -98,7 +96,7 @@ class NightFilter:
                 log.warning("KWin would not load %s; the screens keep their "
                             "colour.", EFFECT)
                 return False
-            self._call(SERVICE, EFFECTS_PATH, EFFECTS, "reconfigureEffect", EFFECT)
+            self._call(KWIN, EFFECTS_PATH, EFFECTS, "reconfigureEffect", EFFECT)
         log.info("[grayscale]: the screens are %s.",
                  "monochrome" if grey else "in colour again")
         return True
