@@ -141,14 +141,6 @@ class TestTheHeaderReadsAsADate:
 
         assert popup.lbl_date.text() == "Timeline: whenever"
 
-    def test_setting_a_day_twice_does_not_accumulate_legend_entries(self, popup, qapp):
-        popup.set_data("2026-09-05", A_DAY, SOME_EVENTS)
-        first = popup.legend_row1.count(), popup.legend_row2.count()
-
-        popup.set_data("2026-09-06", A_DAY, SOME_EVENTS)
-
-        assert (popup.legend_row1.count(), popup.legend_row2.count()) == first
-
     def test_the_whole_popup_paints(self, popup, qapp):
         popup.set_data("2026-09-05", A_DAY, SOME_EVENTS)
 

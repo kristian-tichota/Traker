@@ -7,6 +7,36 @@ from src.domain.clock import as_displayed_date
 
 log = logging.getLogger(__name__)
 
+STATE_COLOURS = {
+    'focus': 'base00',
+    'focus_overtime': 'red',
+    'rest': 'green',
+    'rest_overtime': 'cyan',
+}
+
+LEGEND = (
+    (("■ Focus", 'base00'), ("■ Focus OT", 'red'), ("■ Rest", 'green'), ("■ Rest OT", 'cyan')),
+    (("● Pause", 'yellow'), ("● Resume", 'base01'), ("● Skip", 'red'),
+     ("◆ Long break", 'base01'), ("● Cluster", 'magenta')),
+)
+
+
+def minute_of_day(timestamp) -> float:
+    """Return the minute of the day an ISO timestamp names, seconds as a fraction."""
+    time_part = timestamp.split("T")[1] if "T" in timestamp else timestamp
+    parts = time_part.split(":")
+    seconds = float(parts[2].replace("Z", "")) if len(parts) > 2 else 0.0
+    return int(parts[0]) * 60 + int(parts[1]) + seconds / 60.0
+
+
+def event_colour(event_type) -> QColor:
+    """Return the colour of an event's dot."""
+    if "pause" in event_type:
+        return QColor(PALETTE['yellow'])
+    if "skip" in event_type or "overridden" in event_type:
+        return QColor(PALETTE['red'])
+    return QColor(PALETTE['base01'])
+
 
 class TimelineCanvas(QWidget):
     def __init__(self, parent=None):
@@ -24,8 +54,14 @@ class TimelineCanvas(QWidget):
         self.setCursor(Qt.CursorShape.OpenHandCursor)
 
     def set_data(self, heartbeats: dict, events: list):
+        """Show heartbeats keyed by minute, and events as (timestamp, type, amount)."""
         self.heartbeats = heartbeats
-        self.events = events
+        self.events = []
+        for timestamp, event_type, _amount in events:
+            try:
+                self.events.append((minute_of_day(timestamp), event_type))
+            except (ValueError, TypeError, IndexError) as e:
+                log.debug("Skipping an event with an unreadable timestamp: %s", e)
         self.view_start = 0.0
         self.view_end = 1440.0
         self.update()
@@ -116,25 +152,14 @@ class TimelineCanvas(QWidget):
 
         painter.setClipRect(bar_x, 0, bar_width, self.height())
 
-        color_map = {
-            'focus': QColor(PALETTE['base00']),
-            'focus_overtime': QColor(PALETTE['red']),
-            'rest': QColor(PALETTE['green']),
-            'rest_overtime': QColor(PALETTE['cyan'])
-        }
-
         pixels_per_minute = bar_width / (self.view_end - self.view_start) if self.view_end > self.view_start else 1
         rect_width = max(1, int(pixels_per_minute) + 1)
 
-        sorted_heartbeats = sorted(self.heartbeats.items(), key=lambda x: x[0])
-
-        for exact_minute, val in sorted_heartbeats:
-            state = val[0] if isinstance(val, tuple) else val
-
-            if self.view_start <= exact_minute <= self.view_end and state in color_map:
-                x_pos = self._time_to_x(exact_minute)
-                painter.setBrush(color_map[state])
-                painter.drawRect(x_pos, bar_y, rect_width, bar_height)
+        colours = {state: QColor(PALETTE[name]) for state, name in STATE_COLOURS.items()}
+        for exact_minute, (state, _mode) in sorted(self.heartbeats.items()):
+            if self.view_start <= exact_minute <= self.view_end and state in colours:
+                painter.setBrush(colours[state])
+                painter.drawRect(self._time_to_x(exact_minute), bar_y, rect_width, bar_height)
 
         window = self.view_end - self.view_start
         if window <= 120:
@@ -169,67 +194,37 @@ class TimelineCanvas(QWidget):
             current_grid += grid_interval
 
         x_to_events = {}
-        for ev in self.events:
-            ts, e_type, amt = ev
-            try:
-                time_part = ts.split("T")[1] if "T" in ts else ts
-                time_elements = time_part.split(":")
+        for minute, event_type in self.events:
+            if self.view_start <= minute <= self.view_end:
+                x_to_events.setdefault(self._time_to_x(minute), []).append(event_type)
 
-                h = int(time_elements[0])
-                m = int(time_elements[1])
-                s = float(time_elements[2].replace("Z", "")) if len(time_elements) > 2 else 0.0
-
-                minute_of_day = (h * 60) + m + (s / 60.0)
-
-                if self.view_start <= minute_of_day <= self.view_end:
-                    x_pos = self._time_to_x(minute_of_day)
-                    if x_pos not in x_to_events:
-                        x_to_events[x_pos] = []
-                    x_to_events[x_pos].append(e_type)
-            except (ValueError, TypeError) as e:
-                log.debug("Skipping an event with an unreadable timestamp: %s", e)
-
+        painter.setPen(QPen(QColor(PALETTE['base03']), 1))
         for x_pos, e_types in x_to_events.items():
             if len(e_types) <= 4:
                 for stack_count, e_type in enumerate(e_types):
                     y_pos = bar_y - 12 - (stack_count * 10)
-
-                    if "long_break" in e_type or "mode_switch" in e_type:
-                        color = QColor(PALETTE['base01'])
-                        painter.setBrush(color)
-                        painter.setPen(QPen(QColor(PALETTE['base03']), 1))
+                    painter.setBrush(event_colour(e_type))
+                    if "long_break" in e_type:
+                        painter.save()
                         painter.translate(x_pos, y_pos)
                         painter.rotate(45)
                         painter.drawRect(-4, -4, 8, 8)
-                        painter.rotate(-45)
-                        painter.translate(-x_pos, -y_pos)
+                        painter.restore()
                     else:
-                        if "pause" in e_type:
-                            color = QColor(PALETTE['yellow'])
-                        elif "skip" in e_type or "overridden" in e_type:
-                            color = QColor(PALETTE['red'])
-                        else:
-                            color = QColor(PALETTE['base01'])
-
-                        painter.setBrush(color)
-                        painter.setPen(QPen(QColor(PALETTE['base03']), 1))
                         painter.drawEllipse(x_pos - 4, y_pos, 8, 8)
             else:
                 y_pos = bar_y - 14
 
                 painter.setBrush(QColor(PALETTE['magenta']))
-                painter.setPen(QPen(QColor(PALETTE['base03']), 1))
                 painter.drawEllipse(x_pos - 6, y_pos - 6, 12, 12)
 
-                painter.setPen(QPen(QColor(PALETTE['base03'])))
                 font = painter.font()
                 font.setFamily('Fira Code')
                 font.setPixelSize(10)
                 font.setBold(True)
                 painter.setFont(font)
-
-                text_rect = QRect(x_pos - 6, y_pos - 6, 12, 12)
-                painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, "+")
+                painter.drawText(QRect(x_pos - 6, y_pos - 6, 12, 12),
+                                 Qt.AlignmentFlag.AlignCenter, "+")
 
 
 class TimelinePopupWidget(QWidget):
@@ -273,21 +268,17 @@ class TimelinePopupWidget(QWidget):
         self.canvas = TimelineCanvas()
         layout.addWidget(self.canvas)
 
-        self.legend_container = QVBoxLayout()
-        self.legend_row1 = QHBoxLayout()
-        self.legend_row2 = QHBoxLayout()
+        for entries in LEGEND:
+            row = QHBoxLayout()
+            row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            row.setSpacing(12)
+            for name, colour in entries:
+                lbl = QLabel(name)
+                lbl.setStyleSheet(f"color: {PALETTE[colour]}; font-family: 'Fira Code'; font-size: 10px; font-weight: bold; border: none;")
+                row.addWidget(lbl)
+            layout.addLayout(row)
 
-        self.legend_row1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.legend_row2.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.legend_row1.setSpacing(12)
-        self.legend_row2.setSpacing(12)
-
-        self.legend_container.addLayout(self.legend_row1)
-        self.legend_container.addLayout(self.legend_row2)
-        layout.addLayout(self.legend_container)
-
-        instructions = QLabel("Double-click timeline to reset zoom | Scroll to zoom | Drag to pan | Thin bar indicates active Timer Mode")
+        instructions = QLabel("Double-click timeline to reset zoom | Scroll to zoom | Drag to pan")
         instructions.setAlignment(Qt.AlignmentFlag.AlignCenter)
         instructions.setStyleSheet(f"color: {PALETTE['base0']}; font-family: 'Fira Code'; font-size: 9px; font-style: italic;")
         layout.addWidget(instructions)
@@ -300,29 +291,3 @@ class TimelinePopupWidget(QWidget):
     def set_data(self, date_str: str, heartbeats: dict, events: list):
         self.lbl_date.setText(f"Timeline: {as_displayed_date(date_str)}")
         self.canvas.set_data(heartbeats, events)
-
-        while self.legend_row1.count():
-            child = self.legend_row1.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-
-        while self.legend_row2.count():
-            child = self.legend_row2.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-
-        states = [
-            ("■ Focus", PALETTE['base00']), ("■ Focus OT", PALETTE['red']),
-            ("■ Rest", PALETTE['green']), ("■ Rest OT", PALETTE['cyan']),
-        ]
-        events = [
-            ("● Pause", PALETTE['yellow']), ("● Resume", PALETTE['base01']),
-            ("● Skip", PALETTE['red']), ("◆ Long break", PALETTE['base01']),
-            ("● Cluster", PALETTE['magenta']),
-        ]
-
-        for row, mapping in ((self.legend_row1, states), (self.legend_row2, events)):
-            for name, color in mapping:
-                lbl = QLabel(name)
-                lbl.setStyleSheet(f"color: {color}; font-family: 'Fira Code'; font-size: 10px; font-weight: bold; border: none;")
-                row.addWidget(lbl)
