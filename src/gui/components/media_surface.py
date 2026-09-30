@@ -2,7 +2,6 @@ import logging
 import os
 import re
 
-from PyQt6 import sip
 from PyQt6.QtCore import QPointF, QThreadPool, QUrl, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QOpenGLContext, QPalette
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
@@ -16,6 +15,7 @@ from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF,
                                     kind_of, library_for, readout_of)
 from src.domain.media import UNKNOWN, Place, as_elapsed, finished, how_far
 from src.gui.components.book_pane import BookPane
+from src.gui.components.break_pane import BreakPane, WebPane
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
 from src.gui.workers import run_in_background
@@ -62,15 +62,7 @@ LIST_INDENT_PX = 28
 LIST_FONT_PX = 20
 PAGE_ROWS = 10
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-
-
-def _failure_label(parent, text, colour='red') -> QLabel:
-    """Build the label that says on screen why nothing is shown."""
-    label = QLabel(text, parent)
-    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    label.setStyleSheet(f"color: {PALETTE[colour]}; font-size: 16px; "
-                        f"font-family: 'Fira Code'; letter-spacing: 2px;")
-    return label
+UNMARKED = Qt.ItemDataRole.UserRole
 
 
 class MpvScreen(QOpenGLWidget):
@@ -181,49 +173,34 @@ def _say_what_mpv_said(level, prefix, text):
                 "mpv %s: %s", prefix, said)
 
 
-class VideoPane(QWidget):
+class VideoPane(BreakPane):
     """One file, playing."""
 
     def __init__(self, path=None, start_at=0, parent=None):
         super().__init__(parent)
-        self._failed = None
-        self.player = None
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
         self.screen_widget = MpvScreen(self)
         self.screen_widget.playback_failed.connect(self._show_failure)
-        layout.addWidget(self.screen_widget)
+        self.layout().addWidget(self.screen_widget)
         self.player = self.screen_widget.player
-
         if self.player is None:
-            self._show_failure(self.screen_widget.player_error
-                               or "no player")
-            return
-        if path:
+            self._show_failure(self.screen_widget.player_error)
+        elif path:
             self.open(path, start_at)
 
     def open(self, path, start_at=0):
         """Play path from where it was left."""
-        self._clear_failure()
         if self.player is None:
             return
-        self.screen_widget.play(os.path.abspath(path),
-                                max(0, int(start_at or 0)) / 1000.0)
+        self._clear_message()
+        self.screen_widget.play(os.path.abspath(path), max(0, int(start_at or 0)) / 1000.0)
 
-    def _clear_failure(self):
-        """Clear the failure left by a file that could not be played."""
-        if self._failed is not None:
-            self._failed.deleteLater()
-            self._failed = None
-        self.screen_widget.show()
+    def _shown(self):
+        return self.screen_widget
 
     def _show_failure(self, message):
         """Show the failure on screen as well as in the log."""
         log.warning("Could not play: %s", message)
-        self.screen_widget.hide()
-        self._failed = _failure_label(self, f"COULD NOT PLAY\n{message}")
-        self.layout().addWidget(self._failed)
+        self._show_message(f"COULD NOT PLAY\n{message}")
 
     def toggle(self):
         """Pause, or carry on."""
@@ -247,18 +224,11 @@ class VideoPane(QWidget):
 
     def position(self) -> int:
         """Return milliseconds in, or zero before mpv has read the file."""
-        return self._milliseconds("time_pos")
+        return max(0, int((getattr(self.player, "time_pos", None) or 0) * 1000))
 
     def duration(self) -> int:
         """Return the file length, or zero until mpv has read it."""
-        return self._milliseconds("duration")
-
-    def _milliseconds(self, name) -> int:
-        """Return one mpv property as whole milliseconds, or zero for no answer."""
-        if self.player is None:
-            return 0
-        seconds = getattr(self.player, name, None)
-        return max(0, int((seconds or 0) * 1000))
+        return max(0, int((getattr(self.player, "duration", None) or 0) * 1000))
 
     def stop(self):
         if self.player is not None:
@@ -270,7 +240,7 @@ class VideoPane(QWidget):
         self.player = None
 
 
-class DocumentPane(QWidget):
+class DocumentPane(BreakPane):
     """One PDF, a whole page at a time."""
 
     def __init__(self, path=None, start_at=0, parent=None):
@@ -278,11 +248,7 @@ class DocumentPane(QWidget):
         from PyQt6.QtPdf import QPdfDocument
         from PyQt6.QtPdfWidgets import QPdfView
 
-        self._failed = None
         self._resume_at = 0
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
         self.document = QPdfDocument(self)
         self.view = QPdfView(self)
         self.view.setDocument(self.document)
@@ -292,12 +258,11 @@ class DocumentPane(QWidget):
         around = self.view.palette()
         around.setColor(QPalette.ColorRole.Dark, QColor(PALETTE['base03']))
         self.view.setPalette(around)
-        layout.addWidget(self.view)
+        self.layout().addWidget(self.view)
 
-        navigator = self.view.pageNavigator()
-        if navigator is not None:
-            navigator.currentPageChanged.connect(self._page_changed)
-        self.view.verticalScrollBar().rangeChanged.connect(self._room_changed)
+        self.pages = self.view.pageNavigator()
+        self.pages.currentPageChanged.connect(self._page_changed)
+        self.view.verticalScrollBar().rangeChanged.connect(self._hold_the_page)
 
         if path:
             self.open(path, start_at)
@@ -307,53 +272,35 @@ class DocumentPane(QWidget):
         from PyQt6.QtPdf import QPdfDocument
 
         self._resume_at = 0
-        self._clear_failure()
         error = self.document.load(os.path.abspath(path))
         if error != QPdfDocument.Error.None_:
             log.warning("Could not read %s: %s", path, error)
-            self.view.hide()
-            self._failed = _failure_label(self, f"COULD NOT READ\n{error.name}")
-            self.layout().addWidget(self._failed)
+            self._show_message(f"COULD NOT READ\n{error.name}")
             return
+        self._clear_message()
         last = max(0, self.document.pageCount() - 1)
         self._resume_at = max(0, min(int(start_at or 0), last))
         self._turn_to(self._resume_at)
 
     def _page_changed(self, page):
         """Put the page back where the turn did not come from the member."""
-        if self._resume_at and int(page) != self._resume_at:
+        if self._resume_at and page != self._resume_at:
             self._turn_to(self._resume_at)
 
-    def _room_changed(self, minimum, maximum):
-        """Handle the document being laid out, after which a jump can land."""
+    def _hold_the_page(self):
+        """Turn to the page asked for, once layout lets a jump land."""
         if self._resume_at:
             self._turn_to(self._resume_at)
 
     def _turn_to(self, page):
-        navigator = self.view.pageNavigator()
-        if navigator is None:
-            return
-        wanted = int(page)
-        if navigator.currentPage() == wanted and self.document.pageCount() > 1:
-            navigator.jump(0 if wanted else 1, QPointF())
-        navigator.jump(wanted, QPointF())
-
-    def _clear_failure(self):
-        if self._failed is not None:
-            self._failed.deleteLater()
-            self._failed = None
-        self.view.show()
+        if self.pages.currentPage() == page and self.document.pageCount() > 1:
+            self.pages.jump(0 if page else 1, QPointF())
+        self.pages.jump(page, QPointF())
 
     def showEvent(self, event):
         """Scroll to the requested page, which needs the view on a screen."""
         super().showEvent(event)
-        if self._resume_at:
-            QTimer.singleShot(0, self._turn_to_the_page_asked_for)
-
-    def _turn_to_the_page_asked_for(self):
-        """Turn to the page a break asked for, once layout has finished."""
-        if self._resume_at:
-            self._turn_to(self._resume_at)
+        QTimer.singleShot(0, self._hold_the_page)
 
     def toggle(self):
         """Turn the page, there being nothing to pause."""
@@ -361,13 +308,10 @@ class DocumentPane(QWidget):
 
     def step(self, direction):
         """Turn a page forward or back, clamped inside the document."""
-        navigator = self.view.pageNavigator()
-        if navigator is None:
-            return
         self._resume_at = 0
         last = max(0, self.document.pageCount() - 1)
-        wanted = max(0, min(last, navigator.currentPage() + int(direction)))
-        navigator.jump(wanted, QPointF())
+        wanted = max(0, min(last, self.pages.currentPage() + int(direction)))
+        self.pages.jump(wanted, QPointF())
 
     def nudge(self, direction):
         """Scroll inside the page."""
@@ -376,12 +320,11 @@ class DocumentPane(QWidget):
         bar.setValue(bar.value() - int(direction) * SCROLL_STEP_PX)
 
     def position(self) -> int:
-        navigator = self.view.pageNavigator()
-        return int(navigator.currentPage()) if navigator is not None else 0
+        return self.pages.currentPage()
 
     def duration(self) -> int:
         """Return how many pages there are."""
-        return max(0, int(self.document.pageCount()))
+        return self.document.pageCount()
 
     def stop(self):
         """Release the file."""
@@ -487,9 +430,15 @@ def _folder_list(parent) -> QTreeWidget:
     return tree
 
 
-def _name_colour(deck, marked=False) -> QColor:
-    """Return the colour of a deck's name: strong when marked, faint when it owes nothing."""
-    return QColor(PALETTE['base02' if marked else 'base00' if deck.owed else 'base1'])
+def _name_colour(deck) -> QColor:
+    """Return the colour of a deck's name: faint when it owes nothing."""
+    return QColor(PALETTE['base00' if deck.owed else 'base1'])
+
+
+def _ink(row, colour):
+    """Colour a row's name, kept for when the row is no longer marked."""
+    row.setForeground(0, colour)
+    row.setData(0, UNMARKED, colour)
 
 
 def _deck_rows(tree, decks) -> list:
@@ -500,7 +449,7 @@ def _deck_rows(tree, decks) -> list:
         counts = (deck.new, deck.learning, deck.review)
         row = QTreeWidgetItem([deck.name if parent is None else deck.leaf,
                                *map(str, counts)])
-        row.setForeground(0, _name_colour(deck))
+        _ink(row, _name_colour(deck))
         for column, (count, colour) in enumerate(zip(counts, COUNT_COLOURS), start=1):
             row.setTextAlignment(column, RIGHT)
             row.setForeground(column, QColor(PALETTE[colour if count else 'base1']))
@@ -517,6 +466,9 @@ def _deck_rows(tree, decks) -> list:
 class _MarkedList:
     """A pane choosing from the rows of its chooser, one marked at a time."""
 
+    marked = 0
+    _rows = ()
+
     def _mark(self, index):
         """Mark the row at index, within the list, and keep it in view."""
         if not self._rows:
@@ -532,19 +484,19 @@ class _MarkedList:
         if not 0 <= self.marked < len(self._rows):
             return
         row = self._rows[self.marked]
-        row.setForeground(0, self._row_colour(self.marked, marked))
+        row.setForeground(0, QColor(PALETTE['base02']) if marked else row.data(0, UNMARKED))
         for column in range(self.chooser.columnCount()):
             row.setData(column, Qt.ItemDataRole.BackgroundRole,
                         QColor(PALETTE['base2']) if marked else None)
 
 
-class DeckPane(QWidget, _MarkedList):
+class DeckPane(WebPane, _MarkedList):
     """One Anki deck, a card at a time, chosen and scheduled by Anki's reviewer."""
 
     changed = pyqtSignal()
 
     def __init__(self, deck=None, start_at=0, parent=None, client=None):
-        super().__init__(parent)
+        super().__init__("COULD NOT REVIEW", parent)
         self.client = client or anki.AnkiConnect(UserProfile().get_metric(
             "strict_break", "anki_url", anki.DEFAULT_URL))
         self.deck = ""
@@ -554,34 +506,16 @@ class DeckPane(QWidget, _MarkedList):
         self.answered = 0
         self.busy = False
         self.listing = []
-        self._rows = []
-        self.marked = 0
         self.choosing = False
         self.from_list = False
         self._generation = 0
         self._media = ""
-        self._message = None
-        self.view = None
         self.chooser = None
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        try:
-            from PyQt6.QtWebEngineWidgets import QWebEngineView
-        except ImportError as error:
-            log.warning("No Anki deck in a break: %s", error)
-            self._show_message(f"COULD NOT REVIEW\n{error}")
+        if self.view is None:
             return
-
-        self.view = QWebEngineView(self)
-        self.view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        self.view.page().setBackgroundColor(QColor(PALETTE['base3']))
-        self.view.page().setAudioMuted(True)
-        layout.addWidget(self.view)
         self.chooser = _deck_list(self)
         self.chooser.hide()
-        layout.addWidget(self.chooser)
+        self.layout().addWidget(self.chooser)
         if deck:
             self.open(deck, start_at)
 
@@ -595,30 +529,27 @@ class DeckPane(QWidget, _MarkedList):
 
     def toggle(self):
         """Review the marked deck, or show the answer and then answer Good."""
-        if self.choosing:
-            if not self.busy and self.listing:
-                self._review(self.listing[self.marked].name)
-            return
-        self.step(1)
+        if not self.choosing:
+            self.step(1)
+        elif not self.busy and self.listing:
+            self._review(self.listing[self.marked].name)
 
     def step(self, direction):
         """Show the answer, then answer Good or Again; on the list, skip to an owing deck."""
+        forward = int(direction) > 0
         if self.busy:
             return
         if self.choosing:
-            self._mark(_next_owing(self.listing, self.marked, 1 if int(direction) > 0 else -1))
-            return
-        if self.card is None:
-            if self.from_list and int(direction) > 0:
+            self._mark(_next_owing(self.listing, self.marked, 1 if forward else -1))
+        elif self.card is None:
+            if self.from_list and forward:
                 self._list()
-            return
-        if self.side == QUESTION:
+        elif self.side == QUESTION:
             self._run(anki.reveal, self._revealed, self.client)
-            return
-        good = int(direction) > 0
-        self._run(anki.grade, self._answered_good if good else self._answered_again,
-                  self.client, self.deck, self.card.card_id,
-                  anki.GOOD if good else anki.AGAIN)
+        else:
+            self._run(anki.grade, self._answered_good if forward else self._answered_again,
+                      self.client, self.deck, self.card.card_id,
+                      anki.GOOD if forward else anki.AGAIN)
 
     def undo(self):
         """Take this opening's last answer back and show that card again."""
@@ -631,8 +562,7 @@ class DeckPane(QWidget, _MarkedList):
         if self.choosing:
             if not self.busy:
                 self._mark(self.marked - int(direction))
-            return
-        if self.view is not None:
+        elif self.view is not None:
             self.view.page().runJavaScript(
                 f"window.scrollBy(0, {-int(direction) * SCROLL_STEP_PX})")
 
@@ -662,19 +592,15 @@ class DeckPane(QWidget, _MarkedList):
         if self.view is not None:
             self.view.setHtml("")
 
-    def shutdown(self):
-        """Let go of the card and destroy the web view at once."""
+    def _opening(self, choosing):
+        """Let go of what was shown, to review a deck or to choose one."""
         self.stop()
-        if self.view is not None:
-            sip.delete(self.view)
-            self.view = None
+        self.answered, self.choosing = 0, choosing
 
     def _review(self, deck):
         """Open Anki's reviewer on deck and show the card it chooses."""
-        self._generation += 1
+        self._opening(choosing=False)
         self.deck = deck
-        self.card, self.side, self.answered, self.busy = None, None, 0, False
-        self.choosing = False
         if self.view is not None:
             self._clear_message()
             self._run(anki.begin, self._began, self.client, self.deck)
@@ -682,9 +608,8 @@ class DeckPane(QWidget, _MarkedList):
 
     def _list(self):
         """Read every deck Anki has, with what each owes, to choose one from."""
-        self._generation += 1
-        self.card, self.side, self.answered, self.busy = None, None, 0, False
-        self.choosing, self.listing, self._rows = True, [], []
+        self._opening(choosing=True)
+        self.listing, self._rows = [], []
         if self.view is not None:
             self._run(anki.decks, self._listed, self.client)
         self.changed.emit()
@@ -703,9 +628,7 @@ class DeckPane(QWidget, _MarkedList):
         self.busy = False
         if error is not None:
             log.warning("Could not review %r: %s", self.deck, error)
-            self.card, self.side = None, None
-            self._show_message(
-                f"COULD NOT REVIEW\n{_why_not(error, self.client.url, self.deck)}")
+            self._failed(_why_not(error, self.client.url, self.deck))
             return False
         return True
 
@@ -755,10 +678,13 @@ class DeckPane(QWidget, _MarkedList):
 
     def _crashed(self, failure):
         """Show a step that failed in a way nothing expected."""
-        error, _formatted = failure
         self.busy = False
-        self.card, self.side = None, None
-        self._show_message(f"COULD NOT REVIEW\n{error}")
+        self._failed(failure[0])
+
+    def _failed(self, why):
+        """Let go of the card and say on screen why the step went wrong."""
+        self.card, self.side, self.verdict = None, None, None
+        self._show_message(f"COULD NOT REVIEW\n{why}")
 
     def _present(self, shown, verdict=None):
         """Show the question of the card Anki holds, or that the deck owes nothing."""
@@ -779,31 +705,12 @@ class DeckPane(QWidget, _MarkedList):
         self.view.setHtml(card_page(side, self.card.ordinal, answer, verdict),
                           QUrl.fromLocalFile(self._media.rstrip("/") + "/"))
 
-    def _row_colour(self, index, marked) -> QColor:
-        return _name_colour(self.listing[index], marked)
-
-    def _show_message(self, text, colour='red'):
-        self._clear_message()
-        self.verdict = None
-        for shown in (self.view, self.chooser):
-            if shown is not None:
-                shown.hide()
-        self._message = _failure_label(self, text, colour)
-        self.layout().addWidget(self._message)
-
-    def _clear_message(self):
-        if self._message is not None:
-            self._message.deleteLater()
-            self._message = None
-        if self.view is not None:
-            self.view.setVisible(not self.choosing)
-            self.chooser.setVisible(self.choosing)
+    def _shown(self):
+        return self.chooser if self.choosing else self.view
 
 
-def _entry_colour(entry, ended, marked=False) -> QColor:
-    """Return an entry's colour: strong when marked, blue for a folder, faint once ended."""
-    if marked:
-        return QColor(PALETTE['base02'])
+def _entry_colour(entry, ended) -> QColor:
+    """Return an entry's colour: blue for a folder, faint once it has ended."""
     return QColor(PALETTE['blue' if entry.folder else 'base1' if ended else 'base00'])
 
 
@@ -817,30 +724,16 @@ def _how_far_into(entry, places) -> tuple:
     return ("" if said == UNKNOWN else said), finished(place, unit)
 
 
-class PagePane(QWidget):
+class PagePane(WebPane):
     """One web page, which every key reaches but the break's own."""
 
     def __init__(self, url=None, start_at=0, parent=None):
-        super().__init__(parent)
+        super().__init__("COULD NOT OPEN", parent, quiet=False)
         self.url = ""
         self.loaded = False
-        self.view = None
-        self._message = None
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        try:
-            from PyQt6.QtWebEngineWidgets import QWebEngineView
-        except ImportError as error:
-            log.warning("No web page in a break: %s", error)
-            self._show_message(f"COULD NOT OPEN\n{error}")
+        if self.view is None:
             return
-
-        self.view = QWebEngineView(self)
-        self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        self.view.page().setBackgroundColor(QColor(PALETTE['base3']))
         self.view.loadFinished.connect(self._finished)
-        layout.addWidget(self.view)
         if url:
             self.open(url, start_at)
 
@@ -854,21 +747,6 @@ class PagePane(QWidget):
             self.view.load(QUrl(self.url))
         self.view.setFocus()
 
-    def position(self) -> int:
-        return 0
-
-    def duration(self) -> int:
-        return 0
-
-    def stop(self):
-        """Leave the page loaded, to be shown again as it was left."""
-
-    def shutdown(self):
-        """Destroy the web view at once."""
-        if self.view is not None:
-            sip.delete(self.view)
-            self.view = None
-
     def _finished(self, ok):
         self.loaded = bool(ok)
         if ok:
@@ -877,22 +755,8 @@ class PagePane(QWidget):
         log.warning("Could not open %s in a break.", self.url)
         self._show_message(f"COULD NOT OPEN\n{self.url}")
 
-    def _show_message(self, text):
-        self._clear_message()
-        if self.view is not None:
-            self.view.hide()
-        self._message = _failure_label(self, text)
-        self.layout().addWidget(self._message)
 
-    def _clear_message(self):
-        if self._message is not None:
-            self._message.deleteLater()
-            self._message = None
-        if self.view is not None:
-            self.view.show()
-
-
-class LibraryPane(QWidget, _MarkedList):
+class LibraryPane(BreakPane, _MarkedList):
     """The media folder as a list, a folder at a time, to open a file from."""
 
     chosen = pyqtSignal(str)
@@ -904,14 +768,8 @@ class LibraryPane(QWidget, _MarkedList):
         self.positions = positions or rest_positions.beside(rest_queue.path_for(profile))
         self.folder = self.root
         self.entries = []
-        self.marked = 0
-        self._rows = []
-        self._ended = []
-        self._message = None
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
         self.chooser = _folder_list(self)
-        layout.addWidget(self.chooser)
+        self.layout().addWidget(self.chooser)
         if path:
             self.open(path, start_at)
 
@@ -957,15 +815,6 @@ class LibraryPane(QWidget, _MarkedList):
         """Return the folder listed, named from the media folder down."""
         return os.path.relpath(self.folder, os.path.dirname(self.root))
 
-    def position(self) -> int:
-        return 0
-
-    def duration(self) -> int:
-        return 0
-
-    def stop(self):
-        """Leave the list as it is, there being no place in it to keep."""
-
     def _list(self, folder, mark=None):
         """List folder, or the nearest folder above it inside the media folder, marking mark."""
         folder = os.path.abspath(folder)
@@ -978,34 +827,25 @@ class LibraryPane(QWidget, _MarkedList):
         places = rest_positions.read(self.positions)
         self.chooser.clear()
         self.chooser.headerItem().setText(0, self.title())
-        self._rows, self._ended = [], []
+        self._rows = []
         for entry in self.entries:
             said, ended = _how_far_into(entry, places)
             row = QTreeWidgetItem([entry.name + ("/" if entry.folder else ""), said])
-            row.setForeground(0, _entry_colour(entry, ended))
+            _ink(row, _entry_colour(entry, ended))
             row.setForeground(1, QColor(PALETTE['base1']))
             row.setTextAlignment(1, RIGHT)
             self.chooser.addTopLevelItem(row)
             self._rows.append(row)
-            self._ended.append(ended)
         paths = [entry.path for entry in self.entries]
         self.marked = 0
         self._mark(paths.index(mark) if mark in paths else 0)
-        self._say_what_is_here()
+        if self.entries:
+            self._clear_message()
+        else:
+            self._show_message(f"NOTHING TO SHOW IN\n{self.title()}", 'base01')
 
-    def _row_colour(self, index, marked) -> QColor:
-        return _entry_colour(self.entries[index], self._ended[index], marked)
-
-    def _say_what_is_here(self):
-        """Show the list, or say that the folder holds nothing to show."""
-        if self._message is not None:
-            self._message.deleteLater()
-            self._message = None
-        self.chooser.setVisible(bool(self.entries))
-        if not self.entries:
-            self._message = _failure_label(self, f"NOTHING TO SHOW IN\n{self.title()}",
-                                           'base01')
-            self.layout().addWidget(self._message)
+    def _shown(self):
+        return self.chooser
 
 
 PANES = {DOCUMENT: DocumentPane, DECK: DeckPane, BOOK: BookPane, SHELF: LibraryPane,

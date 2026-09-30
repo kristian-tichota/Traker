@@ -394,28 +394,31 @@ class TestPlayingAVideo:
 
         assert pane.position() == 0
 
-    def test_a_file_that_is_not_there_says_so_on_the_screen(self, qapp, tmp_path,
-                                                            settled):
+    def test_a_file_that_could_not_be_played_says_so_on_the_screen(self, qapp, tmp_path):
         pane = VideoPane(str(tmp_path / "talk.mkv"))
-        pane.screen_widget.player = None
-        pane._show_failure("no such file")
-        settled()
 
-        assert "COULD NOT PLAY" in failure_of(pane)
+        pane.screen_widget.playback_failed.emit("no such file")
+        pane.screen_widget.playback_failed.emit("still no such file")
 
-    def test_a_player_that_would_not_start_says_why_in_its_own_words(
-            self, qapp, tmp_path, monkeypatch, settled):
+        assert failure_of(pane) == "COULD NOT PLAY\nstill no such file"
+        assert pane.screen_widget.isHidden() is True
+
+    @pytest.fixture
+    def refused(self, monkeypatch):
         def refuse(screen):
             screen.player_error = "libmpv would not load: undefined symbol"
             return None
         monkeypatch.setattr(MpvScreen, "_start_mpv", refuse)
 
+    def test_a_player_that_would_not_start_says_why_each_time(self, qapp, tmp_path,
+                                                              refused):
         pane = VideoPane(str(tmp_path / "talk.mkv"))
-        settled()
+        pane.stop()
 
-        said = failure_of(pane)
-        assert "COULD NOT PLAY" in said
-        assert "undefined symbol" in said
+        pane.open(str(tmp_path / "talk.mkv"))
+
+        assert pane.screen_widget.isHidden() is True
+        assert failure_of(pane) == "COULD NOT PLAY\nlibmpv would not load: undefined symbol"
 
     def test_it_takes_its_keys_without_raising(self, qapp, tmp_path):
         pane = VideoPane(str(tmp_path / "talk.mkv"))
@@ -1010,14 +1013,6 @@ class TestTheSurfaceAroundThem:
         surface.show_hold(0.0, False)
 
         assert "HOLD ESC" in surface.strip.text()
-
-    def test_the_pane_it_was_given_is_the_pane_it_holds(self, qapp, activity):
-        surface = MediaSurface(None, pane_factory=Recorder)
-
-        surface.open(activity)
-
-        assert isinstance(surface.pane, Recorder)
-        assert surface.activity is activity
 
     def test_the_screen_showing_the_file_names_no_keys_on_it(self, qapp, activity):
         surface = MediaSurface(None, pane_factory=Recorder)

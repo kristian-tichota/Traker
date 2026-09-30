@@ -6,11 +6,10 @@ from functools import partial
 
 from PyQt6 import sip
 from PyQt6.QtCore import QThreadPool, QUrl, Qt, pyqtSignal
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from src.config import PALETTE
 from src.desktop import books
+from src.gui.components.break_pane import WebPane
 from src.gui.workers import run_in_background
 from src.profile import UserProfile
 
@@ -231,20 +230,27 @@ def _unpack(generation, path) -> tuple:
 
 
 def _hand_over(pane, outcome):
-    """Give an unpacked book to the pane that asked, or remove it once that pane is gone."""
-    if not sip.isdeleted(pane):
-        pane._unpacked(outcome)
-    elif outcome[1] is not None:
-        shutil.rmtree(outcome[1].folder, ignore_errors=True)
+    """Give an unpacked book to the opening that asked, or remove it once that is over."""
+    generation, book, error = outcome
+    if sip.isdeleted(pane) or generation != pane._generation:
+        _discard(book)
+    else:
+        pane._unpacked(book, error)
 
 
-class BookPane(QWidget):
+def _discard(book):
+    """Remove the folder a book was unpacked into, where there is one."""
+    if book is not None:
+        shutil.rmtree(book.folder, ignore_errors=True)
+
+
+class BookPane(WebPane):
     """One EPUB, a page at a time, set in the middle of the screen."""
 
     changed = pyqtSignal()
 
     def __init__(self, path=None, start_at=0, parent=None):
-        super().__init__(parent)
+        super().__init__("COULD NOT READ", parent, alignment=Qt.AlignmentFlag.AlignCenter)
         profile = UserProfile()
         self.font_px = int(profile.number("strict_break.book", "font_px", FONT_PX,
                                           low=8, high=96))
@@ -257,32 +263,18 @@ class BookPane(QWidget):
         self._resume_at = 0
         self._going = None
         self._generation = 0
-        self._message = None
         self._world = None
-        self.view = None
 
         self.setObjectName("bookPane")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.setStyleSheet(f"#bookPane {{ background-color: {PALETTE[PAPER]}; }}")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        try:
-            from PyQt6.QtWebEngineCore import QWebEngineScript, QWebEngineSettings
-            from PyQt6.QtWebEngineWidgets import QWebEngineView
-        except ImportError as error:
-            log.warning("No book in a break: %s", error)
-            self._show_message(f"COULD NOT READ\n{error}")
+        if self.view is None:
             return
 
+        from PyQt6.QtWebEngineCore import QWebEngineScript, QWebEngineSettings
         self._world = QWebEngineScript.ScriptWorldId.ApplicationWorld
-        self.view = QWebEngineView(self)
-        self.view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         self.view.setEnabled(False)
         page = self.view.page()
-        page.setBackgroundColor(QColor(PALETTE[PAPER]))
-        page.setAudioMuted(True)
         settings = page.settings()
         attribute = QWebEngineSettings.WebAttribute
         for name, on in ((attribute.JavascriptEnabled, False),
@@ -303,7 +295,6 @@ class BookPane(QWidget):
         pager.setRunsOnSubFrames(False)
         page.scripts().insert(pager)
         self.view.loadFinished.connect(self._chapter_loaded)
-        layout.addWidget(self.view, alignment=Qt.AlignmentFlag.AlignCenter)
         self._size_the_page()
 
         if path:
@@ -384,13 +375,6 @@ class BookPane(QWidget):
         if self.view is not None:
             self.view.setHtml("")
 
-    def shutdown(self):
-        """Let go of the book and destroy the web view at once."""
-        self._let_go()
-        if self.view is not None:
-            sip.delete(self.view)
-            self.view = None
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._size_the_page()
@@ -406,16 +390,10 @@ class BookPane(QWidget):
     def _let_go(self):
         self._generation += 1
         self.busy, self.laid_out, self._going = False, None, None
-        if self.book is not None:
-            shutil.rmtree(self.book.folder, ignore_errors=True)
-            self.book = None
+        _discard(self.book)
+        self.book = None
 
-    def _unpacked(self, outcome):
-        generation, book, error = outcome
-        if generation != self._generation:
-            if book is not None:
-                shutil.rmtree(book.folder, ignore_errors=True)
-            return
+    def _unpacked(self, book, error):
         self.busy = False
         if error is not None:
             log.warning("Could not read a book: %s", error)
@@ -428,9 +406,8 @@ class BookPane(QWidget):
 
     def _crashed(self, failure):
         """Show an unpacking that failed in a way nothing expected."""
-        error, _formatted = failure
         self.busy = False
-        self._show_message(f"COULD NOT READ\n{error}")
+        self._show_message(f"COULD NOT READ\n{failure[0]}")
 
     def _load(self, index, going):
         """Open chapter index and go where going says once it is laid out."""
@@ -473,20 +450,3 @@ class BookPane(QWidget):
         to = self.chapter + (1 if direction > 0 else -1)
         if 0 <= to < len(self.book.chapters):
             self._load(to, {"offset": 0, "of": 1} if direction > 0 else {"end": True})
-
-    def _show_message(self, text):
-        self._clear_message()
-        if self.view is not None:
-            self.view.hide()
-        self._message = QLabel(text, self)
-        self._message.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._message.setStyleSheet(f"color: {PALETTE['red']}; font-size: 16px; "
-                                    f"font-family: 'Fira Code'; letter-spacing: 2px;")
-        self.layout().addWidget(self._message)
-
-    def _clear_message(self):
-        if self._message is not None:
-            self._message.deleteLater()
-            self._message = None
-        if self.view is not None:
-            self.view.show()
