@@ -93,6 +93,15 @@ class TestMovement:
 
         assert len(visited) == 9
 
+    def test_the_first_move_without_a_cursor_lands_on_the_first_cell(self, qapp, profile_path):
+        widget, _model = build_table()
+        try:
+            press(widget, Qt.Key.Key_J)
+
+            assert at(widget) == (0, 0)
+        finally:
+            widget.deleteLater()
+
     def test_moving_in_an_empty_table_does_not_raise(self, qapp, profile_path):
         widget, _model = build_table(rows=[])
         try:

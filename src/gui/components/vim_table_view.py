@@ -177,46 +177,37 @@ class VimTableView(QTableView):
             super().keyPressEvent(event)
             return
 
-        model = self.model()
-        rows = model.rowCount() if model is not None else 0
-
-        current = self.currentIndex()
-        r = max(0, current.row())
-        c = max(0, current.column())
-
         key = event.key()
-        if key == Qt.Key.Key_Escape:
+        step = {self.key_down: (1, 0), self.key_up: (-1, 0),
+                self.key_left: (0, -1), self.key_right: (0, 1)}.get(key)
+        if step is not None:
+            self._step(*step)
+        elif key == Qt.Key.Key_Escape:
             self.clearSelection()
             self.clearFocus()
             self.mode_requested.emit("NORMAL")
-            return
-        elif key == self.key_down:
-            if current.row() < rows - 1:
-                self._move_to(r + 1, c)
-            return
-        elif key == self.key_up:
-            if current.row() > 0:
-                self._move_to(r - 1, c)
-            return
-        elif key == self.key_left:
-            beside = self._column_beside(c, -1)
-            if beside is not None:
-                self._move_to(r, beside)
-            return
-        elif key == self.key_right:
-            beside = self._column_beside(c, 1)
-            if beside is not None:
-                self._move_to(r, beside)
-            return
         elif key == self.key_edit:
-            if current.isValid() and (model.flags(current) & Qt.ItemFlag.ItemIsEditable):
+            current = self.currentIndex()
+            if current.isValid() and (self.model().flags(current) & Qt.ItemFlag.ItemIsEditable):
                 self.edit(current)
-            return
         elif key == self.key_sort:
             self.sort_requested.emit(self)
-            return
         elif key == Qt.Key.Key_Slash:
             self.filter_requested.emit()
-            return
+        else:
+            super().keyPressEvent(event)
 
-        super().keyPressEvent(event)
+    def _step(self, rows, columns):
+        """Move the cursor one row or column, onto the first cell where it has none."""
+        current = self.currentIndex()
+        if not current.isValid():
+            self.focus_first_cell()
+            return
+        if rows:
+            row = current.row() + rows
+            if 0 <= row < self.model().rowCount():
+                self._move_to(row, current.column())
+            return
+        beside = self._column_beside(current.column(), columns)
+        if beside is not None:
+            self._move_to(current.row(), beside)
