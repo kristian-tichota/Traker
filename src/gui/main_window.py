@@ -150,8 +150,7 @@ class MainWindow(QMainWindow):
 
         self.dirty_tabs = set(range(self.tabs.count()))
         self.tabs.currentChanged.connect(self._on_tab_changed)
-        if self.tabs.count() > 0:
-            self._on_tab_changed(0)
+        self._on_tab_changed(0)
 
         self._wire_input()
         self.set_mode("NORMAL")
@@ -175,7 +174,7 @@ class MainWindow(QMainWindow):
         return home
 
     def _read_keybinds(self):
-        """Return the keys NORMAL mode answers to, from [keybinds]."""
+        """Read the keys NORMAL mode answers to, from [keybinds]."""
         keybind = self.profile.get_metric
         self.key_cmd = get_qt_key(keybind("keybinds", "command_mode", "i"), Qt.Key.Key_I)
         self.key_sheet = get_qt_key(keybind("keybinds", "sheet_mode", "s"), Qt.Key.Key_S)
