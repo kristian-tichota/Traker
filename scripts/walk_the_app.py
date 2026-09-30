@@ -30,7 +30,6 @@ os.environ["TRAKER_SERVER_CONFIG"] = str(SANDBOX / "server.toml")
 import src.profile as profile                                    # noqa: E402
 profile.PROFILE_PATH = str(SANDBOX / "user_profile.toml")
 
-# The walk visits every tab, so it opts into the ones the default leaves off.
 profile.UserProfile()
 _profile_file = SANDBOX / "user_profile.toml"
 _written = _profile_file.read_text(encoding="utf-8")

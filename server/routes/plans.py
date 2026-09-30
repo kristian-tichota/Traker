@@ -126,18 +126,6 @@ def add_plan():
             "sessions": len(sessions), "movements": written}
 
 
-@plans_bp.route("/<int:plan_id>/sessions", methods=["POST"])
-@require_auth
-def add_plan_session(plan_id):
-    """Add one session, with its movements, to an existing cycle."""
-    d = read_payload("date", "week", "name")
-    _require_owned_plan(plan_id)
-    conn = get_db()
-    with conn:
-        written = _insert_session(conn, plan_id, d)
-    return {"status": "success", "movements": written}
-
-
 @plans_bp.route("/<int:plan_id>/log", methods=["POST"])
 @require_auth
 def log_planned_session(plan_id):
