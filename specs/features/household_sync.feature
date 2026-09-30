@@ -23,6 +23,11 @@ Feature: Two members, one server
       When I ask for a catalog domain
       Then I receive every entry, whoever defined it
 
+    Scenario: My own catalog change is not announced back to me
+      When I change the catalog and the update stream echoes it
+      Then the tabs reading that catalog are read again
+      And the status line keeps my command's confirmation
+
     Scenario Outline: Personal data stays personal
       Then my <data> is scoped to me alone
 
