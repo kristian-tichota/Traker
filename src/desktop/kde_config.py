@@ -1,6 +1,8 @@
 import logging
 import os
 
+from src.desktop import files
+
 log = logging.getLogger(__name__)
 
 CONFIG_DIR = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
@@ -10,6 +12,8 @@ KWINRC_PATH = os.path.join(CONFIG_DIR, "kwinrc")
 def split(text):
     """Split the file into [(group, lines)], with None above the first group."""
     sections = [(None, [])]
+    if text and not text.endswith("\n"):
+        text += "\n"
     for line in text.splitlines(keepends=True):
         stripped = line.strip()
         if stripped.startswith("[") and stripped.endswith("]"):
@@ -65,9 +69,6 @@ def group_or_new(sections, name):
 def with_keys(text, group_name, keys):
     """Return text with keys set in group_name and nothing else touched."""
     sections = split(text)
-    last = sections[-1][1]
-    if last and not last[-1].endswith("\n"):
-        last[-1] += "\n"
     lines = group_or_new(sections, group_name)
     for key, value in keys:
         set_key(lines, key, value)
@@ -76,21 +77,19 @@ def with_keys(text, group_name, keys):
 
 def text(path):
     """Read a file's text, "" where absent and None where unreadable."""
-    if not os.path.exists(path):
-        return ""
     try:
         with open(path, encoding="utf-8") as f:
             return f.read()
-    except OSError as e:
+    except FileNotFoundError:
+        return ""
+    except (OSError, UnicodeDecodeError) as e:
         log.warning("Could not read %s: %s", path, e)
         return None
 
 
 def store(path, text_to_write) -> bool:
     try:
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text_to_write)
+        files.write(path, text_to_write)
     except OSError as e:
         log.warning("Could not write %s: %s. Nothing of Traker's reaches the "
                     "compositor's configuration this session.", path, e)

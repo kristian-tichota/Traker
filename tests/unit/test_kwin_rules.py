@@ -187,6 +187,21 @@ class TestHoldingOneForABreak:
         assert rule.release() is True
         assert kwin.reconfigures == 1
 
+    def test_a_linked_file_is_replaced_whole_through_the_link_keeping_its_mode(self, tmp_path):
+        real = tmp_path / "dotfiles" / "kwinrulesrc"
+        real.parent.mkdir()
+        real.write_text("[General]\ncount=0\nrules=\n")
+        real.chmod(0o600)
+        link = tmp_path / "kwinrulesrc"
+        link.symlink_to(real)
+        inode = real.stat().st_ino
+
+        assert RestRule("Traker rest", path=str(link), reconfigure=Compositor()).hold() is True
+        assert link.is_symlink() and REST_GROUP in real.read_text()
+        assert real.stat().st_ino != inode
+        assert real.stat().st_mode & 0o777 == 0o600
+        assert [p.name for p in real.parent.iterdir()] == ["kwinrulesrc"]
+
     def test_it_holds_nothing_where_the_file_cannot_be_written(self, tmp_path):
         kwin = Compositor()
         (tmp_path / "kwinrulesrc").mkdir()

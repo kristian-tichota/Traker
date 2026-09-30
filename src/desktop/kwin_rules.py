@@ -2,17 +2,10 @@ import logging
 import os
 
 from src.desktop import kde_config
-from src.desktop.session import session_call, session_send
+from src.desktop.session import (ACTIVITIES, ACTIVITIES_PATH, ACTIVITIES_SERVICE, KWIN,
+                                 KWIN_PATH, session_call, session_send)
 
 log = logging.getLogger(__name__)
-
-KWIN = "org.kde.KWin"
-KWIN_PATH = "/KWin"
-KWIN_IFACE = "org.kde.KWin"
-
-ACTIVITIES_SERVICE = "org.kde.ActivityManager"
-ACTIVITIES_PATH = "/ActivityManager/Activities"
-ACTIVITIES = "org.kde.ActivityManager.Activities"
 
 REST_GROUP = "traker-rest"
 WINDOW_GROUP = "traker-window"
@@ -22,7 +15,6 @@ FORCE_TEMPORARILY = 6
 EXACT_MATCH = 1
 SUBSTRING_MATCH = 2
 
-# KWin reads an id it cannot resolve as every desktop, so an unresolved name must never be written.
 EVERYWHERE = ""
 
 DEFAULT_PATH = os.path.join(kde_config.CONFIG_DIR, "kwinrulesrc")
@@ -40,19 +32,18 @@ def _rule_names(general):
     return [str(i) for i in range(1, count + 1)]
 
 
+def _list(general, names):
+    """Write the ordered rule names into [General]."""
+    kde_config.set_key(general, "rules", ",".join(names))
+    kde_config.set_key(general, "count", str(len(names)))
+
+
 def written(text, group, keys):
     """Insert one rule first and keep every other line."""
     sections = [(n, lines) for n, lines in kde_config.split(text) if n != group]
-    last = sections[-1][1]
-    if last and not last[-1].endswith("\n"):
-        last[-1] += "\n"
-
     general = kde_config.group_or_new(sections, GENERAL)
-    names = [group] + [n for n in _rule_names(general) if n != group]
-    kde_config.set_key(general, "rules", ",".join(names))
-    kde_config.set_key(general, "count", str(len(names)))
-    body = [f"[{group}]\n"] + [f"{key}={value}\n" for key, value in keys]
-    sections.append((group, body))
+    _list(general, [group] + [n for n in _rule_names(general) if n != group])
+    sections.append((group, [f"[{group}]\n"] + [f"{key}={value}\n" for key, value in keys]))
     return kde_config.join(sections)
 
 
@@ -61,9 +52,7 @@ def removed(text, *groups):
     sections = [(n, lines) for n, lines in kde_config.split(text) if n not in groups]
     for name, lines in sections:
         if name == GENERAL:
-            names = [n for n in _rule_names(lines) if n not in groups]
-            kde_config.set_key(lines, "rules", ",".join(names))
-            kde_config.set_key(lines, "count", str(len(names)))
+            _list(lines, [n for n in _rule_names(lines) if n not in groups])
     return kde_config.join(sections)
 
 
@@ -146,7 +135,7 @@ def activity_id(name, caller=None):
 
 def _reconfigure() -> bool:
     """Ask KWin to re-read its rules."""
-    return session_send(KWIN, KWIN_PATH, KWIN_IFACE, "reconfigure")
+    return session_send(KWIN, KWIN_PATH, KWIN, "reconfigure")
 
 
 def _restore(path, was, existed) -> bool:
