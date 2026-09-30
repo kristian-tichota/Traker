@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, g
 
 from server.auth import require_auth
 from server.db_session import get_db
-from server.payload import read_payload
+from server.payload import NotFound, read_payload
 from server.validation import checked_payload, validate_column_value
 
 pomodoro_bp = Blueprint("pomodoro", __name__)
@@ -114,5 +114,5 @@ def clear_pomodoro_dsi_override(date_str):
         ).rowcount
 
     if not removed:
-        return jsonify({"error": f"No stress override on {date_str} to clear."}), 404
+        raise NotFound(f"No stress override on {date_str} to clear.")
     return jsonify({"status": "success"})

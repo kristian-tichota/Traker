@@ -4,6 +4,8 @@ from flask import request
 class BadRequest(ValueError):
     """Anything the client sent that cannot be honoured."""
 
+    status = 400
+
 
 class BadPayload(BadRequest):
     """A request body that cannot be read, or that is missing a field."""
@@ -11,6 +13,18 @@ class BadPayload(BadRequest):
 
 class BadValue(BadRequest):
     """A value that does not belong in the column it was bound for."""
+
+
+class NotFound(BadRequest):
+    """A name or row that matches nothing this member may touch."""
+
+    status = 404
+
+
+class Conflict(BadRequest):
+    """A write that what the store already holds forbids."""
+
+    status = 409
 
 
 def read_payload(*required: str) -> dict:

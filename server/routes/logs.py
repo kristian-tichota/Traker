@@ -5,7 +5,7 @@ from server.auth import require_auth
 from server.database import AD_HOC_CATEGORY
 from server.db_session import get_db
 from server.events import event_broadcaster
-from server.payload import BadPayload, BadValue, read_payload
+from server.payload import BadPayload, BadValue, Conflict, read_payload
 from server.validation import (checked_columns, checked_payload,
                                validate_column_value)
 
@@ -28,20 +28,6 @@ def _since_clause():
         return "", ()
     validate_column_value("date", since)
     return " AND l.date >= ?", (since,)
-
-
-def _resolve_item(conn, table: str, name: str, label: str):
-    """Return the catalog id for name, or a 400 refusing the name."""
-    if not isinstance(name, str):
-        return None, (jsonify(
-            {"error": f"{label} name must be text, not a {type(name).__name__}."}
-        ), 400)
-    row = conn.execute(
-        f"SELECT id FROM {table} WHERE name = ? COLLATE NOCASE", (name,)
-    ).fetchone()
-    if row is None:
-        return None, (jsonify({"error": f"{label} '{name}' not found in catalog."}), 400)
-    return row["id"], None
 
 
 def _catalog_id(conn, table: str, name):
@@ -212,12 +198,10 @@ def add_quick_food_log():
         how = ("log it with :log — it is already an estimate"
                if (held["category"] or "") == AD_HOC_CATEGORY
                else "log it with :log, or give this estimate another name")
-        return jsonify({"error": f"'{held['name']}' is already a food, so {how}."}), 409
+        raise Conflict(f"'{held['name']}' is already a food, so {how}.")
     if sets.find(conn, "food", name) is not None:
-        return jsonify({"error": (
-            f"'{name}' is already a meal set, so an estimate by that name "
-            f"could not be logged."
-        )}), 409
+        raise Conflict(f"'{name}' is already a meal set, so an estimate by that name "
+                       f"could not be logged.")
 
     with conn:
         cursor = conn.execute("""

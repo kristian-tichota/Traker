@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify
 from server.auth import require_auth
 from server.db_session import get_db
 from server.events import event_broadcaster
-from server.payload import BadValue, read_payload
+from server.payload import BadValue, Conflict, NotFound, read_payload
 from server import sets as item_sets
 from server.tables import CATALOG_DOMAINS, NAMED_CATALOG_TABLES
 from server.validation import checked_columns, require_known_columns
@@ -14,12 +14,17 @@ log = logging.getLogger(__name__)
 catalog_bp = Blueprint("catalog", __name__)
 
 
+def _catalog_table(domain):
+    """Return this domain's catalog table, or the refusal that there is none."""
+    if domain not in CATALOG_DOMAINS:
+        raise BadValue("Invalid domain")
+    return CATALOG_DOMAINS[domain]
+
+
 @catalog_bp.route("/<domain>", methods=["GET"])
 @require_auth
 def get_catalog(domain):
-    table = CATALOG_DOMAINS.get(domain)
-    if not table:
-        return jsonify({"error": "Invalid domain"}), 400
+    table = _catalog_table(domain)
     conn = get_db()
     rows = conn.execute(f"SELECT * FROM {table}").fetchall()
     return jsonify([dict(r) for r in rows])
@@ -28,10 +33,7 @@ def get_catalog(domain):
 @catalog_bp.route("/<domain>", methods=["POST"])
 @require_auth
 def add_catalog_item(domain):
-    table = CATALOG_DOMAINS.get(domain)
-    if not table:
-        return jsonify({"error": "Invalid domain"}), 400
-
+    table = _catalog_table(domain)
     data = read_payload("name")
 
     conn = get_db()
@@ -59,10 +61,8 @@ def delete_item_by_name(name):
             f"({', '.join(using)})"
             for spec, using in holding
         ]
-        return jsonify({"error": (
-            f"'{name}' is used by {' and '.join(parts)}. "
-            f"Remove it from those first."
-        )}), 409
+        raise Conflict(f"'{name}' is used by {' and '.join(parts)}. "
+                       f"Remove it from those first.")
 
     removed = 0
     with conn:
@@ -72,7 +72,7 @@ def delete_item_by_name(name):
             ).rowcount
 
     if not removed:
-        return jsonify({"error": f"No catalog item named '{name}'."}), 404
+        raise NotFound(f"No catalog item named '{name}'.")
 
     event_broadcaster.broadcast("catalog_updated", {"action": "delete", "name": name})
     return jsonify({"status": "success", "removed": removed})
@@ -120,10 +120,10 @@ def add_set(domain):
     components = data["components"]
 
     if not isinstance(name, str) or not name.strip():
-        return jsonify({"error": f"A {spec.word} needs a name."}), 400
+        raise BadValue(f"A {spec.word} needs a name.")
     name = name.strip()
     if not isinstance(components, list) or not components:
-        return jsonify({"error": f"'{name}' needs at least one component."}), 400
+        raise BadValue(f"'{name}' needs at least one component.")
 
     conn = get_db()
 
@@ -131,44 +131,32 @@ def add_set(domain):
         f"SELECT name FROM {spec.catalog_table} WHERE name = ? COLLATE NOCASE", (name,)
     ).fetchone()
     if clash:
-        return jsonify({"error": (
+        raise BadValue(
             f"'{clash['name']}' is already a {spec.domain} item. A {spec.word} needs "
-            f"a name of its own, or logging it would be ambiguous."
-        )}), 400
+            f"a name of its own, or logging it would be ambiguous.")
 
     existing = item_sets.find(conn, spec.domain, name)
     if existing:
-        return jsonify({"error": (
+        raise BadValue(
             f"A {spec.word} called '{existing['name']}' already exists. "
-            f"Remove it first, or give this one another name."
-        )}), 400
+            f"Remove it first, or give this one another name.")
 
-    resolved = []
+    resolved = {}
     for entry in components:
         if not isinstance(entry, dict):
-            return jsonify({"error": (
-                f"Each component is a {spec.domain} item name and its amount."
-            )}), 400
+            raise BadValue(f"Each component is a {spec.domain} item name and its amount.")
         item_name = entry.get("item_name")
         if not isinstance(item_name, str) or not item_name.strip():
-            return jsonify({"error": f"Each component needs a {spec.domain} name."}), 400
+            raise BadValue(f"Each component needs a {spec.domain} name.")
         row = conn.execute(
             f"SELECT id, name FROM {spec.catalog_table} WHERE name = ? COLLATE NOCASE",
             (item_name.strip(),)
         ).fetchone()
         if row is None:
-            return jsonify({
-                "error": f"{spec.domain.capitalize()} '{item_name}' not found in catalog."
-            }), 400
-        amounts = _component_amounts(conn, spec, entry, row["name"])
-        resolved.append((row["id"], row["name"], amounts))
-
-    named_twice = [n for _id, n, _a in resolved
-                   if sum(1 for _i, other, _x in resolved if other == n) > 1]
-    if named_twice:
-        return jsonify({"error": (
-            f"'{named_twice[0]}' is listed twice. Give one amount per component."
-        )}), 400
+            raise BadValue(f"{spec.domain.capitalize()} '{item_name}' not found in catalog.")
+        if row["id"] in resolved:
+            raise BadValue(f"'{row['name']}' is listed twice. Give one amount per component.")
+        resolved[row["id"]] = _component_amounts(conn, spec, entry, row["name"])
 
     columns = ["set_id", spec.item_column, *spec.amount_columns]
     placeholders = ", ".join("?" * len(columns))
@@ -180,7 +168,7 @@ def add_set(domain):
             f"VALUES ({placeholders})",
             [(cursor.lastrowid, item_id,
               *(amounts.get(column, 0) for column in spec.amount_columns))
-             for item_id, _n, amounts in resolved])
+             for item_id, amounts in resolved.items()])
 
     event_broadcaster.broadcast(
         "catalog_updated",

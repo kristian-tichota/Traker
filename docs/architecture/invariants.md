@@ -8,7 +8,7 @@ A violation of the constraints below fails silently, fatally, or both.
 - `PausesWhenHidden` timers MUST be created in `__init__` and started in `showEvent`, because Qt sends no `hideEvent` to a widget never shown and a `QTabWidget` shows only its current tab. Qt state MUST NOT be read back to decide what to do, because `isVisible()` answers for the whole parent chain.
 
 ## Correctness
-- There is one write gate, and any value derived on the way to the store MUST pass through it again. A write that matched no row returns 404. A route raises `BadPayload` or `BadValue` and MUST NOT build the answer itself. SQLite accepts `"12o"` in a `REAL` column, where `CHECK(x >= 0)` then passes, and stores `1e400` as `inf`; `coerce_value` refuses both at the boundary.
+- There is one write gate, and any value derived on the way to the store MUST pass through it again. A write that matched no row returns 404. A route raises a `BadRequest`, whose class carries the status, and MUST NOT build the answer itself. SQLite accepts `"12o"` in a `REAL` column, where `CHECK(x >= 0)` then passes, and stores `1e400` as `inf`; `coerce_value` refuses both at the boundary.
 - A number that appears in two readouts MUST be one function in `src/domain/`, with a test asserting the two agree. Search for the quantity, not the function name.
 - A food log stores whichever of `servings` or `grams` was entered. Storing servings unconditionally would rewrite the recorded mass.
 - `CREATE TABLE IF NOT EXISTS` never alters an existing table, so a later column requires an explicit migration in `init_db`, in foreign-key order. Deleting a catalog item that a set uses returns 409; every other log-to-item reference is `ON DELETE SET NULL`.
