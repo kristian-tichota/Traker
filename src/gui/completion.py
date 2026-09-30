@@ -7,6 +7,8 @@ PREFIX, SUBSTRING, SUBSEQUENCE = 0, 1, 2
 
 def normalize(text: str) -> str:
     """Fold a name to the form matching compares: no diacritics, no capitals."""
+    if text.isascii():
+        return text.lower()
     decomposed = unicodedata.normalize("NFKD", text)
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).lower()
 
