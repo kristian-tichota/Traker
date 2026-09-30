@@ -1,12 +1,8 @@
-import logging
-
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from src.gui.completion import best_match, completion_tail
 from src.gui.components.hint_line import HintingLineEdit
 from src.gui.filtering import FilterError, parse
-
-log = logging.getLogger(__name__)
 
 
 class FilterLineEdit(HintingLineEdit):
@@ -44,25 +40,13 @@ class FilterLineEdit(HintingLineEdit):
 
     def _update_hint(self, text):
         """Suggest a catalog name for a trailing bare word."""
-        self.completion_text = ""
-        if not text.strip():
-            self.hint_text = ""
-            self.update()
-            return
-
-        last = text.split()[-1] if not text.endswith(" ") else ""
-        if not last or any(operator in last for operator in (":", "=", ">", "<")):
-            self.hint_text = ""
-            self.update()
-            return
-
-        match = best_match(last, self.completion_names)
-        if match is None:
-            self.hint_text = ""
-        else:
-            tail = completion_tail(last, match)
-            self.completion_text = tail if tail else ""
-            self.hint_text = tail if tail else f"  → {match}"
+        self.completion_text = self.hint_text = ""
+        last = "" if text.endswith(" ") else (text.split() or [""])[-1]
+        if not any(sign in last for sign in ":=<>"):
+            match = best_match(last, self.completion_names)
+            tail = None if match is None else completion_tail(last, match)
+            self.completion_text = tail or ""
+            self.hint_text = f"  → {match}" if match and tail is None else self.completion_text
         self.update()
 
     def keyPressEvent(self, event):

@@ -73,16 +73,12 @@ class TestOpeningTheBar:
 
     def test_a_chart_tab_says_there_is_nothing_to_filter(self, window):
         go_to(window, "food_graphs")
+        assert window.filterable_view() is None
 
         window.open_filter()
 
         assert "Nothing to filter" in window.status_bar.text()
         assert not window.filter_line.isVisibleTo(window)
-
-    def test_the_filterable_view_is_none_on_a_chart_tab(self, window):
-        go_to(window, "food_graphs")
-
-        assert window.filterable_view() is None
 
 
 class TestTheFoldIsWarmedWhenTheBarOpens:
@@ -189,35 +185,41 @@ class TestOnlyOnePromptIsOnScreen:
         assert window.command_line.isVisibleTo(window)
         assert window.command_prefix.isVisibleTo(window)
 
-    def test_it_comes_back_when_the_tab_changes(self, window):
-        window.open_filter()
-
-        go_to(window, "supplements")
-
-        assert window.command_line.isVisibleTo(window)
 
 
 class TestTheEmptyBarDoesNotOverprintItsPlaceholder:
-    def test_an_empty_bar_hints_nothing(self, window):
+    def test_it_hints_nothing_until_a_word_is_typed_or_once_it_is_deleted(self, window):
         window.open_filter()
-
         assert window.filter_line.hint_text == ""
 
-    def test_the_placeholder_is_what_says_what_to_type(self, window):
-        placeholder = window.filter_line.placeholderText()
-
-        assert "oats" in placeholder
-        assert "meal:b" in placeholder
-        assert "kcal>300" in placeholder
-
-    def test_deleting_back_to_nothing_drops_the_hint_again(self, window):
-        window.open_filter()
         window.filter_line.setText("Rolled")
         assert window.filter_line.hint_text
 
         window.filter_line.setText("")
-
         assert window.filter_line.hint_text == ""
+
+    def test_the_placeholder_is_what_says_what_to_type(self, qapp):
+        from src.gui.components.filter_line import FilterLineEdit
+
+        bar = FilterLineEdit()
+        placeholder = bar.placeholderText()
+
+        assert "oats" in placeholder
+        assert "meal:b" in placeholder
+        assert "kcal>300" in placeholder
+        bar.deleteLater()
+
+    def test_a_name_typed_out_in_full_hints_nothing(self, qapp):
+        from src.gui.components.filter_line import FilterLineEdit
+
+        bar = FilterLineEdit()
+        bar.open_for(["Exercise"], ["Plank"])
+
+        bar.setText("pla")
+        assert bar.hint_text == "nk"
+        bar.setText("plank")
+        assert bar.hint_text == ""
+        bar.deleteLater()
 
     def test_the_paint_refuses_a_hint_over_the_placeholder(self, qapp):
         from PyQt6.QtGui import QPixmap
@@ -246,18 +248,12 @@ class TestTheEmptyBarDoesNotOverprintItsPlaceholder:
 
 
 class TestTypingNarrowsTheTable:
-    def test_the_table_narrows_as_the_member_types(self, window):
+    def test_the_table_narrows_as_the_member_types_and_says_how_far(self, window):
         window.open_filter()
 
         window.filter_line.setText("oats")
 
         assert window.views["food"].proxy_for(0).rowCount() == 1
-
-    def test_the_status_bar_reports_how_many_matched(self, window):
-        window.open_filter()
-
-        window.filter_line.setText("oats")
-
         assert "1 of 2 rows" in window.status_bar.text()
 
     def test_deleting_back_to_nothing_shows_everything(self, window):
@@ -281,28 +277,16 @@ class TestTypingNarrowsTheTable:
 
 
 class TestLeavingTheMode:
-    def test_escape_returns_to_normal(self, window):
+    def test_escape_clears_the_filter_hides_the_bar_and_returns_to_normal(self, window):
         window.open_filter()
         window.filter_line.setFocus()
-
-        press(window.filter_line, Qt.Key.Key_Escape)
-
-        assert window.current_mode == "NORMAL"
-
-    def test_escape_clears_the_filter(self, window):
-        window.open_filter()
         window.filter_line.setText("oats")
         assert window.views["food"].proxy_for(0).rowCount() == 1
 
         press(window.filter_line, Qt.Key.Key_Escape)
 
+        assert window.current_mode == "NORMAL"
         assert window.views["food"].proxy_for(0).rowCount() == 2
-
-    def test_escape_hides_the_bar(self, window):
-        window.open_filter()
-
-        press(window.filter_line, Qt.Key.Key_Escape)
-
         assert not window.filter_line.isVisibleTo(window)
 
     def test_enter_keeps_the_filter_and_moves_to_the_rows(self, window):
@@ -321,6 +305,7 @@ class TestLeavingTheMode:
         go_to(window, "supplements")
 
         assert not window.filter_line.isVisibleTo(window)
+        assert window.command_line.isVisibleTo(window)
         assert window.views["food"].proxy_for(0).rowCount() == 2
 
 
@@ -338,14 +323,6 @@ class TestSortingFromTheSheet:
         press(table, Qt.Key.Key_O)
 
         assert table.model().index(0, column).data() == "9.00"
-
-    def test_the_status_bar_names_the_column_and_direction(self, window):
-        table = self._table(window)
-        column = window.views["food"].headers[0].index("Calories")
-        table.setCurrentIndex(table.model().index(0, column))
-
-        press(table, Qt.Key.Key_O)
-
         assert "Calories" in window.status_bar.text()
         assert "ascending" in window.status_bar.text()
 
