@@ -114,24 +114,6 @@ class TestEveryCommandSaysWhatItWrites:
 
 
 class TestAViewSaysWhatItChanged:
-    def test_a_log_view_names_its_domain(self, qapp, profile_path, recording_db):
-        from src.gui.views.food_views import FoodView
-
-        view = FoodView(recording_db)
-        assert view.domain_of(0) == FOOD
-        view.shutdown()
-        view.deleteLater()
-
-    def test_a_two_table_view_names_the_same_domain_for_both(
-            self, qapp, profile_path, recording_db):
-        from src.gui.views.exercise_view import ExerciseView
-
-        view = ExerciseView(recording_db)
-        assert view.domain_of(0) == EXERCISE
-        assert view.domain_of(1) == EXERCISE
-        view.shutdown()
-        view.deleteLater()
-
     def test_an_edit_reports_the_domain_it_changed(
             self, qapp, profile_path, recording_db, settled):
         from PyQt6.QtCore import Qt

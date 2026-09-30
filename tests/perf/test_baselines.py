@@ -64,7 +64,8 @@ def test_populating_a_log_table_stays_interactive(
     table = view._table_widgets[0]
 
     def populate_and_paint():
-        view.populate_table(table, rows, table_idx=0)
+        view.set_rows(0, [])
+        view.set_rows(0, rows)
         _render(table)
 
     millis = _time(populate_and_paint)
@@ -88,7 +89,8 @@ def test_population_scales_with_the_ledger_not_the_screen(qapp, live_client):
 
     def paint(subset):
         def run():
-            view.populate_table(table, subset, table_idx=0)
+            view.set_rows(0, [])
+            view.set_rows(0, subset)
             _render(table)
         return run
 
@@ -224,7 +226,7 @@ def test_idle_cpu_on_a_tab_with_no_animation(qapp, live_client):
     from src.gui.views.food_views import FoodView
 
     view = FoodView(live_client)
-    view.populate_table(view._table_widgets[0], live_client.get_food_logs(), table_idx=0)
+    view.set_rows(0, live_client.get_food_logs())
     view.hide()
 
     burned = _idle_cpu(qapp, seconds=2.0, tick=0.025)

@@ -67,9 +67,8 @@ class TestWritesDoNotBlockTheInterface:
         self, qapp, recording_db, settled
     ):
         view = TinyView(recording_db)
-        layout, table = view.build_table_layout(None, HEADERS, 0)
-        view.setLayout(layout)
-        view.populate_table(table, [(1, "2026-09-05", 2.0)], table_idx=0)
+        view.setLayout(view.build_table_layout(None, HEADERS, 0)[0])
+        view.set_rows(0, [(1, "2026-09-05", 2.0)])
 
         model = view.model_for(0)
         model.setData(model.index(0, 1), "3", Qt.ItemDataRole.EditRole)

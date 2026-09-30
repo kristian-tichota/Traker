@@ -70,45 +70,44 @@ def type_into(model, row, column, text):
 
 class TestPopulation:
     def test_the_first_field_is_the_row_id_not_a_column(self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         assert model.columnCount() == len(HEADERS)
         assert model.row_id(model.index(0, 0)) == 7
 
     def test_the_row_id_is_still_reachable_where_UserRole_carried_it(
             self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         assert model.index(0, 3).data(Qt.ItemDataRole.UserRole) == 7
 
     def test_iso_dates_are_rendered_the_way_the_household_reads_them(
             self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         assert cell(model, 0, 0) == "05.09.2026"
 
     def test_an_unparseable_date_is_shown_as_it_arrived(self, view, model, settled):
-        view.populate_table(view.table, [(7, "not-a-date", "Breakfast", "Oats", 1.0, 0.0)],
-                            table_idx=0)
+        view.set_rows(0, [(7, "not-a-date", "Breakfast", "Oats", 1.0, 0.0)])
 
         assert cell(model, 0, 0) == "not-a-date"
 
     def test_numbers_are_shown_to_two_decimals_and_right_aligned(
             self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         assert cell(model, 0, 3) == "2.00"
         alignment = model.index(0, 3).data(Qt.ItemDataRole.TextAlignmentRole)
         assert alignment & Qt.AlignmentFlag.AlignRight
 
     def test_a_name_is_not_right_aligned(self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         alignment = model.index(0, 2).data(Qt.ItemDataRole.TextAlignmentRole)
         assert not alignment & Qt.AlignmentFlag.AlignRight
 
     def test_an_orphaned_row_keeps_its_date_and_quantity(self, view, model, settled):
-        view.populate_table(view.table, [ORPHANED], table_idx=0)
+        view.set_rows(0, [ORPHANED])
 
         assert model.rowCount() == 1
         assert cell(model, 0, 0) == "05.09.2026"
@@ -116,31 +115,31 @@ class TestPopulation:
 
     def test_an_orphaned_row_loses_its_name_rather_than_reading_None(
             self, view, model, settled):
-        view.populate_table(view.table, [ORPHANED], table_idx=0)
+        view.set_rows(0, [ORPHANED])
 
         assert cell(model, 0, 2) == "—"
 
     def test_an_orphaned_rows_derived_values_read_zero(self, view, model, settled):
-        view.populate_table(view.table, [ORPHANED], table_idx=0)
+        view.set_rows(0, [ORPHANED])
 
         assert cell(model, 0, 4) == "0.00"
 
     def test_an_orphaned_derived_value_is_right_aligned_like_a_number(
             self, view, model, settled):
-        view.populate_table(view.table, [ORPHANED], table_idx=0)
+        view.set_rows(0, [ORPHANED])
 
         alignment = model.index(0, 4).data(Qt.ItemDataRole.TextAlignmentRole)
         assert alignment & Qt.AlignmentFlag.AlignRight
 
     def test_only_the_declared_columns_are_editable(self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         assert model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable
         assert not model.flags(model.index(0, 4)) & Qt.ItemFlag.ItemIsEditable
 
     def test_repopulating_replaces_the_previous_rows(self, view, model, settled):
-        view.populate_table(view.table, [ROW, ROW], table_idx=0)
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW, ROW])
+        view.set_rows(0, [ROW])
 
         assert model.rowCount() == 1
 
@@ -148,19 +147,19 @@ class TestPopulation:
         edits = []
         view.model_for(0).edit_requested.connect(lambda *args: edits.append(args))
 
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
         settled()
 
         assert edits == []
         assert recording_db.calls == [], "filling the table must not look like an edit"
 
     def test_an_empty_response_renders_an_empty_table(self, view, model, settled):
-        view.populate_table(view.table, [], table_idx=0)
+        view.set_rows(0, [])
 
         assert model.rowCount() == 0
 
     def test_a_row_shorter_than_the_headers_does_not_raise(self, view, model, settled):
-        view.populate_table(view.table, [(7, "2026-09-05")], table_idx=0)
+        view.set_rows(0, [(7, "2026-09-05")])
 
         assert model.rowCount() == 1
         assert cell(model, 0, 0) == "05.09.2026"
@@ -176,7 +175,7 @@ class TestPopulation:
 
 class TestInlineEditing:
     def test_a_readable_date_is_sent_back_as_iso(self, view, model, recording_db, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         type_into(model, 0, 0, "06.09.2026")
         settled()
@@ -186,7 +185,7 @@ class TestInlineEditing:
         assert mapping is MAPPING
 
     def test_a_non_date_column_is_sent_verbatim(self, view, model, recording_db, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         type_into(model, 0, 1, "Dinner")
         settled()
@@ -195,7 +194,7 @@ class TestInlineEditing:
         assert (column, value) == ("Meal Type", "Dinner")
 
     def test_surrounding_whitespace_is_trimmed(self, view, model, recording_db, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         type_into(model, 0, 1, "  Dinner  ")
         settled()
@@ -204,7 +203,7 @@ class TestInlineEditing:
 
     def test_a_date_the_user_typed_badly_is_sent_as_typed(
             self, view, model, recording_db, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         type_into(model, 0, 0, "tomorrow")
         settled()
@@ -213,7 +212,7 @@ class TestInlineEditing:
 
     def test_a_derived_column_refuses_the_edit_rather_than_sending_it(
             self, view, model, recording_db, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         accepted = type_into(model, 0, 4, "999")
         settled()
@@ -222,14 +221,14 @@ class TestInlineEditing:
         assert recording_db.calls == []
 
     def test_the_editor_opens_on_what_the_member_was_reading(self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         assert model.index(0, 0).data(Qt.ItemDataRole.EditRole) == "05.09.2026"
 
     def test_an_edit_does_not_put_unconfirmed_text_on_screen(
             self, view, model, recording_db, settled):
         recording_db.result = (False, "Column 'id' is not permitted for modification")
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         type_into(model, 0, 1, "Dinner")
         settled()
@@ -237,7 +236,7 @@ class TestInlineEditing:
         assert cell(model, 0, 1) == "Breakfast"
 
     def test_a_saved_edit_marks_every_tab_stale(self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         type_into(model, 0, 1, "Dinner")
         settled()
@@ -249,7 +248,7 @@ class TestInlineEditing:
     def test_a_refused_edit_is_reported_and_puts_the_cell_back(
             self, view, model, recording_db, settled):
         recording_db.result = (False, "Column 'id' is not permitted for modification")
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         type_into(model, 0, 1, "Dinner")
         settled()
@@ -274,7 +273,7 @@ class TestDeletion:
     def test_deleting_a_row_targets_that_tables_name_and_row_id(
         self, view, recording_db, choose_delete, settled
     ):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         view.show_context_menu(view.table, 0, self._point_at(view, 0, 0))
         settled()
@@ -284,7 +283,7 @@ class TestDeletion:
     def test_the_table_reports_which_of_the_views_tables_was_clicked(
         self, view, recording_db, choose_delete, settled
     ):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         view.table.context_menu_requested.emit(0, self._point_at(view, 0, 0))
         settled()
@@ -292,7 +291,7 @@ class TestDeletion:
         assert recording_db.last("delete_record") == ("food_logs", 7)
 
     def test_a_successful_deletion_marks_every_tab_stale(self, view, choose_delete, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         view.show_context_menu(view.table, 0, self._point_at(view, 0, 0))
         settled()
@@ -302,7 +301,7 @@ class TestDeletion:
 
     def test_a_refused_deletion_is_reported(self, view, recording_db, choose_delete, settled):
         recording_db.result = (False, "Unauthorized target table")
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         view.show_context_menu(view.table, 0, self._point_at(view, 0, 0))
         settled()
@@ -314,7 +313,7 @@ class TestDeletion:
             self, view, recording_db, choose_delete, settled):
         from PyQt6.QtCore import QPoint
 
-        view.populate_table(view.table, [], table_idx=0)
+        view.set_rows(0, [])
 
         view.show_context_menu(view.table, 0, QPoint(5, 5))
 
@@ -334,22 +333,16 @@ class TestEditableColumnsComeFromTheMapping:
         assert model.editable_columns() == view.editable_columns(0)
 
     def test_a_derived_column_is_not_writable(self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         calories = model.index(0, HEADERS.index("Calories"))
         assert not (model.flags(calories) & Qt.ItemFlag.ItemIsEditable)
 
     def test_a_mapped_column_is_writable(self, view, model, settled):
-        view.populate_table(view.table, [ROW], table_idx=0)
+        view.set_rows(0, [ROW])
 
         servings = model.index(0, HEADERS.index("Servings"))
         assert model.flags(servings) & Qt.ItemFlag.ItemIsEditable
-
-    def test_there_is_no_override_to_widen_them(self, view):
-        import inspect
-
-        parameters = inspect.signature(view.populate_table).parameters
-        assert "editable_cols" not in parameters
 
 
 class TestARefreshSaysWhichRowsChanged:

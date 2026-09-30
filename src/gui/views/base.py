@@ -175,28 +175,22 @@ class BaseManagedView(ShutdownMixin, QWidget):
         index = widget.currentIndex()
         if not index.isValid():
             return None
-        proxy = widget.model()
-        source = proxy.mapToSource(index) if hasattr(proxy, "mapToSource") else index
         model = self._table_models[widget.table_idx]
-        return model.row_id(source), index.column()
+        return model.row_id(widget.model().mapToSource(index)), index.column()
 
     def _restore_cursor(self, widget, keep):
         """Put the cursor back on its row, where that row is still here."""
-        if keep is None:
+        if keep is None or keep[0] is None:
             return
         row_id, column = keep
-        if row_id is None:
-            return
         model = self._table_models[widget.table_idx]
-        for position, row in enumerate(model.rows):
-            if len(row) and row[0] == row_id:
-                index = model.index(position, column)
-                proxy = widget.model()
-                if hasattr(proxy, "mapFromSource"):
-                    index = proxy.mapFromSource(index)
-                if index.isValid():
-                    widget.setCurrentIndex(index)
-                return
+        position = next((position for position, row in enumerate(model.rows)
+                         if len(row) and row[0] == row_id), None)
+        if position is None:
+            return
+        index = widget.model().mapFromSource(model.index(position, column))
+        if index.isValid():
+            widget.setCurrentIndex(index)
 
     def warm_fold(self, table_idx=0):
         """Fold the rows for matching, off the interface thread."""
@@ -221,10 +215,6 @@ class BaseManagedView(ShutdownMixin, QWidget):
     def fold_is_warm(self, table_idx=0) -> bool:
         model = self._table_models[table_idx]
         return len(model._folded) >= model.rowCount()
-
-    def populate_table(self, table, data, table_idx=0):
-        """Put data in table table_idx, under the alternative name."""
-        self.set_rows(table_idx, data)
 
     def table_title(self, table_idx=0) -> str:
         """Return what the heading over this table calls it, for a status line."""
@@ -377,10 +367,6 @@ class BaseManagedView(ShutdownMixin, QWidget):
         if action == delete_action:
             self.fetch(self._delete_row, self._on_delete_finished,
                        self.tables[table_index], row_id)
-
-    def domain_of(self, table_idx=0):
-        """Return the household subject this view's table belongs to."""
-        return domain_of_table(self.tables[table_idx]) or ""
 
     def _delete_row(self, table, row_id):
         """Delete on the pool thread, carrying the table name back out."""
