@@ -59,12 +59,9 @@ def add_chore():
         raise BadValue("A chore needs a name.")
     values["name"] = name
 
-    columns = sorted(values)
-    conn.execute(
-        f"INSERT INTO chores ({', '.join(columns)}) "
-        f"VALUES ({', '.join('?' for _ in columns)})",
-        [values[column] for column in columns])
-    conn.commit()
+    with conn:
+        conn.execute(f"INSERT INTO chores ({', '.join(values)}) "
+                     f"VALUES ({', '.join('?' * len(values))})", tuple(values.values()))
 
     event_broadcaster.broadcast("catalog_updated", {"action": "chore", "name": name})
     return jsonify({"status": "success", "name": name}), 201
@@ -79,19 +76,18 @@ def complete_chore():
     chore = _chore_by_name(conn, payload["name"])
     values = checked_payload(conn, "chore_completions", payload, ("date",))
 
-    already = conn.execute(
-        "SELECT id FROM chore_completions WHERE chore_id = ? AND date = ?",
-        (chore["id"], values["date"])).fetchone()
-    if already is None:
-        conn.execute(
+    with conn:
+        repeated = not conn.execute(
             "INSERT INTO chore_completions (chore_id, date, done_by) "
-            "VALUES (?, ?, ?)", (chore["id"], values["date"], g.username))
-        conn.commit()
+            "SELECT :chore, :date, :by WHERE NOT EXISTS (SELECT 1 FROM chore_completions "
+            "WHERE chore_id = :chore AND date = :date)",
+            {"chore": chore["id"], "date": values["date"], "by": g.username}).rowcount
 
-    event_broadcaster.broadcast(
-        "catalog_updated", {"action": "chore_done", "name": chore["name"]})
+    if not repeated:
+        event_broadcaster.broadcast(
+            "catalog_updated", {"action": "chore_done", "name": chore["name"]})
     return jsonify({"status": "success", "name": chore["name"],
-                    "date": values["date"], "repeated": already is not None})
+                    "date": values["date"], "repeated": repeated})
 
 
 @chores_bp.route("/completions", methods=["GET"])
