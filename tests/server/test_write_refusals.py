@@ -215,12 +215,16 @@ class TestABodyThatEscapedBothHandlers:
         assert response.status_code == 400
         assert member_a.get("/api/catalog/beverage").get_json() == []
 
-    def test_a_name_that_is_not_text_is_refused(self, member_a):
-        member_a.post("/api/catalog/food", json=OATS)
-        response = member_a.post("/api/logs/food", json={
-            "date": "2026-09-05", "meal_type": "Lunch",
-            "food_name": {"$ne": None}, "servings": 1.0,
-        })
+    @pytest.mark.parametrize("path, body", [
+        ("/api/logs/food", {"meal_type": "Lunch", "food_name": {"$ne": None}, "servings": 1}),
+        ("/api/logs/beverage", {"time": "08:00", "bev_name": ["Coffee"], "servings": 1}),
+        ("/api/logs/supplement", {"supp_name": ["Zinc"], "servings": 1}),
+        ("/api/logs/mobility", {"mob_name": {"a": 1}, "duration_mins": 5}),
+        ("/api/logs/exercise", {"ex_name": ["Press"], "weight_kg": 30, "rpe": 8}),
+        ("/api/logs/exercise/workout", {"name": {"a": 1}}),
+    ])
+    def test_a_name_that_is_not_text_is_refused(self, member_a, path, body):
+        response = member_a.post(path, json=dict(body, date="2026-09-05"))
 
         assert response.status_code == 400
         assert response.headers["Content-Type"].startswith("application/json")

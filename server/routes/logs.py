@@ -30,10 +30,16 @@ def _since_clause():
     return " AND l.date >= ?", (since,)
 
 
+def _name(spec, name):
+    """Return the item or set name a log write carries, once it is text."""
+    if not isinstance(name, str):
+        raise BadValue(
+            f"{spec.domain.capitalize()} name must be text, not a {type(name).__name__}.")
+    return name
+
+
 def _catalog_id(conn, table: str, name):
     """Return the catalog id for name, or None, deciding nothing."""
-    if not isinstance(name, str):
-        return None
     row = conn.execute(
         f"SELECT id FROM {table} WHERE name = ? COLLATE NOCASE", (name,)
     ).fetchone()
@@ -93,6 +99,7 @@ def _log_set(conn, spec, set_row, multiplier, fixed: dict):
 def _log_item_or_set(conn, spec, name, fixed: dict, amount: float):
     """Log amount of name, whichever of the two namespaces holds it."""
     (amount_column,) = spec.log_amount_columns
+    name = _name(spec, name)
     item_id = _catalog_id(conn, spec.catalog_table, name)
     if item_id is not None:
         _insert_log_row(conn, spec, item_id, fixed, {amount_column: amount})
@@ -146,11 +153,8 @@ def add_food_log():
     amount = _food_amount(d)
     v = checked_payload(conn, "food_logs", d, ("date", "meal_type", amount))
 
-    name = d["food_name"]
-    if not isinstance(name, str):
-        raise BadValue(f"Food name must be text, not a {type(name).__name__}.")
-
     spec = sets.spec_for("food")
+    name = _name(spec, d["food_name"])
     fixed = {"date": v["date"], "meal_type": v["meal_type"]}
     item = conn.execute(
         "SELECT id, category FROM food_items WHERE name = ? COLLATE NOCASE", (name,)
@@ -272,13 +276,14 @@ def add_exercise_log():
                         defaults={column: 0 for column in scheme})
 
     spec = sets.spec_for("exercise")
-    item_id = _catalog_id(conn, "exercise_items", d["ex_name"])
+    name = _name(spec, d["ex_name"])
+    item_id = _catalog_id(conn, "exercise_items", name)
     if item_id is None:
-        if sets.find(conn, "exercise", d["ex_name"]) is not None:
+        if sets.find(conn, "exercise", name) is not None:
             raise BadValue(
-                f"'{d['ex_name']}' is a workout, which carries its own sets and "
+                f"'{name}' is a workout, which carries its own sets and "
                 f"loads. Log it with :wlog.")
-        raise _unknown_name(spec, d["ex_name"])
+        raise _unknown_name(spec, name)
 
     _insert_log_row(conn, spec, item_id, {"date": v["date"]},
                     {column: v[column] for column in scheme})
@@ -294,9 +299,10 @@ def add_workout_log():
     v = checked_payload(conn, "exercise_logs", d, ("date",))
 
     spec = sets.spec_for("exercise")
-    workout = sets.find(conn, "exercise", d["name"])
+    name = _name(spec, d["name"])
+    workout = sets.find(conn, "exercise", name)
     if workout is None:
-        raise BadValue(f"No workout called '{d['name']}'.")
+        raise BadValue(f"No workout called '{name}'.")
     written = _log_set(conn, spec, workout, 1.0, {"date": v["date"]})
     return jsonify({"status": "success", "rows": written, "set": workout["name"]})
 

@@ -34,6 +34,14 @@ class TestTheAllowlistIsPerTable:
         assert "caffeine_mg" in error and "food_logs" in error
         assert "no such column" not in error, "the allowlist answers, not sqlite"
 
+    def test_a_column_that_is_not_a_name_is_refused(self, member_a, food_log_id):
+        response = member_a.patch(
+            f"/api/logs/food_logs/{food_log_id}", json={"col": ["servings"], "val": "3"}
+        )
+
+        assert response.status_code == 400
+        assert response.get_json()["error"]
+
     def test_a_catalog_column_is_refused_on_a_log_table(self, member_a, food_log_id):
         response = member_a.patch(
             f"/api/logs/food_logs/{food_log_id}", json={"col": "energy", "val": "500"}
