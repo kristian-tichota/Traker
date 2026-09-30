@@ -40,6 +40,8 @@ def call(url, path, token, payload=None, method=None):
             return refused.code, json.loads(body)
         except ValueError:
             return refused.code, {"error": body[:400]}
+    except urllib.error.URLError as unreachable:
+        return None, {"error": str(unreachable.reason)}
 
 
 def complaints(document):
@@ -145,10 +147,8 @@ def main():
                         help=f"the service (default {LOCAL_SERVER_URL})")
     parser.add_argument("--token", default=API_TOKEN, required=not API_TOKEN,
                         help="the member's API token (default: the one in the profile)")
-    parser.add_argument("--dry-run", action="store_true",
+    parser.add_argument("--dry-run", "--check", action="store_true",
                         help="check the document and the catalog, write nothing")
-    parser.add_argument("--check", action="store_true",
-                        help="same as --dry-run")
     parser.add_argument("--replace", action="store_true",
                         help="delete an existing cycle of the same name first")
     args = parser.parse_args()
@@ -186,7 +186,7 @@ def main():
         return 1
     print(f"Every movement is in the catalog ({len(known)} items).")
 
-    if args.dry_run or args.check:
+    if args.dry_run:
         print("\n--dry-run: nothing was written.")
         return 0
 

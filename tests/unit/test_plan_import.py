@@ -1,4 +1,5 @@
 import pathlib
+import socket
 import sys
 
 import pytest
@@ -80,3 +81,15 @@ class TestACycleWrittenWrong:
         doc["sessions"] = []
 
         assert importer.complaints(doc) == ["the cycle has no sessions"]
+
+
+class TestAServiceThatIsNotThere:
+    def test_it_is_a_reason_rather_than_a_traceback(self):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+
+        status, body = importer.call(f"http://127.0.0.1:{port}", "/api/plans", "token")
+
+        assert status is None
+        assert body["error"]
