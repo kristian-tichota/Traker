@@ -1,70 +1,49 @@
-#!/usr/bin/env python3
-
 import datetime
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
-from src.database.rows import grouped_by_set
+
 from src.domain import formulas
 from src.domain.clock import minutes_of_day
-from src.gui.views.base import BaseManagedView, lay_out_tables
+from src.domain.tables import BEVERAGE
 from src.gui.components.calorie_bar import AnimatedProgressBar
+from src.gui.views.base import CatalogueView
 from src.profile import UserProfile
 
 
-class BeveragesView(BaseManagedView):
+class BeveragesView(CatalogueView):
+    DOMAIN = BEVERAGE
+    TITLES = ("Beverage Logs Ledger", "Beverage Inventory Matrix", "Drink Sets")
+    HEADERS = (["Date", "Time", "Beverage Name", "Drink Set", "Servings",
+                "Antioxidants (mg)", "Caffeine (mg)", "Sleep Metric Delay"],
+               ["Beverage Name", "Caffeine (mg)", "Antioxidants (mg)"],
+               ["Drink Set", "Beverage Name", "Servings"])
+    MAPPINGS = ({"Date": "date", "Time": "time", "Beverage Name": "beverage_item_id",
+                 "Servings": "servings"},
+                {"Beverage Name": "name", "Caffeine (mg)": "caffeine_mg",
+                 "Antioxidants (mg)": "antioxidants_mg"},
+                {"Beverage Name": "beverage_item_id", "Servings": "amount"})
+
     def __init__(self, db):
-        h_logs = ["Date", "Time", "Beverage Name", "Drink Set", "Servings", "Antioxidants (mg)", "Caffeine (mg)", "Sleep Metric Delay"]
-        h_items = ["Beverage Name", "Caffeine (mg)", "Antioxidants (mg)"]
-        h_sets = ["Drink Set", "Beverage Name", "Servings"]
-        m_logs = {"Date": "date", "Time": "time", "Beverage Name": "beverage_item_id", "Servings": "servings"}
-        m_items = {"Beverage Name": "name", "Caffeine (mg)": "caffeine_mg", "Antioxidants (mg)": "antioxidants_mg"}
-        m_sets = {"Beverage Name": "beverage_item_id", "Servings": "amount"}
-        super().__init__(db,
-                         ["beverage_logs", "beverage_items", "beverage_set_components"],
-                         [h_logs, h_items, h_sets],
-                         [m_logs, m_items, m_sets])
-
-        main_layout = QVBoxLayout(self)
-
+        super().__init__(db)
         self.caffeine_bar = AnimatedProgressBar("caffeine")
-        main_layout.addWidget(self.caffeine_bar)
+        self.layout().insertWidget(0, self.caffeine_bar)
 
-        v1, self.t_logs = self.build_table_layout("Beverage Logs Ledger", h_logs, 0)
-        v2, self.t_items = self.build_table_layout("Beverage Inventory Matrix", h_items, 1)
-        v3, self.t_sets = self.build_table_layout("Drink Sets", h_sets, 2)
-        main_layout.addLayout(lay_out_tables(QHBoxLayout(), v1, v2, v3))
+    def read_ledger(self):
+        return self.db.get_beverage_logs()
 
-    def refresh(self):
-        self.fetch(self._read_logs, self._on_logs_fetched)
-        self.fetch_table(1, self.db.get_all_beverages)
-        self.fetch_table(2, lambda: self.db.get_sets("beverage"))
+    def read_catalogue(self):
+        return self.db.get_all_beverages()
 
-    def _read_logs(self):
-        """Read the ledger, grouped so a logged drink set reads as one line."""
-        rows = self.db.get_beverage_logs()
-        return rows, grouped_by_set(rows)
+    def read_day(self, rows):
+        """Return the caffeine today's drinks will leave at bedtime."""
+        today = datetime.date.today().isoformat()
+        profile = UserProfile()
+        sleep_mins = minutes_of_day(
+            str(profile.get_metric("goals", "sleep_time", "23:00")).strip(), default=23 * 60)
+        half_life = float(profile.get_metric("goals", "caffeine_half_life", 5.0))
+        return sum(formulas.residual_at_bedtime(row.caffeine_mg or 0.0,
+                                                minutes_of_day(row.time, default=0),
+                                                sleep_mins, half_life)
+                   for row in rows if row.date == today)
 
-    def _on_logs_fetched(self, result):
-        data, grouped = result
-        self.populate_table(self.t_logs, grouped, table_idx=0)
-
-        today_str = datetime.date.today().isoformat()
-
-        prof = UserProfile()
-        sleep_str = str(prof.get_metric("goals", "sleep_time", "23:00")).strip()
-        half_life = float(prof.get_metric("goals", "caffeine_half_life", 5.0))
-
-        sleep_mins = minutes_of_day(sleep_str, default=23 * 60)
-
-        total_residual = 0.0
-        for row in data:
-            if row.date != today_str:
-                continue
-
-            log_time_str = row.time
-            caffeine_mg = row.caffeine_mg or 0.0
-
-            log_mins = minutes_of_day(log_time_str, default=0)
-            total_residual += formulas.residual_at_bedtime(
-                caffeine_mg, log_mins, sleep_mins, half_life)
+    def show_day(self, residual):
         self.caffeine_bar.reload_targets()
-        self.caffeine_bar.set_value(total_residual)
+        self.caffeine_bar.set_value(residual)

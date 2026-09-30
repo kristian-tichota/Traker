@@ -220,7 +220,7 @@ class TestTheHeaderIsTheState:
 
         food.apply_column_layout(0, layout)
 
-        header = food.table.horizontalHeader()
+        header = food._table_widgets[0].horizontalHeader()
         assert header.isSectionHidden(declared_headers.index("Sugars"))
         assert shown(food)[:2] == ["Est", "Calories"]
         assert food.model_for(0)._headers == declared_headers
@@ -313,7 +313,7 @@ class TestItIsRemembered:
         assert any("not saved" in message for message in messages)
 
     def test_dragging_a_heading_stores_where_it_landed(self, food, settled):
-        header = food.table.horizontalHeader()
+        header = food._table_widgets[0].horizontalHeader()
 
         header.moveSection(header.visualIndex(food.headers[0].index("Calories")), 0)
         settled()
@@ -323,7 +323,7 @@ class TestItIsRemembered:
                                   food.headers[0]) == food.column_layout(0)
 
     def test_dragging_a_heading_does_not_also_sort_it(self, food, settled):
-        table = food.table
+        table = food._table_widgets[0]
         table.resize(1200, 400)
         table.show()
         table.resizeColumnsToContents()
@@ -456,7 +456,7 @@ class TestTheMouseCanDoWhatTheKeyboardCan:
 class TestTheCursorFollowsWhatIsOnScreen:
     def test_hjkl_moves_in_the_order_the_member_sees(self, food, settled):
         food.apply_column_layout(0, food.column_layout(0).move("Calories", 1))
-        table = food.table
+        table = food._table_widgets[0]
         table.setCurrentIndex(table.model().index(0, food.headers[0].index("Calories")))
 
         press(table, table.key_right)
@@ -465,7 +465,7 @@ class TestTheCursorFollowsWhatIsOnScreen:
 
     def test_a_hidden_column_is_stepped_over(self, food, settled):
         food.apply_column_layout(0, food.column_layout(0).hide("Date"))
-        table = food.table
+        table = food._table_widgets[0]
         table.setCurrentIndex(table.model().index(0, food.headers[0].index("Est")))
 
         press(table, table.key_right)
@@ -474,7 +474,7 @@ class TestTheCursorFollowsWhatIsOnScreen:
 
     def test_the_cursor_stops_at_the_last_visible_column(self, food, settled):
         food.apply_column_layout(0, food.column_layout(0).hide("Fibre"))
-        table = food.table
+        table = food._table_widgets[0]
         table.setCurrentIndex(table.model().index(0, food.headers[0].index("Salt")))
 
         press(table, table.key_right)
@@ -482,7 +482,7 @@ class TestTheCursorFollowsWhatIsOnScreen:
         assert food.headers[0][table.currentIndex().column()] == "Salt"
 
     def test_the_cursor_leaves_a_column_that_has_just_been_hidden(self, food, settled):
-        table = food.table
+        table = food._table_widgets[0]
         table.setCurrentIndex(table.model().index(0, food.headers[0].index("Sugars")))
 
         food.apply_column_layout(0, food.column_layout(0).hide("Sugars"))
@@ -494,9 +494,9 @@ class TestTheCursorFollowsWhatIsOnScreen:
     def test_entering_the_sheet_lands_on_a_column_that_is_shown(self, food, settled):
         food.apply_column_layout(0, food.column_layout(0).hide("Est"))
 
-        food.table.focus_first_cell()
+        food._table_widgets[0].focus_first_cell()
 
-        assert food.headers[0][food.table.currentIndex().column()] == "Date"
+        assert food.headers[0][food._table_widgets[0].currentIndex().column()] == "Date"
 
 
 @pytest.mark.gui
@@ -517,15 +517,15 @@ class TestNoTableDeclaresAColumnTwice:
 class TestATableSaysWhenItTakesFocus:
     def test_taking_focus_names_the_table(self, food, qapp):
         named = []
-        food.t_items.focus_taken.connect(named.append)
+        food._table_widgets[1].focus_taken.connect(named.append)
 
         food.show()
-        food.t_items.activateWindow()
-        food.t_items.setFocus()
+        food._table_widgets[1].activateWindow()
+        food._table_widgets[1].setFocus()
         qapp.processEvents()
         food.hide()
 
-        assert named == [food.t_items]
+        assert named == [food._table_widgets[1]]
 
 
 @pytest.mark.gui
@@ -609,7 +609,7 @@ class TestColsFromTheCommandBar:
 
     def test_it_acts_on_the_table_the_member_was_last_in(
             self, window, food_tab, settled):
-        food_tab.t_items.focus_taken.emit(food_tab.t_items)
+        food_tab._table_widgets[1].focus_taken.emit(food_tab._table_widgets[1])
 
         line = self.submit(window, "cols hide Category", settled)
 

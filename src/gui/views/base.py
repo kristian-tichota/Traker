@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QMenu
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMenu
 from PyQt6.QtCore import Qt, QThreadPool, pyqtSignal
 from src.config import PALETTE
 from src.domain.clock import as_displayed_date, as_stored_date
@@ -7,7 +7,7 @@ from src.gui.columns import ColumnLayout, setting_key
 from src.gui.components.vim_table_view import VimTableView
 from src.domain.tables import domain_of_table
 from src.gui.lifecycle import ShutdownMixin
-from src.database.rows import MatchedTotals
+from src.database.rows import MatchedTotals, grouped_by_set
 from src.gui.models.filter_proxy import FilterProxyModel
 from src.gui.models.log_table import (DATE_HEADERS, LogTableModel,
                                       editable_columns)
@@ -26,16 +26,6 @@ ESTIMATE_PART = ("estimated_rows", "Est", "{:,.0f} estimated")
 
 LEDGER_STRETCH, RIGHT_COLUMN_STRETCH = 6, 4
 CATALOG_STRETCH, SETS_STRETCH = 6, 4
-
-
-def lay_out_tables(into, ledger, catalog, sets_pane):
-    """Place a domain tab's three panes at the stretches above."""
-    right_column = QVBoxLayout()
-    right_column.addLayout(catalog, CATALOG_STRETCH)
-    right_column.addLayout(sets_pane, SETS_STRETCH)
-    into.addLayout(ledger, LEDGER_STRETCH)
-    into.addLayout(right_column, RIGHT_COLUMN_STRETCH)
-    return into
 
 
 def summary_line(totals, headers) -> str:
@@ -424,3 +414,46 @@ class BaseManagedView(ShutdownMixin, QWidget):
         table, success, msg = outcome
         self.status_message.emit(" Saved." if success else f" Edit refused: {msg}")
         self.data_changed.emit(domain_of_table(table) or "")
+
+
+class CatalogueView(BaseManagedView):
+    """A domain's ledger beside its catalogue and sets, read by read_ledger and read_catalogue."""
+
+    DOMAIN = ""
+    TITLES = HEADERS = MAPPINGS = ()
+
+    def __init__(self, db):
+        tables = [f"{self.DOMAIN}_{kind}" for kind in ("logs", "items", "set_components")]
+        super().__init__(db, tables, list(self.HEADERS), list(self.MAPPINGS))
+        ledger, catalogue, sets_pane = (
+            self.build_table_layout(title, headers, table_idx)[0]
+            for table_idx, (title, headers) in enumerate(zip(self.TITLES, self.HEADERS)))
+        right_column = QVBoxLayout()
+        right_column.addLayout(catalogue, CATALOG_STRETCH)
+        right_column.addLayout(sets_pane, SETS_STRETCH)
+        panes = QHBoxLayout()
+        panes.addLayout(ledger, LEDGER_STRETCH)
+        panes.addLayout(right_column, RIGHT_COLUMN_STRETCH)
+        QVBoxLayout(self).addLayout(panes)
+
+    def refresh(self):
+        self.fetch(self._read_ledger, self._show_ledger)
+        self.fetch_table(1, self.read_catalogue)
+        self.fetch_table(2, self.db.get_sets, self.DOMAIN)
+
+    def read_day(self, rows):
+        """Return what this tab reports about today from rows, on the pool thread."""
+        return None
+
+    def show_day(self, day):
+        """Show what read_day returned."""
+
+    def _read_ledger(self):
+        """Read the ledger, grouped so a logged set reads as one line."""
+        rows = self.read_ledger()
+        return grouped_by_set(rows), self.read_day(rows)
+
+    def _show_ledger(self, result):
+        grouped, day = result
+        self.set_rows(0, grouped)
+        self.show_day(day)
