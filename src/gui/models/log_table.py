@@ -116,7 +116,7 @@ class LogTableModel(QAbstractTableModel):
 
     def value_at(self, row_index, column):
         """Return the raw value behind a cell, for a reader that cannot use the text."""
-        return self._value_at(row_index, column)
+        return _cell(self._rows[row_index], column)
 
     def fold_all(self, rows=None):
         """Fold every row, without touching Qt."""
@@ -148,17 +148,9 @@ class LogTableModel(QAbstractTableModel):
             self._folded[row_index] = cached
         return cached
 
-    def _value_at(self, row_index, column):
-        """Return the raw value behind a cell of the rows currently held."""
-        return _cell(self._rows[row_index], column)
-
-    def _references_an_item(self, column):
-        """Report whether this column names the catalog item rather than a value."""
-        return column in self._item_columns
-
     def display_text(self, row_index, column):
         """Return what the cell shows."""
-        value = self._value_at(row_index, column)
+        value = self.value_at(row_index, column)
         if value is None:
             if row_index in self._pending_rows:
                 return PENDING_TEXT
@@ -184,11 +176,11 @@ class LogTableModel(QAbstractTableModel):
     def _is_numeric_column(self, column):
         """Report whether this column holds numbers, so an empty cell reads zero."""
         if self._numeric_fields is None:
-            return not self._references_an_item(column)
+            return column not in self._item_columns
         return (column + 1) in self._numeric_fields
 
     def _is_numeric_cell(self, row_index, column):
-        value = self._value_at(row_index, column)
+        value = self.value_at(row_index, column)
         if value is None:
             return self._is_numeric_column(column)
         return isinstance(value, float)
@@ -207,8 +199,6 @@ class LogTableModel(QAbstractTableModel):
                 return ALIGN_CENTRE
             return ALIGN_RIGHT if self._is_numeric_cell(row_index, column) else ALIGN_LEFT
         if role == Qt.ItemDataRole.BackgroundRole:
-            if self._change_brush is None:
-                return None
             return self._change_brush if row_index in self._changed_rows else None
         if role == Qt.ItemDataRole.FontRole:
             return HEADING_FONT if row_index in self._headings else None
