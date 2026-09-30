@@ -19,10 +19,11 @@ restarted notification server again; Plasma drops the hold when Traker exits.
 
 Holding `Esc` for `release_hold_secs` abandons the break, and the remaining time is recorded as
 `overridden_break`. When the break ends the walls stay but give up the desktops, the switch and the
-focus: the countdown becomes `BREAK OVER` and a count up in a blue frame on each wall that shows no
-activity, a file goes on playing, and the press that starts focus takes the walls away. A wall shows
-the session, the chores that are due and, after `away_secs`, the offers; a pressed offer glows,
-yellow while the offers are held back. The chore tick is the one surface that writes to the service.
+focus: the countdown becomes `BREAK OVER` and a count up in a frame on each wall that shows no
+activity, faint at first and at full size after `over_ramp_secs`, a file goes on playing, and the
+press that starts focus takes the walls away. A wall shows the session, the chores that are due and,
+after `away_secs`, the offers; a pressed offer glows, yellow while the offers are held back. The
+chore tick is the one surface that writes to the service.
 
 ## Break activities
 

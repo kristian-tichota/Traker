@@ -31,6 +31,7 @@ from src.gui.components.timeline_popup import TimelinePopupWidget
 from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin
 from src.domain.tables import CHORE
+from src.gui.animations import blend
 from src.gui.workers import discard, run_in_background
 
 log = logging.getLogger(__name__)
@@ -60,7 +61,12 @@ IDLE_POLL_MS = 1000
 
 SCREENS_SETTLE_MS = 400
 
-PROMPT_BORDER_PX = 16
+PROMPT_BORDER_PX = 6
+
+OVER_FADE_MS = 3000
+OVER_FADE_STRENGTH = 0.4
+OVER_STEPS = 40
+OVER_SIGN = blend(QColor(PALETTE['base03']), QColor(PALETTE['blue']), 0.75)
 
 PLAYING_TITLE = "NOW PLAYING"
 PROGRESS_PX = 420
@@ -316,7 +322,7 @@ class StrictOverlay(QWidget):
         self.stands_corrected = False
         self.let_go = False
         self._playing_name = None
-        self._dressed = (False, -1)
+        self._dressed = (False, 0.0, -1)
         self.setWindowFlags(self.FLAGS)
         self.setWindowTitle(wall_caption(screen))
         self.setObjectName(WALL_NAME)
@@ -471,9 +477,11 @@ class StrictOverlay(QWidget):
         self._dress_for_the_state()
 
     def _dress_for_the_state(self):
-        """Dress the wall as a sign once the break ends, unless it shows an activity."""
+        """Dress the wall as a sign that grows with the wait, unless it shows an activity."""
         prompting = self.timer_ref.prompts_for_focus() and not self.is_showing_media()
-        dressed = (prompting, self.height())
+        strength = round(self.timer_ref.over_strength() * OVER_STEPS) / OVER_STEPS \
+            if prompting else 0.0
+        dressed = (prompting, strength, self.height())
         if dressed == self._dressed:
             return
         self._dressed = dressed
@@ -481,12 +489,11 @@ class StrictOverlay(QWidget):
         inset = PROMPT_BORDER_PX if prompting else 0
         self.frame.setContentsMargins(inset, inset, inset, inset)
 
-        if prompting:
-            headline, instruction = max(28, self.height() // 16), max(11, self.height() // 48)
-            said, hint = PALETTE['blue'], PALETTE['base2']
-        else:
-            headline, instruction = 28, 11
-            said = hint = PALETTE['base01']
+        headline = round(28 + (max(28, self.height() // 22) - 28) * strength)
+        instruction = round(11 + (max(11, self.height() // 64) - 11) * strength)
+        quiet = QColor(PALETTE['base01'])
+        said = blend(quiet, OVER_SIGN, strength).name()
+        hint = blend(quiet, QColor(PALETTE['base0']), strength).name()
         self.label.setStyleSheet(f"color: {said}; font-size: {headline}px;"
                                  f" font-family: 'Fira Code';")
         self.lbl_hint.setStyleSheet(f"color: {hint}; font-size: {instruction}px;"
@@ -497,10 +504,11 @@ class StrictOverlay(QWidget):
     def paintEvent(self, event):
         """Paint the frame around a wall whose break has run out."""
         super().paintEvent(event)
-        if not self._dressed[0]:
+        prompting, strength, _ = self._dressed
+        if not prompting:
             return
         painter = QPainter(self)
-        pen = QPen(QColor(PALETTE['blue']), PROMPT_BORDER_PX)
+        pen = QPen(blend(QColor(PALETTE['base03']), OVER_SIGN, strength), PROMPT_BORDER_PX)
         pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
         painter.setPen(pen)
         inset = PROMPT_BORDER_PX // 2
@@ -811,6 +819,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             "strict_break", "warn_secs", 60, low=0.0)
         self.away_secs = self.profile.number(
             "strict_break", "away_secs", 300, low=0.0)
+        self.over_ramp_secs = self.profile.number(
+            "strict_break", "over_ramp_secs", 300, low=0.0)
         self._warn_sound = str(self.profile.get_metric(
             "strict_break", "sound_name", "dialog-warning"))
         self._warn_sound_file = str(self.profile.get_metric(
@@ -1402,6 +1412,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         if not self.waiting_for_work_start or not self._over_since_ms:
             return 0
         return max(0, QDateTime.currentMSecsSinceEpoch() - self._over_since_ms)
+
+    def over_strength(self) -> float:
+        """Return how far the break-over sign has grown, from 0 to 1."""
+        over = self.over_by_ms()
+        faded = min(1.0, over / OVER_FADE_MS)
+        ramp_ms = self.over_ramp_secs * 1000 - OVER_FADE_MS
+        grown = min(1.0, max(0.0, (over - OVER_FADE_MS) / ramp_ms)) if ramp_ms > 0 else faded
+        return OVER_FADE_STRENGTH * faded + (1.0 - OVER_FADE_STRENGTH) * grown
 
     def release_hint(self) -> str:
         """Return what to hold, and for how long."""

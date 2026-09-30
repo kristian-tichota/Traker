@@ -225,6 +225,9 @@ release_hold_secs = 10
 # Proportional: a break twice as long waits twice as long. 0 opens them the
 # moment the break lands.
 away_secs = 300
+# Seconds after a break ends over which the walls' BREAK OVER sign grows from
+# faint to full. 0 grows it to full within its first seconds.
+over_ramp_secs = 300
 # Ask KWin to keep the break on every virtual desktop and activity. Qt cannot
 # say that on Wayland, so without this one shortcut steps around a break.
 follow_across_desktops = true

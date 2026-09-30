@@ -1080,14 +1080,18 @@ class TestWhatTheScreenShows:
         host = timer._media_host
         other, = [wall for wall in timer.overlays if wall is not host]
 
+        timer.over_ramp_secs = 0
         advance(timer, timer.break_ms + 1000)
+        timer._over_since_ms -= pomodoro_view.OVER_FADE_MS
+        sign = pomodoro_view.OVER_SIGN.name()
+        other.update_display()
 
-        assert corner_colour(host) != PALETTE["blue"]
-        assert corner_colour(other) == PALETTE["blue"]
+        assert corner_colour(host) != sign
+        assert corner_colour(other) == sign
 
         send_key(timer, Qt.Key.Key_0)
 
-        assert corner_colour(host) == PALETTE["blue"]
+        assert corner_colour(host) == sign
 
 
 class TestTheQueue:

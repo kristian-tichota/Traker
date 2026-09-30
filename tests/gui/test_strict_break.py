@@ -8,7 +8,6 @@ from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
 
 import src.gui.views.pomodoro_view as pomodoro_view
-from src.config import PALETTE
 from src.desktop.activities import VIDEO, BreakActivity
 from src.gui.views.pomodoro_view import RELEASE_KEY, PomodoroView, StrictOverlay
 from tests.gui.conftest import advance
@@ -74,6 +73,12 @@ def font_size_of(widget) -> int:
 
 def corner_colour(widget) -> str:
     return widget.grab().toImage().pixelColor(2, 2).name()
+
+
+def wait_past_the_break(view, seconds):
+    view._over_since_ms = QDateTime.currentMSecsSinceEpoch() - int(seconds * 1000)
+    for wall in view.overlays:
+        wall.update_display()
 
 
 def start_recording(recording_db):
@@ -972,6 +977,7 @@ class TestWhenTheBreakRunsOut:
         quiet = font_size_of(wall.label)
 
         advance(timer, timer.break_ms + 1000)
+        wait_past_the_break(timer, timer.over_ramp_secs)
         sign = font_size_of(wall.label)
         wall.resize(2000, 1400)
 
@@ -979,15 +985,31 @@ class TestWhenTheBreakRunsOut:
         assert wall.label.sizeHint().height() < wall.height() // 3
         assert font_size_of(wall.label) > sign
 
-    def test_the_wall_takes_a_frame_that_carries_across_a_room(self, timer):
+    def test_the_sign_starts_faint_and_grows_with_the_wait(self, timer):
+        enter_strict_break(timer)
+        wall = timer.overlays[0]
+        wall.resize(2000, 1400)
+        advance(timer, timer.break_ms + 1000)
+
+        looks = []
+        for secs in (0, timer.over_ramp_secs / 2, timer.over_ramp_secs, timer.over_ramp_secs * 2):
+            wait_past_the_break(timer, secs)
+            looks.append((font_size_of(wall.label), corner_colour(wall)))
+
+        assert looks[0][1] != pomodoro_view.OVER_SIGN.name()
+        assert looks[0][0] < looks[1][0] < looks[2][0]
+        assert looks[2] == looks[3] == (looks[2][0], pomodoro_view.OVER_SIGN.name())
+
+    def test_no_ramp_grows_the_sign_within_its_fade(self, timer):
+        timer.over_ramp_secs = 0
         enter_strict_break(timer)
         wall = timer.overlays[0]
         wall.resize(400, 300)
-        assert corner_colour(wall) != PALETTE["blue"]
-
         advance(timer, timer.break_ms + 1000)
 
-        assert corner_colour(wall) == PALETTE["blue"]
+        wait_past_the_break(timer, pomodoro_view.OVER_FADE_MS / 1000)
+
+        assert corner_colour(wall) == pomodoro_view.OVER_SIGN.name()
 
     def test_one_press_of_that_key_starts_focus(self, timer, recording_db):
         enter_strict_break(timer)

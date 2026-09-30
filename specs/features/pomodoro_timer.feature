@@ -363,7 +363,7 @@ Feature: Focus timer
       Then the walls stay in place while the timer waits for me
       And each one is still in front of the screen it covers, every screen
       And the countdown alone becomes the break being over, counting up from its end
-      And it says it at the scale of the screen it is on, inside a frame
+      And it says it inside a frame, faintly at first, growing with the wait to the scale of the screen it is on
       But the wall showing an activity keeps the activity and takes no frame
       And the rest of the wall stands: what is coming, what is due, what is playing
       And the keys that drive what is playing go on driving it
