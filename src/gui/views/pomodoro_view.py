@@ -1,4 +1,5 @@
 import datetime
+import functools
 import logging
 import math
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -1477,11 +1478,21 @@ class PomodoroView(ShutdownMixin, QWidget):
         return hints
 
     def take_offers(self) -> list:
-        """Return what this break may be handed to, in key order."""
+        """Return what this break may be handed to, in key order, the shelves once walked."""
         self._offers = (break_activities.queued(rest_queue.read(self._queue_path))
-                        + list(self.activities)
-                        + break_activities.shelves(self._library_path))
+                        + list(self.activities))
+        run_in_background(self.threadpool, break_activities.shelves,
+                          functools.partial(self._add_shelves, self._offers), None,
+                          self._library_path)
         return self._offers
+
+    def _add_shelves(self, offered, shelves):
+        """Offer the library's shelves after what the break was offering when it began."""
+        if not shelves or offered is not self._offers or not self._strict_engaged:
+            return
+        self._offers = offered + shelves
+        self._show_upcoming()
+        self._say_which_keys_drive_it()
 
     OFFERS_TITLE = "SOMETHING TO DO"
 

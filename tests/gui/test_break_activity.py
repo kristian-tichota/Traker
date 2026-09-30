@@ -1,3 +1,5 @@
+import threading
+
 import pytest
 from PyQt6 import sip
 from PyQt6.QtCore import QAbstractAnimation, QEvent, Qt, QThreadPool, pyqtSignal
@@ -277,6 +279,12 @@ def enter_strict_break(view, past_the_wait=True):
         view.time_left_ms -= view.away_ms()
         view._say_when_the_offers_open()
     assert view.holds_the_screens()
+
+
+def enter_with_the_shelves(view):
+    enter_strict_break(view)
+    QThreadPool.globalInstance().waitForDone(2000)
+    QApplication.processEvents()
 
 
 def send_key(target, key):
@@ -1696,13 +1704,28 @@ class TestTheCardOnEveryWall:
 
 class TestTheLibrary:
     def test_its_subfolders_are_offered_after_the_standing_entries(self, library_timer):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
 
         assert [offer.name for offer in library_timer._offers] == [
             "Reading", "Something to watch", "Books", "Videos"]
 
+    def test_the_library_is_walked_off_the_interface_thread(self, library_timer,
+                                                            monkeypatch):
+        walked = []
+        shelves = pomodoro_view.break_activities.shelves
+
+        def noting(folder):
+            walked.append(threading.current_thread() is threading.main_thread())
+            return shelves(folder)
+
+        monkeypatch.setattr(pomodoro_view.break_activities, "shelves", noting)
+        enter_with_the_shelves(library_timer)
+
+        assert walked == [False]
+        assert library_timer._offers[-1].name == "Videos"
+
     def test_each_names_its_subfolder_and_the_file_it_opens(self, library_timer, settled):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
         settled()
 
         assert library_timer.upcoming.lines()[-2:] == [
@@ -1710,7 +1733,7 @@ class TestTheLibrary:
 
     def test_its_key_lists_its_folder_with_the_file_it_reached_marked(self, library_timer,
                                                                       media):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
 
         send_key(library_timer, Qt.Key.Key_3)
 
@@ -1721,14 +1744,14 @@ class TestTheLibrary:
                                                                     media):
         ended = str(media / "Videos" / "e1.mkv")
         rest_positions.remember(ended, 1_440_000, library_timer._positions_path, 1_440_000)
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
 
         send_key(library_timer, Qt.Key.Key_4)
 
         assert marked(library_timer) == str(media / "Videos" / "e2.mkv")
 
     def test_space_opens_the_marked_file_as_what_it_is(self, library_timer, media):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
         send_key(library_timer, Qt.Key.Key_3)
 
         send_key(library_timer, Qt.Key.Key_Down)
@@ -1739,7 +1762,7 @@ class TestTheLibrary:
 
     def test_0_in_that_file_brings_the_list_back_with_it_marked(self, library_timer,
                                                                  media):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
         send_key(library_timer, Qt.Key.Key_3)
         send_key(library_timer, Qt.Key.Key_Down)
         send_key(library_timer, Qt.Key.Key_Space)
@@ -1752,7 +1775,7 @@ class TestTheLibrary:
 
     def test_left_climbs_to_the_media_folder_and_right_into_another(self, library_timer,
                                                                    media):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
         send_key(library_timer, Qt.Key.Key_3)
 
         send_key(library_timer, Qt.Key.Key_Left)
@@ -1763,7 +1786,7 @@ class TestTheLibrary:
         assert marked(library_timer) == str(media / "Videos" / "e1.mkv")
 
     def test_every_key_its_card_names_is_one_the_break_answers(self, library_timer):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
         send_key(library_timer, Qt.Key.Key_3)
 
         for label, _says in library_timer.media_surface.keys.hints:
@@ -1773,7 +1796,7 @@ class TestTheLibrary:
             assert library_timer.eventFilter(library_timer, pressed) is True, label
 
     def test_its_key_again_while_its_list_shows_does_nothing(self, library_timer):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
         send_key(library_timer, Qt.Key.Key_3)
         send_key(library_timer, Qt.Key.Key_Down)
         built = len(library_timer.media_pane_factory.built)
@@ -1801,7 +1824,7 @@ BOOK_KEYS = {"SPACE →": Qt.Key.Key_Space, "SPACE ←": Qt.Key.Key_Space,
 class TestABook:
     @pytest.fixture
     def reading(self, library_timer):
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
         send_key(library_timer, Qt.Key.Key_3)
         send_key(library_timer, Qt.Key.Key_Space)
         return library_timer
@@ -1972,7 +1995,7 @@ class TestTheHookFollowsTheBreak:
     def test_a_shelf_s_list_is_the_break_and_its_file_what_it_is(self, library_timer,
                                                                  settled):
         library_timer.hook = told = Told()
-        enter_strict_break(library_timer)
+        enter_with_the_shelves(library_timer)
 
         send_key(library_timer, Qt.Key.Key_3)
         settled()
