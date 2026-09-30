@@ -322,7 +322,7 @@ class StrictOverlay(QWidget):
         self.keys = KeyCard(parent=self)
         self.keys.setVisible(False)
 
-        # Qt rebuilds a mapped window the first time a GL child reaches it: this one is first.
+        # Workaround: Qt rebuilds a mapped window when a GL child first reaches it, so one comes first.
         self.texture_page = QOpenGLWidget(self)
         self.texture_page.hide()
 
@@ -1699,7 +1699,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         return self._showing is not None and self._showing.kind == break_activities.PAGE
 
     def _offer_index(self, key):
-        """Return where in the offers a key's offer stands, or None for a key left alone."""
+        """Return the index of the offer a key opens, or None for a key left alone."""
         if not self._offers:
             return None
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
