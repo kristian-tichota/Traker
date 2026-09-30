@@ -149,6 +149,7 @@ class TestFocusEnding:
         assert timer.is_running is False
         assert timer.current_phase == "work"
         assert "FOCUS OVER" in timer.lbl_phase.text()
+        assert timer.lbl_release_hint.isHidden() is True
 
     def test_strict_mode_starts_the_break_immediately(self, strict):
         strict._toggle_timer()
@@ -554,6 +555,22 @@ class TestWalkingAway:
 
         assert timer._idled is False
         assert timer._get_current_state() == "focus"
+
+    def test_skipping_ahead_from_an_absence_is_the_break_and_nothing_else(
+            self, timer, recording_db):
+        timer._toggle_timer()
+        timer.idle_source = Away(timer.idle_pause_ms)
+        timer._watch_for_the_member()
+        timer._skip_phase()
+        start_recording(recording_db)
+
+        timer.idle_source = Away(0)
+        timer._watch_for_the_member()
+
+        QThreadPool.globalInstance().waitForDone(2000)
+        assert timer._get_current_state() == "rest"
+        assert timer.lbl_phase.text() == "BREAK"
+        assert not recording_db.called("log_pomodoro_event")
 
     def test_a_threshold_of_zero_leaves_the_clock_running(self, timer):
         timer._toggle_timer()
