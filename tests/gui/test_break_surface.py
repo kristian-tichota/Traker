@@ -17,12 +17,12 @@ TODAY = plans.today_iso()
 
 
 def plan_row(start=TODAY, weeks=4):
-    return rows.TrainingPlanRow.from_server([1, "Cycle 1", start, weeks, "Rebuild"])
+    return rows.TrainingPlanRow.from_server([1, "Cycle 1", start, weeks, "Rebuild", 1])
 
 
 def session(date, name="Upper A", week=1):
     return rows.PlanSessionRow.from_server(
-        [1, date, week, name, "re-entry", "Keep it light"])
+        [1, date, week, name, "re-entry", "Keep it light", 2])
 
 
 def movement(date, name="Overhead Press", position=0, sets=3, low=8, high=12,
@@ -85,7 +85,7 @@ def timer(qapp, app_id, strict_timer, with_a_session_today):
 
 def enter_strict_break(view):
     view._skip_phase()
-    assert view._strict_break_is_holding()
+    assert view.holds_the_screens()
 
 
 class TestWhatItSays:

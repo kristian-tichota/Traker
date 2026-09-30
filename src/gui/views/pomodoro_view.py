@@ -1501,7 +1501,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def opens_in_ms(self) -> int:
         """Return what is left of that wait, or nothing outside a held break."""
-        if not self._strict_break_is_holding():
+        if not self.holds_the_screens():
             return 0
         return media.opens_in(self.away_ms(), self.phase_length_ms(),
                               self.time_left_ms)
@@ -1632,17 +1632,13 @@ class PomodoroView(ShutdownMixin, QWidget):
         return window is not None and window in self.overlays
 
     def holds_the_screens(self) -> bool:
-        """Report whether a strict break owns the screens now."""
-        return self._strict_break_is_holding()
-
-    def _strict_break_is_holding(self) -> bool:
         """Report whether a running strict break owns the screens now."""
         return (self._strict_engaged and self.is_running
                 and "break" in self.current_phase)
 
     def prompts_for_focus(self) -> bool:
         """Report whether the walls are up only to state that the break is over."""
-        return self._strict_engaged and not self._strict_break_is_holding()
+        return self._strict_engaged and not self.holds_the_screens()
 
     def stop_hint(self) -> str:
         """Return what stopping a running interval costs, stated beside the ring."""
@@ -1650,7 +1646,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _apply_exit_controls(self):
         """Refuse pause and skip while the screens are held, and price a stop."""
-        holding = self._strict_break_is_holding()
+        holding = self.holds_the_screens()
         self.btn_play.setEnabled(not holding)
         self.btn_skip.setEnabled(not holding)
         self.lbl_release_hint.setText(
@@ -1659,55 +1655,47 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def eventFilter(self, watched, event):
         """Handle every key a break answers, wherever the focus is."""
-        if event.type() not in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+        if (event.type() not in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease)
+                or event.isAutoRepeat() or not self._strict_engaged):
             return super().eventFilter(watched, event)
 
-        if self.prompts_for_focus():
-            if event.type() == QEvent.Type.KeyPress \
-                    and event.key() == RELEASE_KEY and not event.isAutoRepeat() \
-                    and not is_typing_into(watched):
-                self._toggle_timer()
-                return True
-
-        if self._strict_break_is_holding() \
-                and event.key() == RELEASE_KEY and not event.isAutoRepeat():
-            if event.type() == QEvent.Type.KeyPress:
+        key, pressed = event.key(), event.type() == QEvent.Type.KeyPress
+        if key == RELEASE_KEY and self.holds_the_screens():
+            if pressed:
                 self.begin_hold()
             else:
                 self.cancel_hold()
             return True
+        if not pressed:
+            return super().eventFilter(watched, event)
 
-        if self._strict_engaged and self._page_takes_keys():
-            if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat() \
-                    and event.key() == PAGE_BACK_KEY \
-                    and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+        typing = is_typing_into(watched)
+        if key == RELEASE_KEY and not typing and self.prompts_for_focus():
+            self._toggle_timer()
+            return True
+
+        if self._page_takes_keys():
+            if key == PAGE_BACK_KEY and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                 return self._drive_media(PAGE_BACK_KEY)
             return super().eventFilter(watched, event)
 
-        if self._strict_engaged:
-            if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat() \
-                    and not is_typing_into(watched):
-                index = self._offer_index(event.key())
-                if index is not None:
-                    self._show_activity(self._offers[index])
-                    self._acknowledge_offer(index)
-                    return True
-                if self._drive_media(event.key()):
-                    return True
-                chore = self._chore_for(event.key())
-                if chore is not None:
-                    self.tick_chore(chore.id)
-                    return True
+        if not typing:
+            index = self._offer_index(key)
+            if index is not None:
+                self._show_activity(self._offers[index])
+                self._acknowledge_offer(index)
+                return True
+            if self._drive_media(key):
+                return True
+            chore = self._chore_for(key)
+            if chore is not None:
+                self.tick_chore(chore.id)
+                return True
         return super().eventFilter(watched, event)
 
     def _page_takes_keys(self) -> bool:
         """Report whether a web page shows, which every key reaches but the break's own."""
         return self._showing is not None and self._showing.kind == break_activities.PAGE
-
-    def _activity_for(self, key):
-        """Return the offer a key opens, or None for a key left alone."""
-        index = self._offer_index(key)
-        return None if index is None else self._offers[index]
 
     def _offer_index(self, key):
         """Return where in the offers a key's offer stands, or None for a key left alone."""
@@ -1761,7 +1749,7 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _hold_is_live(self, purpose) -> bool:
         """Report whether what the hold would pay for is still the case."""
         if purpose == HOLD_RELEASE:
-            return self._strict_break_is_holding()
+            return self.holds_the_screens()
         return self._focus_is_running()
 
     def begin_hold(self, purpose=HOLD_RELEASE):

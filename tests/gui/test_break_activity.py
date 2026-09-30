@@ -276,7 +276,7 @@ def enter_strict_break(view, past_the_wait=True):
     if past_the_wait:
         view.time_left_ms -= view.away_ms()
         view._say_when_the_offers_open()
-    assert view._strict_break_is_holding()
+    assert view.holds_the_screens()
 
 
 def send_key(target, key):
@@ -329,7 +329,7 @@ class TestNothingIsShownUnasked:
         assert view.activities == []
         assert view.take_offers() == []
         assert view.offer_section() == []
-        assert view._activity_for(Qt.Key.Key_Return) is None
+        assert view._offer_index(Qt.Key.Key_Return) is None
 
         view.shutdown()
         QThreadPool.globalInstance().waitForDone(2000)
@@ -338,8 +338,8 @@ class TestNothingIsShownUnasked:
     def test_a_key_with_no_activity_behind_it_is_not_swallowed(self, timer):
         enter_strict_break(timer)
 
-        assert timer._activity_for(Qt.Key.Key_9) is None
-        assert timer._activity_for(Qt.Key.Key_A) is None
+        assert timer._offer_index(Qt.Key.Key_9) is None
+        assert timer._offer_index(Qt.Key.Key_A) is None
 
     def test_the_keys_do_nothing_outside_a_held_break(self, timer):
         send_key(timer, Qt.Key.Key_Return)
@@ -450,7 +450,7 @@ class TestTheFirstMinutesAreAwayFromTheScreen:
 
         send_key(timer, Qt.Key.Key_Return)
 
-        assert timer._strict_break_is_holding()
+        assert timer.holds_the_screens()
         assert timer.btn_play.isEnabled() is False
         assert timer.btn_skip.isEnabled() is False
 
@@ -634,7 +634,7 @@ class TestShowingOne:
         assert timer.overlays
         assert timer._media_host.media is timer.media_surface
         assert timer._strict_engaged is True
-        assert timer._strict_break_is_holding() is True
+        assert timer.holds_the_screens() is True
 
     def test_pause_and_skip_stay_refused(self, timer):
         enter_strict_break(timer)
@@ -729,7 +729,7 @@ class TestTheFiveKeys:
         assert showing._showing is None
         assert "stop" in pane.calls
         assert showing._media_host.is_showing_media() is False
-        assert showing._strict_break_is_holding() is True
+        assert showing.holds_the_screens() is True
 
     def test_pressing_its_key_again_while_it_shows_does_nothing(self, showing):
         pane = showing_pane(showing)
@@ -751,7 +751,7 @@ class TestTheFiveKeys:
         assert showing_pane(showing) is pane
         assert showing.media_pane_factory.built == [pane]
         assert showing._media_host.is_showing_media() is True
-        assert showing._strict_break_is_holding() is True
+        assert showing.holds_the_screens() is True
         assert showing.kwin_pin.engaged is True
 
     def test_closing_it_and_opening_it_again_carries_on_where_it_was(self, showing):
@@ -769,7 +769,7 @@ class TestTheFiveKeys:
         assert showing._showing.name == "Something to watch"
 
     def test_the_chore_letters_are_still_the_chores(self, showing):
-        assert showing._activity_for(Qt.Key.Key_N) is None
+        assert showing._offer_index(Qt.Key.Key_N) is None
         assert showing._drive_media(Qt.Key.Key_N) is False
         assert showing._drive_media(Qt.Key.Key_P) is False
 

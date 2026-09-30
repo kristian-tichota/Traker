@@ -56,7 +56,7 @@ def hold_for(view, seconds):
 
 def enter_strict_break(view):
     view._skip_phase()
-    assert view._strict_break_is_holding()
+    assert view.holds_the_screens()
 
 
 def send_key(view, key, event_type=QEvent.Type.KeyPress):
@@ -571,7 +571,7 @@ class TestAMonitorSwitchedOffAndBackOn:
         timer._rewall_for_the_outputs()
 
         assert timer.overlays == []
-        assert timer._strict_break_is_holding() is True
+        assert timer.holds_the_screens() is True
         assert timer._filtering_keys is True
 
         back = FakeScreen("DP-1")
@@ -757,7 +757,7 @@ class TestAWallRefusesToBeClosed:
 
         assert wall.isVisible() is True
         assert wall.let_go is False
-        assert timer._strict_break_is_holding() is True
+        assert timer.holds_the_screens() is True
 
     def test_the_break_letting_go_is_what_closes_it(self, timer):
         enter_strict_break(timer)
@@ -788,7 +788,7 @@ class TestTheWindowRefusesToQuitMidBreak:
         window.close()
 
         assert window.sync_listener is not None
-        assert view._strict_break_is_holding() is True
+        assert view.holds_the_screens() is True
         assert view.overlays
 
     def test_and_taken_once_the_screens_are_given_back(self, strict_window, settled):

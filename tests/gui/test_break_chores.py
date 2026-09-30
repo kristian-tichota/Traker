@@ -64,7 +64,7 @@ def timer(qapp, app_id, strict_timer, chores_on_break, with_chores):
 
 def enter_strict_break(view):
     view._skip_phase()
-    assert view._strict_break_is_holding()
+    assert view.holds_the_screens()
 
 
 def press(view, key):
@@ -309,7 +309,7 @@ class TestTheTwoKeyRangesDoNotCollide:
         settled()
 
         for offset in range(26):
-            assert timer._activity_for(Qt.Key.Key_A + offset) is None
+            assert timer._offer_index(Qt.Key.Key_A + offset) is None
 
     def test_the_key_shown_is_the_key_answered(self, timer, settled):
         enter_strict_break(timer)
