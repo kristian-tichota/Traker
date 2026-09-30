@@ -42,11 +42,11 @@ class ServerDatabase:
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
-        conn.execute("PRAGMA journal_mode = WAL;")
         return conn
 
     def init_db(self):
         conn = self.get_connection()
+        conn.execute("PRAGMA journal_mode = WAL;")
         with conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -328,10 +328,10 @@ class ServerDatabase:
                     FOREIGN KEY (chore_id) REFERENCES chores(id) ON DELETE CASCADE
                 );
             """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_chore_completions_chore
-                ON chore_completions(chore_id, date);
-            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chore_completions_chore "
+                         "ON chore_completions(chore_id, date)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_plan_movements_session "
+                         "ON plan_movements(session_id, position)")
 
             for table in CATALOG_TABLE_NAMES:
                 self._ensure_folded_name_index(conn, table)
@@ -343,6 +343,8 @@ class ServerDatabase:
                 self._ensure_column(
                     conn, table, "set_id",
                     "INTEGER REFERENCES item_sets(id) ON DELETE SET NULL")
+                conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_user_date "
+                             f"ON {table}(user_id, date)")
 
             self._seed_users(conn)
         conn.close()
