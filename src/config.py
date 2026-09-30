@@ -1,32 +1,16 @@
-import logging
 import os
-import tomllib
-
-log = logging.getLogger(__name__)
 
 LOCAL_SERVER_URL = "http://127.0.0.1:6035"
 
 
 def _load_server_creds():
     """Resolve credentials from the environment, then the profile, then the default."""
-    from src.profile import PROFILE_PATH
+    from src.profile import PROFILE_PATH, load_profile_document
 
-    url = os.environ.get("TRAKER_SERVER_URL")
-    token = os.environ.get("TRAKER_API_TOKEN")
+    server = load_profile_document().get("server", {}) if os.path.exists(PROFILE_PATH) else {}
+    return (os.environ.get("TRAKER_SERVER_URL") or server.get("url") or LOCAL_SERVER_URL,
+            os.environ.get("TRAKER_API_TOKEN") or server.get("token") or "")
 
-    if os.path.exists(PROFILE_PATH):
-        try:
-            with open(PROFILE_PATH, "rb") as f:
-                data = tomllib.load(f)
-            server_cfg = data.get("server", {})
-            url = url or server_cfg.get("url")
-            token = token or server_cfg.get("token")
-        except OSError as e:
-            log.warning("Could not read %s: %s", PROFILE_PATH, e)
-        except tomllib.TOMLDecodeError as e:
-            log.warning("Could not parse server settings in %s: %s", PROFILE_PATH, e)
-
-    return url or LOCAL_SERVER_URL, token or ""
 
 SERVER_URL, API_TOKEN = _load_server_creds()
 

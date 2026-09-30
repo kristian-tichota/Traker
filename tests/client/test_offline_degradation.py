@@ -130,11 +130,11 @@ class TestCredentialResolution:
         assert token == "", "a shipped token would authenticate every install as the same member"
 
     def test_an_unreadable_profile_falls_through_to_the_default(self, monkeypatch, tmp_path, caplog):
-        with caplog.at_level(logging.WARNING, logger="src.config"):
+        with caplog.at_level(logging.WARNING):
             url, _ = self._reload(monkeypatch, {}, "not [[ valid toml", tmp_path)
 
         assert url == "http://127.0.0.1:6035"
-        assert "Could not parse server settings" in caplog.text
+        assert "Failed to parse" in caplog.text
 
 
 class TestUnreachableIsDistinguishableFromEmpty:
