@@ -1,7 +1,6 @@
 import pytest
 
-from src.database.cache import (
-    NOTHING_CHANGED, LedgerCache, domain_for_path)
+from src.database.cache import LedgerCache, domain_for_path
 from src.database.rows import FoodLogRow
 
 
@@ -18,7 +17,6 @@ class TestKeyingAndHits:
         cache = LedgerCache()
 
         assert cache.get("food") is None
-        assert cache.misses == 1
 
     def test_what_was_stored_comes_back(self):
         cache = LedgerCache()
@@ -127,7 +125,8 @@ class TestInvalidation:
         cache = LedgerCache()
         cache.put("food", None, ROWS)
 
-        assert cache.drop(()) == 0
+        cache.drop(())
+
         assert cache.get("food") is not None
 
     def test_clear_forgets_every_domain(self):
@@ -138,6 +137,33 @@ class TestInvalidation:
         cache.clear()
 
         assert len(cache) == 0
+
+    def test_a_read_that_began_before_a_drop_is_not_remembered(self):
+        cache = LedgerCache()
+        began = cache.generation("food")
+
+        cache.drop("food")
+        cache.put("food", None, ROWS, began)
+
+        assert cache.get("food") is None
+
+    def test_a_read_that_began_before_a_clear_is_not_remembered(self):
+        cache = LedgerCache()
+        began = cache.generation("food")
+
+        cache.clear()
+        cache.put("food", None, ROWS, began)
+
+        assert cache.get("food") is None
+
+    def test_a_drop_of_another_domain_does_not_void_a_read(self):
+        cache = LedgerCache()
+        began = cache.generation("food")
+
+        cache.drop("exercise")
+        cache.put("food", None, ROWS, began)
+
+        assert cache.get("food") == ROWS
 
     def test_there_is_no_expiry_to_configure(self):
         cache = LedgerCache()
@@ -169,8 +195,7 @@ class TestWhichDomainAWriteChanges:
         assert domain_for_path("/api/catalog/food") == domain_for_path("/api/logs/food")
 
     def test_a_settings_write_changes_no_household_data(self):
-        assert domain_for_path("/api/settings/ex_graph_slot_1") is NOTHING_CHANGED
-        assert not NOTHING_CHANGED
+        assert domain_for_path("/api/settings/ex_graph_slot_1") == ()
 
     def test_a_delete_by_name_cannot_say_which_catalog(self):
         assert domain_for_path("/api/catalog/items/Rolled%20Oats") is None

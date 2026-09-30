@@ -89,6 +89,13 @@ class TestBeingToldNoIsNotBeingOffline:
         assert client.get_food_logs() == []
         assert client.connection.online is True
 
+    def test_a_refused_read_is_not_remembered_as_an_empty_ledger(self, client_answering):
+        client = client_answering(FakeResponse(500, "", {"error": "no"}))
+
+        client.get_food_logs()
+
+        assert "food" not in client.cache.cached_domains()
+
     def test_a_refused_read_and_a_refused_write_agree(self, client_answering):
         client = client_answering(FakeResponse(400, "", {"error": "no"}))
 

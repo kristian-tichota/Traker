@@ -4,7 +4,7 @@ import requests
 from requests import RequestException
 from src.config import SERVER_URL, API_TOKEN, CAFFEINE_HALF_LIFE, SLEEP_CAFFEINE_THRESHOLD
 from src.database.analytics import DBAnalyticsMixin
-from src.database.cache import NOTHING_CHANGED, LedgerCache, domain_for_path
+from src.database.cache import LedgerCache, domain_for_path
 from src.database.rows import (BeverageItemRow, BeverageLogRow,
                                ChoreDoneRow, ChoreRow,
                                ExerciseItemRow, ExerciseLogRow, FoodItemRow,
@@ -19,6 +19,8 @@ from src.profile import UserProfile
 log = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_S = 5
+
+_CAFFEINE = BeverageLogRow._fields.index("caffeine_mg")
 
 
 class ConnectionStatus:
@@ -54,6 +56,16 @@ def _refusal(response) -> str:
     return str(payload)
 
 
+def _since(since):
+    """Build the ?since= query parameters for a date-bounded read."""
+    return {"since": since} if since else None
+
+
+def _each(shape):
+    """Return a builder of shape rows from the rows a read answered."""
+    return lambda body: [shape.from_server(row) for row in body]
+
+
 class DatabaseClient(DBAnalyticsMixin):
     def __init__(self, base_url: str = SERVER_URL, token: str = API_TOKEN):
         self.base_url = base_url.rstrip("/")
@@ -65,27 +77,32 @@ class DatabaseClient(DBAnalyticsMixin):
         self.connection = ConnectionStatus()
         self.cache = LedgerCache()
 
-    def _get(self, path: str, params: dict = None):
+    def _fetch(self, path: str, params: dict = None):
+        """Return the parsed answer to a read, or None where there is none."""
         try:
             r = requests.get(f"{self.base_url}{path}", headers=self.headers, params=params, timeout=REQUEST_TIMEOUT_S)
         except RequestException as e:
             log.warning("GET %s failed: %s", path, e)
             self.connection.record_failure(str(e))
-            return []
+            return None
 
         if r.status_code >= 400:
             self.connection.record_success()
             log.warning("GET %s refused: %s", path, _refusal(r))
-            return []
+            return None
 
         try:
             body = r.json()
         except ValueError as e:
             log.warning("GET %s answered something that is not JSON: %s", path, e)
             self.connection.record_failure(f"unreadable response from {path}")
-            return []
+            return None
         self.connection.record_success()
         return body
+
+    def _get(self, path: str, params: dict = None):
+        body = self._fetch(path, params)
+        return [] if body is None else body
 
     def _post(self, path: str, payload: dict):
         try:
@@ -97,7 +114,7 @@ class DatabaseClient(DBAnalyticsMixin):
         self.connection.record_success()
         if r.status_code >= 400:
             return False, _refusal(r)
-        self._invalidate_for(path)
+        self.invalidate(domain_for_path(path))
         return True, "Success"
 
     def _delete(self, path: str):
@@ -119,7 +136,7 @@ class DatabaseClient(DBAnalyticsMixin):
             payload = r.json()
         except ValueError:
             payload = None
-        self._invalidate_for(path)
+        self.invalidate(domain_for_path(path))
         return True, "Success", payload
 
     def get_setting(self, key: str, default_val: str) -> str:
@@ -142,7 +159,7 @@ class DatabaseClient(DBAnalyticsMixin):
 
     def _catalog(self, domain: str, shape):
         """Return one shared catalog as shape."""
-        return [shape.from_server(item) for item in self._get(f"/api/catalog/{domain}")]
+        return _each(shape)(self._get(f"/api/catalog/{domain}"))
 
     def get_all_foods(self):
         return self._catalog("food", FoodItemRow)
@@ -153,7 +170,7 @@ class DatabaseClient(DBAnalyticsMixin):
     def get_sets(self, domain: str):
         """Return every shared set of one domain, one row per component."""
         shape = WorkoutComponentRow if domain == "exercise" else SetComponentRow
-        return [shape.from_server(r) for r in self._get(f"/api/catalog/sets/{domain}")]
+        return self._catalog(f"sets/{domain}", shape)
 
     def get_set_names(self, domain: str):
         """Return the set names of one domain, for completion."""
@@ -201,43 +218,28 @@ class DatabaseClient(DBAnalyticsMixin):
         catalogs = "catalog" if removed == 1 else "catalogs"
         return True, f" Removed '{name}' from {removed} {catalogs}."
 
-    @staticmethod
-    def _since(since):
-        """Build the ?since= query parameters for a date-bounded log read."""
-        return {"since": since} if since else None
-
-    def _invalidate_for(self, path: str):
-        """Drop the cached reads a successful write to path invalidates."""
-        domain = domain_for_path(path)
-        if domain is NOTHING_CHANGED:
-            return
-        if domain is None:
+    def invalidate(self, domains=None):
+        """Forget cached reads: everything, or just these domains."""
+        if domains is None:
             self.cache.clear()
         else:
-            self.cache.drop(domain)
+            self.cache.drop(domains)
 
-    def _cached(self, domain, since, read):
+    def _cached(self, domain, path, rows_of, since=None):
         """Answer from the cache where it can, otherwise read and remember."""
         held = self.cache.get(domain, since)
         if held is not None:
             return held
-        rows = read()
-        if rows or self.connection.online:
-            self.cache.put(domain, since, rows)
+        generation = self.cache.generation(domain)
+        body = self._fetch(path, _since(since))
+        if body is None:
+            return []
+        rows = rows_of(body)
+        self.cache.put(domain, since, rows, generation)
         return rows
 
-    def invalidate(self, domains=None):
-        """Forget cached reads: everything, or just these domains."""
-        if domains is None:
-            return self.cache.clear()
-        return self.cache.drop(domains)
-
     def get_food_logs(self, since: str = None):
-        def read():
-            return [FoodLogRow.from_server(r)
-                    for r in self._get("/api/logs/food", params=self._since(since))]
-
-        return self._cached("food", since, read)
+        return self._cached("food", "/api/logs/food", _each(FoodLogRow), since)
 
     def add_food_log(self, d: dict):
         return self._post("/api/logs/food", d)
@@ -247,31 +249,13 @@ class DatabaseClient(DBAnalyticsMixin):
         return self._post("/api/logs/food/quick", d)
 
     def get_beverage_logs(self, since: str = None):
-        return self._cached("beverage", since,
-                            lambda: self._read_beverage_logs(since))
-
-    def _read_beverage_logs(self, since):
-        rows = self._get("/api/logs/beverage", params=self._since(since))
-        profile = UserProfile()
-        half_life = float(profile.get_metric("goals", "caffeine_half_life", CAFFEINE_HALF_LIFE))
-        threshold = float(profile.get_metric("goals", "max_sleep_caffeine", SLEEP_CAFFEINE_THRESHOLD))
-        out = []
-        for r in rows:
-            row = BeverageLogRow.from_server(r, "")
-            wait = formulas.hours_until_caffeine_safe(
-                row.caffeine_mg or 0.0, threshold, half_life)
-            out.append(row._replace(sleep_wait=f"{wait:.1f} hrs"))
-        return out
+        return self._cached("beverage", "/api/logs/beverage", _beverage_rows, since)
 
     def add_beverage_log(self, d: dict):
         return self._post("/api/logs/beverage", d)
 
     def get_exercise_logs(self, since: str = None):
-        def read():
-            return [ExerciseLogRow.from_server(r)
-                    for r in self._get("/api/logs/exercise", params=self._since(since))]
-
-        return self._cached("exercise", since, read)
+        return self._cached("exercise", "/api/logs/exercise", _each(ExerciseLogRow), since)
 
     def add_exercise_log(self, d: dict):
         return self._post("/api/logs/exercise", d)
@@ -281,21 +265,13 @@ class DatabaseClient(DBAnalyticsMixin):
         return self._post("/api/logs/exercise/workout", d)
 
     def get_supplement_logs(self, since: str = None):
-        def read():
-            return [SupplementLogRow.from_server(r)
-                    for r in self._get("/api/logs/supplement", params=self._since(since))]
-
-        return self._cached("supplement", since, read)
+        return self._cached("supplement", "/api/logs/supplement", _each(SupplementLogRow), since)
 
     def add_supplement_log(self, d: dict):
         return self._post("/api/logs/supplement", d)
 
     def get_mobility_logs(self, since: str = None):
-        def read():
-            return [MobilityLogRow.from_server(r)
-                    for r in self._get("/api/logs/mobility", params=self._since(since))]
-
-        return self._cached("mobility", since, read)
+        return self._cached("mobility", "/api/logs/mobility", _each(MobilityLogRow), since)
 
     def add_mobility_log(self, d: dict):
         return self._post("/api/logs/mobility", d)
@@ -321,21 +297,16 @@ class DatabaseClient(DBAnalyticsMixin):
         self.connection.record_success()
         if r.status_code >= 400:
             return False, _refusal(r)
-        self._invalidate_for(f"/api/logs/{table}/{row_id}")
+        self.invalidate(domain_for_path(f"/api/logs/{table}/{row_id}"))
         return True, "Success"
 
     def get_chores(self):
         """Return the board: every chore, its cadence and its last completion."""
-        def read():
-            return [ChoreRow.from_server(r) for r in self._get("/api/chores")]
-
-        return self._cached("chore", None, read)
+        return self._cached("chore", "/api/chores", _each(ChoreRow))
 
     def get_chore_completions(self, since: str = None):
         """Return the shared history, most recent first."""
-        params = {"since": since} if since else None
-        return [ChoreDoneRow.from_server(r)
-                for r in self._get("/api/chores/completions", params)]
+        return _each(ChoreDoneRow)(self._get("/api/chores/completions", _since(since)))
 
     def add_chore(self, d: dict):
         return self._post("/api/chores", d)
@@ -345,19 +316,14 @@ class DatabaseClient(DBAnalyticsMixin):
         return self._post("/api/chores/done", d)
 
     def get_training_plans(self):
-        def read():
-            return [TrainingPlanRow.from_server(r) for r in self._get("/api/plans")]
-
-        return self._cached("plan", None, read)
+        return self._cached("plan", "/api/plans", _each(TrainingPlanRow))
 
     def get_plan_sessions(self, plan_id: int):
-        return [PlanSessionRow.from_server(r)
-                for r in self._get(f"/api/plans/{plan_id}/sessions")]
+        return _each(PlanSessionRow)(self._get(f"/api/plans/{plan_id}/sessions"))
 
     def get_plan_movements(self, plan_id: int):
         """Return every movement of one cycle, in one read."""
-        return [PlanMovementRow.from_server(r)
-                for r in self._get(f"/api/plans/{plan_id}/movements")]
+        return _each(PlanMovementRow)(self._get(f"/api/plans/{plan_id}/movements"))
 
     def add_training_plan(self, d: dict):
         return self._post("/api/plans", d)
@@ -373,7 +339,7 @@ class DatabaseClient(DBAnalyticsMixin):
         return self._post(f"/api/plans/{plan.id}/log", {"date": d["date"]})
 
     def get_pomodoro_daily_summary(self):
-        return [PomodoroDailyRow.from_server(r) for r in self._get("/api/pomodoro/daily-summary")]
+        return _each(PomodoroDailyRow)(self._get("/api/pomodoro/daily-summary"))
 
     def get_pomodoro_heartbeats_for_day(self, date: str):
         rows = self._get(f"/api/pomodoro/heartbeats/{date}")
@@ -397,3 +363,16 @@ class DatabaseClient(DBAnalyticsMixin):
 
     def clear_pomodoro_dsi_override(self, date: str):
         return self._delete(f"/api/pomodoro/dsi-override/{date}")
+
+
+def _beverage_rows(body):
+    """Build beverage rows, each with its wait until the dose is sleep-safe."""
+    profile = UserProfile()
+    half_life = float(profile.get_metric("goals", "caffeine_half_life", CAFFEINE_HALF_LIFE))
+    threshold = float(profile.get_metric("goals", "max_sleep_caffeine", SLEEP_CAFFEINE_THRESHOLD))
+
+    def wait(row):
+        hours = formulas.hours_until_caffeine_safe(row[_CAFFEINE] or 0.0, threshold, half_life)
+        return f"{hours:.1f} hrs"
+
+    return [BeverageLogRow.from_server(row, wait(row)) for row in body]

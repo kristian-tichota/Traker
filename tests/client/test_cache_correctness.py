@@ -183,6 +183,23 @@ class TestAFailedReadIsNeverRemembered:
         monkeypatch.setattr(requests, "get", working)
         assert len(db_client.get_food_logs()) == 1
 
+    def test_a_read_overtaken_by_a_write_is_not_remembered(self, stocked, monkeypatch):
+        import requests
+
+        answered = requests.get
+
+        def overtaken(*args, **kwargs):
+            response = answered(*args, **kwargs)
+            stocked.add_food_log({"date": "2026-09-05", "meal_type": "Breakfast",
+                                  "food_name": "Rolled Oats", "servings": 1.0})
+            return response
+
+        monkeypatch.setattr(requests, "get", overtaken)
+        assert stocked.get_food_logs() == []
+
+        monkeypatch.setattr(requests, "get", answered)
+        assert len(stocked.get_food_logs()) == 1
+
     def test_a_genuinely_empty_ledger_is_cached(self, db_client):
         assert db_client.get_food_logs() == []
 

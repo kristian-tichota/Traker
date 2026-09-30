@@ -7,13 +7,12 @@ log = logging.getLogger(__name__)
 class LedgerCache:
     """Reads already answered, keyed by (domain, since)."""
 
-    UNBOUNDED = None
-
     def __init__(self):
         self._entries = {}
+        self._drops = {}
+        self._clears = 0
         self._lock = threading.RLock()
         self.hits = 0
-        self.misses = 0
 
     def get(self, domain, since=None):
         """Return rows for this read, or None where nothing here answers it."""
@@ -22,40 +21,41 @@ class LedgerCache:
             if exact is not None:
                 self.hits += 1
                 return list(exact)
+            whole = None if since is None else self._entries.get((domain, None))
+            if whole is None:
+                return None
+            self.hits += 1
+            return [row for row in whole
+                    if getattr(row, "date", None) is None or row.date >= since]
 
-            if since is not None:
-                whole = self._entries.get((domain, self.UNBOUNDED))
-                if whole is not None:
-                    self.hits += 1
-                    return [row for row in whole if _within(row, since)]
-
-            self.misses += 1
-            return None
-
-    def put(self, domain, since, rows):
+    def generation(self, domain):
+        """Return a token that changes whenever domain is dropped or the cache cleared."""
         with self._lock:
-            self._entries[(domain, since)] = list(rows)
-        return rows
+            return self._clears + self._drops.get(domain, 0)
+
+    def put(self, domain, since, rows, generation=None):
+        """Remember rows, unless domain was dropped after generation was taken."""
+        with self._lock:
+            if generation is None or generation == self.generation(domain):
+                self._entries[(domain, since)] = list(rows)
 
     def drop(self, domains):
         """Forget every entry for these domains, bounded and unbounded alike."""
         wanted = {domains} if isinstance(domains, str) else set(domains)
-        if not wanted:
-            return 0
         with self._lock:
+            for domain in wanted:
+                self._drops[domain] = self._drops.get(domain, 0) + 1
             doomed = [key for key in self._entries if key[0] in wanted]
             for key in doomed:
                 del self._entries[key]
         if doomed:
             log.debug("Dropped %d cached read(s) for %s", len(doomed), sorted(wanted))
-        return len(doomed)
 
     def clear(self):
         """Forget every cached read."""
         with self._lock:
-            count = len(self._entries)
+            self._clears += 1
             self._entries.clear()
-        return count
 
     def cached_domains(self):
         with self._lock:
@@ -66,60 +66,27 @@ class LedgerCache:
             return len(self._entries)
 
 
-def _row_date(row):
-    """Return the date a log row carries, as the API stores it, or None."""
-    value = getattr(row, "date", None)
-    if value is None:
-        try:
-            value = row[1]
-        except (IndexError, TypeError, KeyError):
-            return None
-    return None if value is None else str(value)
-
-
-def _within(row, since):
-    """Report whether a row belongs in a read bounded at since."""
-    date = _row_date(row)
-    return True if date is None else date >= since
-
 _PATH_DOMAINS = ("food", "beverage", "exercise", "supplement", "mobility")
+
+_SECTION_DOMAINS = {"settings": (), "pomodoro": "pomodoro", "chores": "chore",
+                    "plans": "plan"}
 
 
 def domain_for_path(path: str):
     """Return the domains a write to path changes, or None where unknown."""
-    path = (path or "").split("?", 1)[0].strip("/")
-    parts = path.split("/")
+    parts = (path or "").split("?", 1)[0].strip("/").split("/")
     if len(parts) < 2 or parts[0] != "api":
         return None
-    section = parts[1]
+    section, rest = parts[1], parts[2:]
+    if section == "plans" and rest[-1:] == ["log"]:
+        return ("plan", "exercise")
+    if section in _SECTION_DOMAINS:
+        return _SECTION_DOMAINS[section]
+    if section not in ("logs", "catalog") or not rest:
+        return None
+    subject = rest[1] if rest[0] == "sets" and len(rest) > 1 else rest[0]
+    if subject in _PATH_DOMAINS:
+        return subject
+    from src.gui.domains import domain_of_table
 
-    if section == "settings":
-        return NOTHING_CHANGED
-    if section == "pomodoro":
-        return "pomodoro"
-    if section == "chores":
-        return "chore"
-    if section == "plans":
-        return ("plan", "exercise") if parts[-1] == "log" else "plan"
-    if section in ("logs", "catalog") and len(parts) >= 3:
-        third = parts[2]
-        if third in _PATH_DOMAINS:
-            return third
-        if third == "sets" and len(parts) >= 4 and parts[3] in _PATH_DOMAINS:
-            return parts[3]
-        from src.gui.domains import domain_of_table
-
-        return domain_of_table(third)
-    return None
-
-
-class _NothingChanged:
-    """Sentinel: this write touched no household data, so drop nothing."""
-
-    def __repr__(self):
-        return "NOTHING_CHANGED"
-
-    def __bool__(self):
-        return False
-
-NOTHING_CHANGED = _NothingChanged()
+    return domain_of_table(subject)
