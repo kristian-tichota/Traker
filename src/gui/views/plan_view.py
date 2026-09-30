@@ -1,9 +1,8 @@
 import logging
 
-from PyQt6.QtCore import QRectF, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
-from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout,
-                             QWidget)
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from src.config import PALETTE
 from src.database.rows import PlannedMovementRow
@@ -49,7 +48,6 @@ class PlanCalendar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setFixedWidth(GRID_PX)
         self.setFixedHeight(HEADER_PX + PITCH_PX + LEGEND_PX)
 
@@ -102,9 +100,6 @@ class PlanCalendar(QWidget):
         inset = (PITCH_PX - CELL_PX) / 2.0
         return QRectF(WEEK_LABEL_PX + column * PITCH_PX + inset,
                       HEADER_PX + row * PITCH_PX + inset, CELL_PX, CELL_PX)
-
-    def sizeHint(self):
-        return QSize(GRID_PX, HEADER_PX + self._weeks * PITCH_PX + LEGEND_PX)
 
     def paintEvent(self, event):
         painter = QPainter(self)
