@@ -7,6 +7,7 @@ from PyQt6.QtCore import QPoint
 
 from src.config import PALETTE
 from src.domain import formulas
+from src.domain.clock import as_displayed_date
 from src.gui.graphs.base import BaseGraphView
 from src.gui.workers import discard
 
@@ -352,4 +353,5 @@ class ExerciseGraphView(BaseGraphView):
             return None
         date, _volume, onerm, sets_str, weight, rpe = item['history'][nearest]
         return ((id(line), nearest), line.axes, (date, onerm),
-                f"Date: {date}\nSets: [{sets_str}]\nWeight: {weight:.1f} kg\nRPE: {rpe:.1f}")
+                f"Date: {as_displayed_date(date)}\nSets: [{sets_str}]\nWeight: {weight:.1f} kg\n"
+                f"RPE: {rpe:.1f}")

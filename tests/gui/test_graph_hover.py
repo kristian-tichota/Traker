@@ -101,3 +101,16 @@ class TestHoveringOnceDataIsThere:
         view.on_hover(event)
 
         assert view._last_hovered[1] == "goal"
+
+    def test_every_hover_reads_the_date_as_the_member_writes_it(self, make_view):
+        heatmap = make_view(ActivityHeatmapView)
+        exercise = make_view(ExerciseGraphView)
+        exercise.reset_axes()
+        exercise.draw_chart([("Plank", [("2026-09-05", 0.0, 60.0, "60", 0.0, 7.0)])]
+                            + [("None", None)] * 3)
+        ax = exercise.flat_axes[0]
+        event = MoveEvent(ax)
+        event.x, event.y = ax.transData.transform((0, 60.0))
+
+        assert "05.09.2026" in heatmap.hover_text("2026-09-05", {"extra_kcal": 0.0})
+        assert "05.09.2026" in exercise._point_under(event)[3]

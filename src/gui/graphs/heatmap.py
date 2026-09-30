@@ -9,6 +9,7 @@ from matplotlib.collections import PatchCollection
 
 from src.config import PALETTE
 from src.domain.activity import kcal_from_met_hours
+from src.domain.clock import as_displayed_date
 from src.gui.graphs.base import BaseGraphView
 
 
@@ -182,12 +183,13 @@ class ActivityHeatmapView(BaseGraphView):
     def hover_text(self, date_str, day_data) -> str:
         """Return what one day of the calendar says under the cursor."""
         extra_kcal = day_data.get('extra_kcal', 0.0)
+        heading = f"Date: {as_displayed_date(date_str)}"
         if extra_kcal == 0:
-            return f"Date: {date_str}\nNo Activity Logged"
+            return f"{heading}\nNo Activity Logged"
 
         mob_kcal = day_data.get('mob_kcal', 0.0)
         ex_kcal = day_data.get('ex_kcal', 0.0)
-        lines = [f"Date: {date_str}", "\u2500" * 16, f"Total Est. Burn: {extra_kcal:.0f} kcal\n"]
+        lines = [heading, "\u2500" * 16, f"Total Est. Burn: {extra_kcal:.0f} kcal\n"]
         if mob_kcal > 0:
             lines.append(f" \u2022 Mobility/Cardio: {mob_kcal:.0f} kcal")
         if ex_kcal > 0:
