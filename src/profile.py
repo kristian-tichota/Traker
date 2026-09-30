@@ -402,7 +402,7 @@ class UserProfile:
         return table.get(key, default) if isinstance(table, dict) else default
 
     def number(self, section: str, key: str, default: float,
-               low: float = None, high: float = None) -> float:
+               low: float = -math.inf, high: float = math.inf) -> float:
         """Return one hand-edited setting as a clamped number, never raising."""
         raw = self.get_metric(section, key, default)
         try:
@@ -413,11 +413,7 @@ class UserProfile:
             log.warning("[%s] %s is not a number (%r); using %s.",
                         section, key, raw, default)
             value = float(default)
-        if low is not None:
-            value = max(low, value)
-        if high is not None:
-            value = min(high, value)
-        return value
+        return min(high, max(low, value))
 
     def timer_split(self) -> dict:
         """Return the split, and the long break that may be queued in its place."""
@@ -464,33 +460,28 @@ class UserProfile:
         return str(colors.get(regime_name, default_hex)).strip()
 
     def calculate_bmr(self) -> float:
-        weight = self.weight_kg()
-        height = float(self.get_metric("biometrics", "height_cm", 180.0))
-        age = int(self.get_metric("biometrics", "age", 30))
+        height = self.number("biometrics", "height_cm", 180.0)
+        age = self.number("biometrics", "age", 30)
         gender = str(self.get_metric("biometrics", "gender", "M")).strip().upper()
-        if gender == "M":
-            return (10 * weight) + (6.25 * height) - (5 * age) + 5
-        return (10 * weight) + (6.25 * height) - (5 * age) - 161
+        return ((10 * self.weight_kg()) + (6.25 * height) - (5 * age)
+                + (5 if gender == "M" else -161))
 
     def calculate_tdee(self) -> float:
-        bmr = self.calculate_bmr()
-        activity = float(self.get_metric("goals", "activity_level", DEFAULT_ACTIVITY_LEVEL))
-        return bmr * activity
+        return self.calculate_bmr() * self.number("goals", "activity_level", DEFAULT_ACTIVITY_LEVEL)
 
     def weight_kg(self) -> float:
-        return float(self.get_metric("biometrics", "weight_kg", DEFAULT_WEIGHT_KG))
+        return self.number("biometrics", "weight_kg", DEFAULT_WEIGHT_KG)
 
     def daily_adjustment_kcal(self) -> float:
         """Return how far from maintenance this member aims, unsigned."""
-        return float(self.get_metric("goals", "daily_adjustment_kcal",
-                                     DEFAULT_DAILY_ADJUSTMENT_KCAL))
+        return self.number("goals", "daily_adjustment_kcal", DEFAULT_DAILY_ADJUSTMENT_KCAL)
 
     def tick_markers(self) -> list:
         """Return the offsets from maintenance the calorie bar marks."""
         return self.get_metric("goals", "tick_markers", DEFAULT_TICK_MARKERS)
 
     def overflow_buffer(self) -> float:
-        return float(self.get_metric("goals", "overflow_buffer", DEFAULT_OVERFLOW_BUFFER))
+        return self.number("goals", "overflow_buffer", DEFAULT_OVERFLOW_BUFFER)
 
     def goal_type(self) -> str:
         """Return the declared goal, folded."""
@@ -509,10 +500,8 @@ class UserProfile:
         if legacy_static is not None and self.get_metric("goals", "protein_multiplier", None) is None:
             return float(legacy_static)
 
-        weight = self.weight_kg()
-        multiplier = float(self.get_metric("goals", "protein_multiplier",
-                                           DEFAULT_PROTEIN_MULTIPLIER))
-        return weight * multiplier
+        return self.weight_kg() * self.number("goals", "protein_multiplier",
+                                              DEFAULT_PROTEIN_MULTIPLIER)
 
     def get_supplement_targets(self) -> list:
         """Return one entry per tracked nutrient: key, name and target."""

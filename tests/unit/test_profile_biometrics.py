@@ -30,6 +30,12 @@ class TestBasalMetabolicRate:
         assert user_profile.calculate_bmr() == pytest.approx(1730.0)
 
 
+    def test_a_hand_edited_weight_that_is_not_a_number_falls_back(self, user_profile):
+        user_profile.data["biometrics"] = {"weight_kg": "seventy"}
+        assert user_profile.weight_kg() == pytest.approx(75.0)
+        assert user_profile.calculate_bmr() == pytest.approx(1730.0)
+
+
 class TestTotalDailyEnergyExpenditure:
     def test_scales_bmr_by_activity_level(self, user_profile):
         user_profile.data["biometrics"] = {

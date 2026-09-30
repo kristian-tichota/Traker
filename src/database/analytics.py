@@ -29,9 +29,9 @@ class DBAnalyticsMixin:
     def get_activity_heatmap_data(self, since: str = None):
         """Return MET-hours above the member's own baseline, per day."""
         profile = UserProfile()
-        activity_level = float(profile.get_metric("goals", "activity_level", DEFAULT_ACTIVITY_LEVEL))
-        neat_tax_percent = float(profile.get_metric("goals", "neat_tax_percent", DEFAULT_NEAT_TAX_PERCENT))
-        tax_multiplier = activity.neat_tax_multiplier(neat_tax_percent)
+        activity_level = profile.number("goals", "activity_level", DEFAULT_ACTIVITY_LEVEL)
+        tax_multiplier = activity.neat_tax_multiplier(
+            profile.number("goals", "neat_tax_percent", DEFAULT_NEAT_TAX_PERCENT))
 
         points = {}
         for row in self.get_exercise_logs(since=since):

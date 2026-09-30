@@ -335,8 +335,8 @@ class DatabaseClient(DBAnalyticsMixin):
 def _beverage_rows(body):
     """Build beverage rows, each with its wait until the dose is sleep-safe."""
     profile = UserProfile()
-    half_life = float(profile.get_metric("goals", "caffeine_half_life", CAFFEINE_HALF_LIFE))
-    threshold = float(profile.get_metric("goals", "max_sleep_caffeine", SLEEP_CAFFEINE_THRESHOLD))
+    half_life = profile.number("goals", "caffeine_half_life", CAFFEINE_HALF_LIFE)
+    threshold = profile.number("goals", "max_sleep_caffeine", SLEEP_CAFFEINE_THRESHOLD)
 
     def wait(row):
         hours = formulas.hours_until_caffeine_safe(row[_CAFFEINE] or 0.0, threshold, half_life)
