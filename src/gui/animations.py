@@ -193,17 +193,16 @@ class ChangeGlow(QObject):
         self.anim.setEndValue(0.0)
         self.anim.setEasingCurve(QEasingCurve.Type.InCubic)
         self.anim.valueChanged.connect(self._apply)
-        self.anim.finished.connect(self._on_finished)
+        self.anim.finished.connect(self.stop)
 
     def start(self):
         """Wash the model's changed rows and begin fading it off."""
         if not self.model.changed_rows():
             self.stop()
-            return False
+            return
         self.anim.stop()
         self.model.highlight_changes(1.0)
         self.anim.start()
-        return True
 
     def stop(self):
         """Drop the wash now, without waiting for the fade."""
@@ -213,15 +212,14 @@ class ChangeGlow(QObject):
     def _apply(self, value: typing.Any):
         self.model.highlight_changes(float(value))
 
-    def _on_finished(self):
-        self.model.highlight_changes(0.0)
-
 
 GLOW_MS = 900
 
 
 class TextGlow(QObject):
     """Fades a label's text from a flash colour back to its own."""
+
+    STYLE = "color: {};"
 
     def __init__(self, label, rest_hex, duration=GLOW_MS):
         super().__init__(label)
@@ -240,28 +238,14 @@ class TextGlow(QObject):
         self.animation.start()
 
     def _apply(self, colour: typing.Any):
-        self.label.setStyleSheet(f"color: {colour.name()};")
+        self.label.setStyleSheet(self.STYLE.format(colour.name()))
 
 
-class StatusBarPulser(QObject):
+class StatusBarPulser(TextGlow):
+    """Fades the status bar's ground from a flash colour back to its own."""
+
     def __init__(self, status_bar, base_bg_hex, text_color_hex, duration=500):
-        super().__init__(status_bar)
-        self.status_bar = status_bar
-        self.base_bg = QColor(base_bg_hex)
-        self.text_color = text_color_hex
+        super().__init__(status_bar, base_bg_hex, duration)
+        self.STYLE = f"background-color: {{}}; color: {text_color_hex}; padding: 3px;"
 
-        self.animation = QVariantAnimation(self)
-        self.animation.setDuration(duration)
-        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.animation.valueChanged.connect(self._apply_color)
-
-    def pulse(self, flash_hex: str):
-        self.animation.stop()
-        self.animation.setStartValue(QColor(flash_hex))
-        self.animation.setEndValue(self.base_bg)
-        self.animation.start()
-
-    def _apply_color(self, color: typing.Any):
-        self.status_bar.setStyleSheet(
-            f"background-color: {color.name()}; color: {self.text_color}; padding: 3px;"
-        )
+    pulse = TextGlow.glow
