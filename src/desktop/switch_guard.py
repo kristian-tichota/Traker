@@ -12,6 +12,9 @@ DESKTOPS = "org.kde.KWin.VirtualDesktopManager"
 
 PROPERTIES = "org.freedesktop.DBus.Properties"
 
+DESKTOP_CHANGED = (KWIN, DESKTOPS_PATH, DESKTOPS, "currentChanged")
+ACTIVITY_CHANGED = (ACTIVITIES_SERVICE, ACTIVITIES_PATH, ACTIVITIES, "CurrentActivityChanged")
+
 _session_call = session_call
 
 
@@ -40,13 +43,9 @@ class SwitchGuard(QObject):
         self._unsubscribe = unsubscriber or _unsubscribe
         self.held_desktop = None
         self.held_activity = None
-        self._holding = False
+        self.holding = False
         self._restoring = False
         self.refusals = 0
-
-    @property
-    def holding(self) -> bool:
-        return self._holding
 
     def hold(self) -> bool:
         """Remember the current desktop and start reversing switches."""
@@ -61,30 +60,22 @@ class SwitchGuard(QObject):
 
         listening = False
         if self.held_desktop is not None:
-            listening |= self._subscribe(
-                KWIN, DESKTOPS_PATH, DESKTOPS, "currentChanged",
-                self._desktop_changed)
+            listening |= self._subscribe(*DESKTOP_CHANGED, self._desktop_changed)
         if self.held_activity is not None:
-            listening |= self._subscribe(
-                ACTIVITIES_SERVICE, ACTIVITIES_PATH, ACTIVITIES,
-                "CurrentActivityChanged", self._activity_changed)
+            listening |= self._subscribe(*ACTIVITY_CHANGED, self._activity_changed)
 
-        self._holding = bool(listening)
-        if self._holding:
+        self.holding = bool(listening)
+        if self.holding:
             log.info("A strict break is refusing desktop and activity changes.")
-        return self._holding
+        return self.holding
 
     def release(self):
         """Stop reversing switches."""
-        if self._holding:
-            if self.held_desktop is not None:
-                self._unsubscribe(KWIN, DESKTOPS_PATH, DESKTOPS,
-                                  "currentChanged", self._desktop_changed)
-            if self.held_activity is not None:
-                self._unsubscribe(ACTIVITIES_SERVICE, ACTIVITIES_PATH,
-                                  ACTIVITIES, "CurrentActivityChanged",
-                                  self._activity_changed)
-        self._holding = False
+        if self.holding and self.held_desktop is not None:
+            self._unsubscribe(*DESKTOP_CHANGED, self._desktop_changed)
+        if self.holding and self.held_activity is not None:
+            self._unsubscribe(*ACTIVITY_CHANGED, self._activity_changed)
+        self.holding = False
         self.held_desktop = None
         self.held_activity = None
         self.refusals = 0
@@ -93,23 +84,19 @@ class SwitchGuard(QObject):
     @pyqtSlot(str)
     def _desktop_changed(self, which=None):
         """Handle KWin reporting a desktop change."""
-        if not self._holding or self._restoring or self.held_desktop is None:
-            return
-        if which is not None and str(which) == str(self.held_desktop):
-            return
-        self._put_back(self._write_desktop, self.held_desktop, "desktop")
+        self._put_back(which, self.held_desktop, self._write_desktop, "desktop")
 
     @pyqtSlot()
     @pyqtSlot(str)
     def _activity_changed(self, which=None):
         """Handle the activity manager reporting an activity change."""
-        if not self._holding or self._restoring or self.held_activity is None:
-            return
-        if which is not None and str(which) == str(self.held_activity):
-            return
-        self._put_back(self._write_activity, self.held_activity, "activity")
+        self._put_back(which, self.held_activity, self._write_activity, "activity")
 
-    def _put_back(self, write, where, what):
+    def _put_back(self, which, where, write, what):
+        if not self.holding or self._restoring or where is None:
+            return
+        if which is not None and str(which) == str(where):
+            return
         self._restoring = True
         try:
             took = write(where)
