@@ -73,6 +73,7 @@ Feature: Shared item catalog
     Scenario: Removal is by name and spans every domain
       When I remove an item by name
       Then any catalog entry with that name is removed from all five domains
+      And a chore of that name is left with its history
       And the removal is broadcast to the other member
 
     Scenario: A removed name may be defined again
