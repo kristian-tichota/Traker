@@ -85,7 +85,8 @@ class Param:
                 value = self.read(token, self.label)
             except CommandError:
                 raise
-            except Exception as exc:  # broad: any parser failure is reported as this argument
+            # Workaround: a reader raises whatever float or int raise; report it as this argument.
+            except Exception as exc:
                 raise CommandError(
                     f"{self.label} expects {self.expects}, got '{token}'") from exc
         return value if self.name is None else {self.name: value}
