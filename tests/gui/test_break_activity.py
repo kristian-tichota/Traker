@@ -957,6 +957,16 @@ class TestWhereItStopped:
 
         assert self.positions(timer) == {"/x/rest.mp4": Place(754_000, 2_400_000)}
 
+    def test_a_file_that_would_not_open_keeps_the_length_it_had(self, timer):
+        rest_positions.remember("/x/rest.mp4", 754_000, timer._positions_path, 2_400_000)
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_2)
+        assert timer.media_pane_factory.last.duration() == 0
+
+        send_key(timer, Qt.Key.Key_0)
+
+        assert self.positions(timer) == {"/x/rest.mp4": Place(754_000, 2_400_000)}
+
     def test_the_next_break_carries_on_from_there(self, timer):
         enter_strict_break(timer)
         send_key(timer, Qt.Key.Key_2)

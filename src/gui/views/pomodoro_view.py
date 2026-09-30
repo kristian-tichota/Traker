@@ -1875,14 +1875,15 @@ class PomodoroView(ShutdownMixin, QWidget):
                 wall.set_keys(hints)
 
     def _remember_where_it_stopped(self):
-        """Stop what is showing and keep the position."""
+        """Stop what is showing, keeping its position and the last length known."""
         if self._showing is None or self.media_surface is None:
             return
         where = self.media_surface.stop()
+        path = self._showing.path
         if self._showing.kind not in (break_activities.DECK, break_activities.SHELF,
                                       break_activities.PAGE):
-            rest_positions.remember(self._showing.path, where.at,
-                                    self._positions_path, where.of)
+            length = where.of or rest_positions.place_for(path, self._positions_path).of
+            rest_positions.remember(path, where.at, self._positions_path, length)
         self._showing = None
         self._list_behind = None
         self._show_upcoming()
