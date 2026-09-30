@@ -1,8 +1,9 @@
 import logging
 import math
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
-from PyQt6.QtCore import QThreadPool, QTimer
+from PyQt6.QtWidgets import QToolTip, QWidget, QVBoxLayout
+from PyQt6.QtCore import QPoint, QThreadPool, QTimer
+from PyQt6.QtGui import QCursor, QFont
 import matplotlib
 
 matplotlib.use('Agg')
@@ -201,6 +202,23 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         self._renders_out = max(0, self._renders_out - 1)
         if not self._renders_out:
             self.canvas.spinner.stop()
+
+    def show_hover(self, key, text) -> bool:
+        """Show text for key under the cursor, reporting whether it was not showing already."""
+        if self._last_hovered == key:
+            return False
+        QToolTip.setFont(QFont("Fira Code", 10))
+        QToolTip.showText(QCursor.pos() + QPoint(15, 15), text, self.canvas)
+        self._last_hovered = key
+        return True
+
+    def clear_hover(self) -> bool:
+        """Take the tooltip down, reporting whether one was up."""
+        if self._last_hovered is None:
+            return False
+        QToolTip.hideText()
+        self._last_hovered = None
+        return True
 
     def wave(self, speed: float) -> float:
         """Return a 0..1 sine on the shared clock, so every chart pulses in step."""

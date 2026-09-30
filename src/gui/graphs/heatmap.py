@@ -1,8 +1,5 @@
 import datetime
 import math
-from PyQt6.QtWidgets import QToolTip
-from PyQt6.QtGui import QCursor, QFont
-from PyQt6.QtCore import QPoint
 import matplotlib.patches as patches
 import matplotlib.colors as mcolors
 from matplotlib.collections import PatchCollection
@@ -156,29 +153,14 @@ class ActivityHeatmapView(BaseGraphView):
 
     def on_hover(self, event):
         cell = self.cell_under(event.xdata, event.ydata) if event.inaxes == self.ax else None
-
         if cell is None:
-            if self._last_hovered is not None:
-                QToolTip.hideText()
-                self._last_hovered = None
-                if self.hover_glow is not None:
-                    self.hover_glow.set_visible(False)
+            if self.clear_hover() and self.hover_glow is not None:
+                self.hover_glow.set_visible(False)
             return
-
-        date_str = cell['date']
-        if self._last_hovered == date_str:
-            return
-
-        QToolTip.setFont(QFont("Fira Code", 10))
-        QToolTip.showText(QCursor.pos() + QPoint(15, 15),
-                          self.hover_text(date_str, cell['data']), self.canvas)
-
-        if self.hover_glow is not None:
-            column, row = math.floor(event.xdata), math.floor(event.ydata)
-            self.hover_glow.set_xy((column, row))
+        if (self.show_hover(cell['date'], self.hover_text(cell['date'], cell['data']))
+                and self.hover_glow is not None):
+            self.hover_glow.set_xy((math.floor(event.xdata), math.floor(event.ydata)))
             self.hover_glow.set_visible(True)
-
-        self._last_hovered = date_str
 
     def hover_text(self, date_str, day_data) -> str:
         """Return what one day of the calendar says under the cursor."""

@@ -1,9 +1,7 @@
 import logging
 
 import numpy as np
-from PyQt6.QtWidgets import QHBoxLayout, QComboBox, QLabel, QToolTip
-from PyQt6.QtGui import QCursor, QFont
-from PyQt6.QtCore import QPoint
+from PyQt6.QtWidgets import QHBoxLayout, QComboBox, QLabel
 
 from src.config import PALETTE
 from src.domain import formulas
@@ -311,15 +309,13 @@ class ExerciseGraphView(BaseGraphView):
                if event.inaxes is not None and event.x is not None and event.y is not None
                else None)
         if hit is None:
-            if self._last_hovered is not None:
+            if self.clear_hover():
                 for node in self.hover_nodes.values():
                     node.set_visible(False)
-                QToolTip.hideText()
-                self._last_hovered = None
             return
 
         key, axes, (x, y), text = hit
-        if self._last_hovered == key:
+        if not self.show_hover(key, text):
             return
         for node in self.hover_nodes.values():
             node.set_visible(False)
@@ -327,9 +323,6 @@ class ExerciseGraphView(BaseGraphView):
         if node is not None:
             node.set_data([x], [y])
             node.set_visible(True)
-        QToolTip.setFont(QFont("Fira Code", 10))
-        QToolTip.showText(QCursor.pos() + QPoint(15, 15), text, self.canvas)
-        self._last_hovered = key
 
     def _point_under(self, event):
         """Return (key, axes, point, tooltip) for the point within reach, or None."""

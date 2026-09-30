@@ -4,9 +4,6 @@ import logging
 import re
 import datetime
 import numpy as np
-from PyQt6.QtWidgets import QToolTip
-from PyQt6.QtGui import QCursor, QFont
-from PyQt6.QtCore import QPoint
 
 from src.config import PALETTE
 from src.database.rows import SupplementLogRow
@@ -174,16 +171,16 @@ class SupplementGraphView(BaseGraphView):
 
     def on_hover(self, event):
         if event.inaxes != self.ax or event.ydata is None:
-            if self._last_hovered is not None:
-                QToolTip.hideText()
-                self._last_hovered = None
+            self.clear_hover()
             return
-
         idx = int(round(event.ydata))
         data = self.hover_data.get(idx)
-        if data is None or self._last_hovered == idx:
-            return
+        if data is not None:
+            self.show_hover(idx, self.hover_text(data))
 
+    @staticmethod
+    def hover_text(data) -> str:
+        """Return what one nutrient's row says under the cursor."""
         lines = [
             f"Nutrient: {data['name']}",
             f"Optimum Target: {data['target']:.0f} {data['unit']}/day",
@@ -191,11 +188,6 @@ class SupplementGraphView(BaseGraphView):
             f"7-Day Saturation: {data['avg']:.1f} {data['unit']}/day",
             "─" * 24
         ]
-
-        for d_str, amt in zip(data['dates'], data['daily']):
-            lines.append(f"[{as_displayed_date(d_str)}]: {amt:.1f} {data['unit']}")
-
-        text = "\n".join(lines)
-        QToolTip.setFont(QFont("Fira Code", 10))
-        QToolTip.showText(QCursor.pos() + QPoint(15, 15), text, self.canvas)
-        self._last_hovered = idx
+        lines.extend(f"[{as_displayed_date(d_str)}]: {amt:.1f} {data['unit']}"
+                     for d_str, amt in zip(data['dates'], data['daily']))
+        return "\n".join(lines)

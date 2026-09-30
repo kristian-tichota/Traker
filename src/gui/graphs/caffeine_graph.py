@@ -1,8 +1,5 @@
 import datetime
 import numpy as np
-from PyQt6.QtWidgets import QToolTip
-from PyQt6.QtGui import QCursor, QFont
-from PyQt6.QtCore import QPoint
 import matplotlib.collections as mcoll
 import matplotlib.colors as mcolors
 import matplotlib.patches as patches
@@ -128,29 +125,15 @@ class CaffeineGraphView(BaseGraphView):
 
     def on_hover(self, event):
         if event.inaxes != self.ax or event.xdata is None:
-            if self._last_hovered is not None:
-                QToolTip.hideText()
-                self._last_hovered = None
+            self.clear_hover()
             return
-
         idx = int(round(event.xdata))
-        if idx < 0 or idx >= len(self.hover_dates_list):
+        if not 0 <= idx < len(self.hover_dates_list):
             return
-
-        current_hover = idx
-        if self._last_hovered == current_hover:
-            return
-
         date_str = self.hover_dates_list[idx]
         data = self.hover_data.get(date_str)
-        if data is None:
-            return
-
-        QToolTip.setFont(QFont("Fira Code", 10))
-        QToolTip.showText(QCursor.pos() + QPoint(15, 15),
-                          self.hover_text(date_str, data), self.canvas)
-
-        self._last_hovered = current_hover
+        if data is not None:
+            self.show_hover(idx, self.hover_text(date_str, data))
 
     def hover_text(self, date_str, data) -> str:
         """Return what one day of the window says under the cursor."""
