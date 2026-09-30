@@ -86,11 +86,7 @@ def library_for(profile) -> str:
 
 def shelves(folder) -> list:
     """Return one SHELF per subfolder of folder that holds something to show, in name order."""
-    try:
-        with os.scandir(folder) as scanned:
-            entries = sorted(scanned, key=lambda entry: _natural(entry.name))
-    except OSError:
-        return []
+    entries = _listed(folder)
     loose = tuple(entry.path for entry in entries
                   if _shelved(entry.name) and entry.is_file())
     found = ([BreakActivity(os.path.basename(os.path.normpath(folder)), folder, SHELF, loose)]
@@ -105,11 +101,7 @@ def shelves(folder) -> list:
 
 def contents(folder) -> list:
     """Return the subfolders holding something to show, then the files to show, in name order."""
-    try:
-        with os.scandir(folder) as scanned:
-            entries = sorted(scanned, key=lambda entry: _natural(entry.name))
-    except OSError:
-        return []
+    entries = _listed(folder)
     folders = [Entry(entry.name, entry.path, True) for entry in entries
                if not entry.name.startswith(".") and entry.is_dir()
                and next(_shelved_files(entry.path), None) is not None]
@@ -133,6 +125,15 @@ def resolve(offer, places) -> BreakActivity:
 
 def _ended(path, places) -> bool:
     return media.finished(places.get(path, media.Place()), readout_of(kind_of(path)))
+
+
+def _listed(folder) -> list:
+    """Return folder's entries in natural order of name, or none where it cannot be read."""
+    try:
+        with os.scandir(folder) as scanned:
+            return sorted(scanned, key=lambda entry: _natural(entry.name))
+    except OSError:
+        return []
 
 
 def _shelved(name) -> bool:
