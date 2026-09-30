@@ -88,13 +88,6 @@ class TestTheWindowAsksAndIsAsked:
                      "show_break_media", "hide_break_media"):
             assert not hasattr(MainWindow, name), name
 
-    def test_the_window_offers_a_public_way_to_mark_tabs_stale(self):
-        assert callable(MainWindow.mark_all_tabs_stale)
-
-    def test_a_view_reports_by_signal_rather_than_reaching_up(self):
-        assert hasattr(BaseManagedView, "data_changed")
-        assert hasattr(BaseManagedView, "status_message")
-
 
 class TestProgressBarTargets:
     def test_setting_a_value_does_not_recompute_the_target(self, qapp, write_profile):

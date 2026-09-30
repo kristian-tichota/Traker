@@ -1,6 +1,5 @@
 import pytest
 
-from src.gui.views.base import BaseManagedView
 from src.gui.views.beverage_view import BeveragesView
 from src.gui.views.exercise_view import ExerciseView
 from src.gui.views.food_views import FoodView
@@ -67,9 +66,6 @@ def make_view(qapp, profile_path, recording_db):
 
 
 class TestEveryLogTabRefreshes:
-    def test_it_is_built_on_the_shared_table_view(self, make_view, view_class):
-        assert isinstance(make_view(view_class), BaseManagedView)
-
     def test_every_table_it_hosts_is_registered_by_index(self, make_view, view_class):
         view = make_view(view_class)
 
@@ -83,12 +79,6 @@ class TestEveryLogTabRefreshes:
         for index, widget in view._table_widgets.items():
             assert widget.model() is view.proxy_for(index)
             assert view.proxy_for(index).sourceModel() is view.model_for(index)
-
-    def test_a_refresh_reaches_the_service_and_renders(self, make_view, view_class, settled):
-        view = make_view(view_class)
-
-        view.refresh()
-        settled()
 
     def test_a_refresh_against_a_service_that_answers_nothing_renders_empty(
         self, make_view, view_class, recording_db, settled

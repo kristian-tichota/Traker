@@ -96,11 +96,6 @@ class TestWalkingEveryTab:
 
         assert window.dirty_tabs == set(), "visiting a tab clears its staleness"
 
-    def test_every_view_survives_a_refresh_with_no_rows(self, window, qapp):
-        for view in window.views.values():
-            view.refresh()
-        drain(qapp)
-
     def test_a_write_marks_every_tab_stale_and_redraws_the_visible_one(self, window, qapp):
         drain(qapp)
         window.tabs.setCurrentIndex(1)

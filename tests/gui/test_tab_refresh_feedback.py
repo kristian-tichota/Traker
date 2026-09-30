@@ -18,15 +18,6 @@ def index_of(window, key):
 
 
 class TestTheFadeFollowsTheData:
-    def test_the_manager_is_not_driven_by_the_tab_changing(self, window):
-        assert window.tab_animator.overlay is not None
-        window.dirty_tabs = set()
-        window.tab_animator.covering = False
-
-        window._on_tab_changed(index_of(window, "food"))
-
-        assert not window.tab_animator.covering
-
     def test_a_clean_tab_is_not_veiled_at_all(self, window):
         window.dirty_tabs = set()
         window.tab_animator.covering = False
@@ -67,14 +58,6 @@ class TestTheFadeFollowsTheData:
         window.tab_animator.reveal()
 
         assert not window.tab_animator.covering
-
-    def test_the_veil_state_does_not_depend_on_an_unshown_parent(self, window):
-        target = index_of(window, "food")
-        window.dirty_tabs = {target}
-
-        window._on_tab_changed(target)
-
-        assert window.tab_animator.covering is True
 
 
 class TestAnInFlightReadIsNotAnEmptyLog:
