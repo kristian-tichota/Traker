@@ -75,12 +75,8 @@ def _insert_session(conn, plan_id: int, entry: dict):
 @require_auth
 def get_plans():
     """Return this member's cycles, newest start first."""
-    return rows("""
-        SELECT p.id, p.name, p.start_date, p.weeks, p.notes,
-               (SELECT COUNT(*) FROM plan_sessions s WHERE s.plan_id = p.id)
-        FROM training_plans p WHERE p.user_id = ?
-        ORDER BY p.start_date DESC, p.id DESC
-    """, (g.user_id,))
+    return rows("SELECT id, name, start_date, weeks, notes FROM training_plans "
+                "WHERE user_id = ? ORDER BY start_date DESC, id DESC", (g.user_id,))
 
 
 @plans_bp.route("/<int:plan_id>/sessions", methods=["GET"])
@@ -88,12 +84,8 @@ def get_plans():
 def get_plan_sessions(plan_id):
     """Return every session of one cycle, in calendar order."""
     _require_owned_plan(plan_id)
-    return rows("""
-        SELECT s.id, s.date, s.week, s.name, s.block, s.notes,
-               (SELECT COUNT(*) FROM plan_movements m WHERE m.session_id = s.id)
-        FROM plan_sessions s WHERE s.plan_id = ?
-        ORDER BY s.date, s.id
-    """, (plan_id,))
+    return rows("SELECT id, date, week, name, block, notes FROM plan_sessions "
+                "WHERE plan_id = ? ORDER BY date, id", (plan_id,))
 
 
 @plans_bp.route("/<int:plan_id>/movements", methods=["GET"])

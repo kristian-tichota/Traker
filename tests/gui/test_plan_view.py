@@ -11,14 +11,13 @@ TODAY = plans.today_iso()
 START = "2026-09-14"
 
 
-def plan_row(session_count=2):
-    return rows.TrainingPlanRow.from_server(
-        [1, "Cycle 1", START, 4, "Rebuild", session_count])
+def plan_row():
+    return rows.TrainingPlanRow.from_server([1, "Cycle 1", START, 4, "Rebuild"])
 
 
-def session(date, week=1, name="Upper A", block="re-entry", movements=2):
+def session(date, week=1, name="Upper A", block="re-entry"):
     return rows.PlanSessionRow.from_server(
-        [hash(date) % 1000, date, week, name, block, "Keep it light", movements])
+        [hash(date) % 1000, date, week, name, block, "Keep it light"])
 
 
 def movement(date, name="Overhead Press", position=0, sets=3, low=8, high=12,

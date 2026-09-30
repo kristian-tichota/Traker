@@ -42,9 +42,9 @@ class TestDefiningACycle:
             "status": "success", "plan_id": answer.get_json()["plan_id"],
             "sessions": 2, "movements": 3}
 
-    def test_the_cycle_reports_how_many_sessions_it_holds(self, member_a, plan_id):
+    def test_the_cycle_reads_back_as_it_was_defined(self, member_a, plan_id):
         (row,) = member_a.get("/api/plans").get_json()
-        assert row[1:] == ["Cycle 1", "2026-09-14", 4, "Rebuild", 2]
+        assert row[1:] == ["Cycle 1", "2026-09-14", 4, "Rebuild"]
 
     def test_a_movement_naming_nothing_in_the_catalog_is_refused(
         self, seeded_catalog, member_a
@@ -107,10 +107,6 @@ class TestReadingACycle:
     def test_sessions_come_back_in_calendar_order(self, member_a, plan_id):
         rows = member_a.get(f"/api/plans/{plan_id}/sessions").get_json()
         assert [row[1] for row in rows] == ["2026-09-14", "2026-09-15"]
-
-    def test_a_session_reports_how_many_movements_it_holds(self, member_a, plan_id):
-        (upper, lower) = member_a.get(f"/api/plans/{plan_id}/sessions").get_json()
-        assert (upper[-1], lower[-1]) == (2, 1)
 
     def test_a_movement_carries_the_day_it_belongs_to(self, member_a, plan_id):
         rows = member_a.get(f"/api/plans/{plan_id}/movements").get_json()

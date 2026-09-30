@@ -17,12 +17,12 @@ TODAY = plans.today_iso()
 
 
 def plan_row(start=TODAY, weeks=4):
-    return rows.TrainingPlanRow.from_server([1, "Cycle 1", start, weeks, "Rebuild", 1])
+    return rows.TrainingPlanRow.from_server([1, "Cycle 1", start, weeks, "Rebuild"])
 
 
 def session(date, name="Upper A", week=1):
     return rows.PlanSessionRow.from_server(
-        [1, date, week, name, "re-entry", "Keep it light", 2])
+        [1, date, week, name, "re-entry", "Keep it light"])
 
 
 def movement(date, name="Overhead Press", position=0, sets=3, low=8, high=12,

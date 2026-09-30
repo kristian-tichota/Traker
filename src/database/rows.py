@@ -459,7 +459,6 @@ class TrainingPlanRow(NamedTuple):
     start_date: str
     weeks: int
     notes: Optional[str]
-    session_count: int
 
     COMPLETION_FIELD = "name"
 
@@ -475,7 +474,6 @@ class PlanSessionRow(NamedTuple):
     name: str
     block: Optional[str]
     notes: Optional[str]
-    movement_count: int
 
     from_server = classmethod(_in_order)
 

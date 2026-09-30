@@ -142,14 +142,13 @@ class TestPlanRows:
 
         assert isinstance(row, TrainingPlanRow)
         assert (row.name, row.start_date, row.weeks) == ("Cycle 1", "2026-09-14", 4)
-        assert row.session_count == 1
 
     def test_a_session_names_the_columns_it_holds(self, db_client, cycle_id):
         (row,) = db_client.get_plan_sessions(cycle_id)
 
         assert isinstance(row, PlanSessionRow)
         assert (row.date, row.week, row.name) == ("2026-09-14", 1, "Upper A")
-        assert (row.block, row.movement_count) == ("re-entry", 1)
+        assert row.block == "re-entry"
 
     def test_a_movement_names_the_columns_it_holds(self, db_client, cycle_id):
         (row,) = db_client.get_plan_movements(cycle_id)
