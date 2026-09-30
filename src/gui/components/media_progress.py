@@ -1,4 +1,4 @@
-from PyQt6.QtCore import QRectF, QSize, Qt
+from PyQt6.QtCore import QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter
 from PyQt6.QtWidgets import QWidget
 
@@ -31,23 +31,9 @@ class MediaProgress(QWidget):
         self._font = QFont("Fira Code")
         self._font.setStyleHint(QFont.StyleHint.Monospace)
         self._font.setPixelSize(TEXT_PX)
-        self._says = ""
-        self._fraction = 0.0
+        self.says = ""
+        self.fraction = 0.0
         self.light = False
-
-    @property
-    def says(self) -> str:
-        """Return the position shown, as it is read."""
-        return self._says
-
-    @property
-    def fraction(self) -> float:
-        """Return how much of the line is filled, between nothing and all of it."""
-        return self._fraction
-
-    def sizeHint(self) -> QSize:
-        """Size to the given width and exactly the height of the band."""
-        return QSize(super().sizeHint().width(), HEIGHT)
 
     def set_light(self, light):
         """Paint the line and readout for a light surface behind them, or a dark one."""
@@ -58,10 +44,10 @@ class MediaProgress(QWidget):
         """Show where place is."""
         says = media.how_far(place, unit)
         fraction = media.fraction(place, unit)
-        if says == self._says and self._filled(fraction) == self._filled(self._fraction):
-            self._fraction = fraction
+        if says == self.says and self._filled(fraction) == self._filled(self.fraction):
+            self.fraction = fraction
             return
-        self._says, self._fraction = says, fraction
+        self.says, self.fraction = says, fraction
         self.update()
 
     def _filled(self, fraction) -> int:
@@ -75,7 +61,7 @@ class MediaProgress(QWidget):
         bar = QRectF(0, self.height() - BAR_PX, self.width(), BAR_PX)
         painter.setBrush(QColor(PALETTE[LIGHT_TRACK if self.light else TRACK]))
         painter.drawRect(bar)
-        filled = self._filled(self._fraction)
+        filled = self._filled(self.fraction)
         if filled:
             painter.setBrush(QColor(PALETTE[FILLED]))
             painter.drawRect(QRectF(bar.left(), bar.top(), filled, BAR_PX))
@@ -85,4 +71,4 @@ class MediaProgress(QWidget):
         corner = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         painter.setFont(self._font)
         painter.setPen(QColor(PALETTE[LIGHT_TEXT if self.light else TEXT]))
-        painter.drawText(row, corner, self._says)
+        painter.drawText(row, corner, self.says)
