@@ -394,13 +394,20 @@ class TestOpeningAPage:
 
 
 class TestPlayingAVideo:
-    def test_it_is_built_and_asked_for_its_position(self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    @pytest.fixture
+    def video(self, qapp, tmp_path):
+        built = []
 
-        assert pane.position() == 0
+        def _build(start_at=0):
+            built.append(VideoPane(str(tmp_path / "talk.mkv"), start_at))
+            return built[-1]
 
-    def test_a_file_that_could_not_be_played_says_so_on_the_screen(self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+        yield _build
+        for pane in built:
+            pane.shutdown()
+
+    def test_a_file_that_could_not_be_played_says_so_on_the_screen(self, video):
+        pane = video()
 
         pane.screen_widget.playback_failed.emit("no such file")
         pane.screen_widget.playback_failed.emit("still no such file")
@@ -415,9 +422,9 @@ class TestPlayingAVideo:
             return None
         monkeypatch.setattr(MpvScreen, "_start_mpv", refuse)
 
-    def test_a_player_that_would_not_start_says_why_each_time(self, qapp, tmp_path,
+    def test_a_player_that_would_not_start_says_why_each_time(self, video, tmp_path,
                                                               refused):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+        pane = video()
         pane.stop()
 
         pane.open(str(tmp_path / "talk.mkv"))
@@ -425,13 +432,13 @@ class TestPlayingAVideo:
         assert pane.screen_widget.isHidden() is True
         assert failure_of(pane) == "COULD NOT PLAY\nlibmpv would not load: undefined symbol"
 
-    def test_and_keeps_the_place_it_was_left_at(self, qapp, tmp_path, refused):
-        pane = VideoPane(str(tmp_path / "talk.mkv"), start_at=754_000)
+    def test_and_keeps_the_place_it_was_left_at(self, video, refused):
+        pane = video(start_at=754_000)
 
         assert pane.position() == 754_000
 
-    def test_it_takes_its_keys_without_raising(self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    def test_it_takes_its_keys_without_raising(self, video):
+        pane = video()
 
         pane.toggle()
         pane.step(1)
@@ -440,16 +447,15 @@ class TestPlayingAVideo:
         pane.nudge(-1)
         pane.stop()
 
-    def test_the_picture_is_libmpv_drawing_into_our_own_surface(self, qapp,
-                                                                tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    def test_the_picture_is_libmpv_drawing_into_our_own_surface(self, video):
+        pane = video()
 
         assert isinstance(pane.screen_widget, MpvScreen)
         assert isinstance(pane.screen_widget, QOpenGLWidget)
         assert pane.screen_widget.parent() is pane
 
-    def test_the_picture_is_given_the_whole_pane(self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    def test_the_picture_is_given_the_whole_pane(self, qapp, video):
+        pane = video()
 
         pane.resize(1600, 900)
         pane.show()
@@ -457,10 +463,9 @@ class TestPlayingAVideo:
 
         assert pane.screen_widget.size() == pane.size()
         pane.close()
-        pane.deleteLater()
 
-    def test_a_second_file_goes_through_the_same_player(self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    def test_a_second_file_goes_through_the_same_player(self, video, tmp_path):
+        pane = video()
         widget, player = pane.screen_widget, pane.player
 
         pane.open(str(tmp_path / "other.mkv"))
@@ -468,23 +473,22 @@ class TestPlayingAVideo:
         assert pane.screen_widget is widget
         assert pane.player is player
 
-    def test_nothing_is_asked_to_follow_a_file_that_ends(self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    def test_nothing_is_asked_to_follow_a_file_that_ends(self, video):
+        pane = video()
 
         assert pane.player is not None
         assert pane.player.keep_open in ("yes", True)
         assert len(pane.player.playlist) <= 1
 
-    def test_it_takes_none_of_my_keys_and_draws_none_of_its_own_furniture(
-            self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    def test_it_takes_none_of_my_keys_and_draws_none_of_its_own_furniture(self, video):
+        pane = video()
 
         assert pane.player.input_default_bindings is False
         assert pane.player.input_vo_keyboard is False
         assert pane.player.osc is False
 
-    def test_the_volume_stays_inside_itself(self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    def test_the_volume_stays_inside_itself(self, video):
+        pane = video()
 
         for _ in range(20):
             pane.nudge(1)
@@ -494,8 +498,8 @@ class TestPlayingAVideo:
             pane.nudge(-1)
         assert pane.player.volume == pytest.approx(0.0)
 
-    def test_letting_go_stops_the_player_it_started(self, qapp, tmp_path):
-        pane = VideoPane(str(tmp_path / "talk.mkv"))
+    def test_letting_go_stops_the_player_it_started(self, video):
+        pane = video()
         assert pane.player is not None
 
         pane.shutdown()
@@ -891,6 +895,7 @@ class TestWhichPaneIsBuilt:
         pane = build_pane(BreakActivity("Watching", str(tmp_path / "a.mkv"), VIDEO))
 
         assert isinstance(pane, VideoPane)
+        pane.shutdown()
 
     def test_a_shelf_is_listed(self, library):
         pane = build_pane(BreakActivity("Books", str(library.root / "Books"), SHELF))
