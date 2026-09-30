@@ -48,10 +48,7 @@ def week_streak(session_dates, logged_dates, today: str = None) -> int:
 
 def session_on(sessions, date_iso: str):
     """Return the session planned for date_iso, or None."""
-    for session in sessions:
-        if session.date == date_iso:
-            return session
-    return None
+    return next((session for session in sessions if session.date == date_iso), None)
 
 
 def movements_on(movements, date_iso: str) -> list:
