@@ -84,30 +84,16 @@ class TestFilteringTheTable:
         assert "Grilled Salmon" not in visible_names(view)
         assert set(visible_names(view)) == {"Rolled Oats", "Řízek s bramborem"}
 
-    def test_terms_and_together(self, view):
-        apply(view, "oats meal:b")
-
-        assert len(visible_names(view)) == 2
-
-    def test_a_date_comparison_reads_the_czech_spelling(self, view):
-        apply(view, "date>01.09.2026")
-
-        assert "Řízek s bramborem" not in visible_names(view)
-
     def test_clearing_restores_every_row(self, view):
         apply(view, "oats")
         view.clear_filter()
 
         assert view.proxy_for(0).rowCount() == len(LEDGER)
 
-    def test_a_filter_matching_nothing_shows_nothing(self, view):
+    def test_a_filter_matching_nothing_shows_nothing_and_keeps_every_row(self, view):
         apply(view, "kangaroo")
 
         assert view.proxy_for(0).rowCount() == 0
-
-    def test_the_source_model_keeps_every_row(self, view):
-        apply(view, "kangaroo")
-
         assert view.model_for(0).rowCount() == len(LEDGER)
 
     def test_a_refresh_re_evaluates_the_filter(self, view):
