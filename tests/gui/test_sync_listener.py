@@ -97,6 +97,13 @@ class TestFrameHandling:
 
         assert received == [{"action": "delete"}]
 
+    def test_a_frame_that_is_not_an_object_does_not_end_the_stream(self, run_listener):
+        good = json.dumps({"event": "catalog_updated", "data": None})
+
+        _, received, _ = run_listener([FakeResponse(["data: [1, 2]", f"data: {good}"])])
+
+        assert received == [{}]
+
     def test_an_unrelated_event_type_is_ignored(self, run_listener):
         frame = json.dumps({"event": "something_else", "data": {"x": 1}})
 
