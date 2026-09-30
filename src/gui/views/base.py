@@ -2,10 +2,10 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QMenu
 from PyQt6.QtCore import Qt, QThreadPool, pyqtSignal
 from src.config import PALETTE
 from src.domain.clock import as_displayed_date, as_stored_date
+from src.domain.tables import domain_of_table
 from src.gui.animations import ChangeGlow
 from src.gui.columns import ColumnLayout, setting_key
 from src.gui.components.vim_table_view import VimTableView
-from src.domain.tables import domain_of_table
 from src.gui.lifecycle import ShutdownMixin
 from src.database.rows import MatchedTotals, grouped_by_set
 from src.gui.models.filter_proxy import FilterProxyModel
@@ -46,7 +46,7 @@ def summary_line(totals, headers) -> str:
 
 
 class BaseManagedView(ShutdownMixin, QWidget):
-    """A tab of one or two editable tables."""
+    """A tab of editable tables, each indexed by its table_idx."""
 
     DATE_HEADERS = DATE_HEADERS
 
