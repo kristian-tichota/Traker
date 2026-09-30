@@ -30,6 +30,33 @@ def timelines_by_name(rows, names):
     return timelines
 
 
+HOVER_REACH_PX = 10
+
+
+def _goal_key(name) -> str:
+    return str(name).lower().replace("_", " ").replace("-", " ").strip()
+
+
+def _reps_text(reps: float) -> str:
+    return str(int(reps)) if reps == int(reps) else str(reps)
+
+
+def exercise_goal(goals, name):
+    """Return (target weight, target reps) the profile sets for name, or None."""
+    wanted = _goal_key(name)
+    goal = next((value for key, value in goals.items() if _goal_key(key) == wanted), None)
+    if not goal or goal.get("target_weight") is None or goal.get("target_reps") is None:
+        return None
+    weight, reps = float(goal["target_weight"]), goal["target_reps"]
+    if isinstance(reps, str):
+        reps = [float(part) for part in reps.split(",") if part.strip()]
+    elif isinstance(reps, (int, float)):
+        reps = [float(reps)]
+    else:
+        reps = []
+    return (weight, reps) if weight > 0 and reps else None
+
+
 class ExerciseGraphView(BaseGraphView):
     CONTENT_MARGINS = (4, 4, 4, 4)
 
@@ -187,9 +214,7 @@ class ExerciseGraphView(BaseGraphView):
         self.hover_lines = []
 
         rows, cols = self._grid_shape()
-        total_slots = rows * cols
-        self.flat_axes = (self.fig.subplots(rows, cols).flatten() if total_slots > 1
-                          else [self.fig.subplots(rows, cols)])
+        self.flat_axes = self.fig.subplots(rows, cols, squeeze=False).flatten()
 
     def draw_chart(self, slot_data_list):
         """Draw one pinned movement per slot."""
@@ -239,53 +264,22 @@ class ExerciseGraphView(BaseGraphView):
 
             goal_meta = None
             try:
-                goals_sec = self.profile.data.get("exercise_goals", {})
-                ex_goal = None
-                normalized_pinned = exercise_pinned.lower().replace("_", " ").replace("-", " ").strip()
+                goal = exercise_goal(self.profile.data.get("exercise_goals", {}), exercise_pinned)
+                if goal is not None:
+                    weight, reps = goal
+                    target_vol = formulas.training_volume(sum(reps), weight)
+                    target_1rm = formulas.one_rep_max_or_weight(weight, max(reps))
+                    goal_dates = [dates[-1], "Goal"]
 
-                for k, v in goals_sec.items():
-                    if k.lower().replace("_", " ").replace("-", " ").strip() == normalized_pinned:
-                        ex_goal = v
-                        break
+                    ax.plot(goal_dates, [intensities[-1], target_1rm], color=PALETTE['blue'], linestyle=':', alpha=0.30, linewidth=1.2, zorder=2)
+                    goal_marker, = ax.plot(["Goal"], [target_1rm], marker='o', color=PALETTE['blue'], markersize=5, alpha=0.35, zorder=3)
 
-                if ex_goal:
-                    raw_wt = ex_goal.get("target_weight")
-                    raw_reps = ex_goal.get("target_reps")
+                    ax2.plot(goal_dates, [volumes[-1], target_vol], color=PALETTE['violet'], linestyle=':', alpha=0.30, linewidth=1.0, zorder=1)
+                    ax2.plot(["Goal"], [target_vol], marker='x', color=PALETTE['violet'], markersize=4, alpha=0.35, zorder=2)
+                    ax2.fill_between(goal_dates, [0, 0], [volumes[-1], target_vol], color=PALETTE['violet'], alpha=0.02, zorder=1)
 
-                    if raw_wt is not None and raw_reps is not None:
-                        t_wt = float(raw_wt)
-
-                        if isinstance(raw_reps, str):
-                            reps_list = [float(x.strip()) for x in raw_reps.split(",") if x.strip()]
-                            sets_str = ",".join(str(int(x)) if x == int(x) else str(x) for x in reps_list)
-                        elif isinstance(raw_reps, (int, float)):
-                            reps_list = [float(raw_reps)]
-                            sets_str = str(int(raw_reps)) if raw_reps == int(raw_reps) else str(raw_reps)
-                        else:
-                            reps_list = []
-                            sets_str = ""
-
-                        if t_wt > 0 and reps_list:
-                            total_reps = sum(reps_list)
-                            max_reps = max(reps_list)
-
-                            target_vol = formulas.training_volume(total_reps, t_wt)
-                            target_1rm = formulas.one_rep_max_or_weight(t_wt, max_reps)
-
-                            goal_dates = [dates[-1], "Goal"]
-
-                            ax.plot(goal_dates, [intensities[-1], target_1rm], color=PALETTE['blue'], linestyle=':', alpha=0.30, linewidth=1.2, zorder=2)
-                            ax.plot(["Goal"], [target_1rm], marker='o', color=PALETTE['blue'], markersize=5, alpha=0.35, zorder=3)
-
-                            ax2.plot(goal_dates, [volumes[-1], target_vol], color=PALETTE['violet'], linestyle=':', alpha=0.30, linewidth=1.0, zorder=1)
-                            ax2.plot(["Goal"], [target_vol], marker='x', color=PALETTE['violet'], markersize=4, alpha=0.35, zorder=2)
-                            ax2.fill_between(goal_dates, [0, 0], [volumes[-1], target_vol], color=PALETTE['violet'], alpha=0.02, zorder=1)
-
-                            goal_meta = {
-                                'onerm': target_1rm,
-                                'weight': t_wt,
-                                'sets_str': sets_str
-                            }
+                    goal_meta = {'marker': goal_marker, 'onerm': target_1rm, 'weight': weight,
+                                 'sets_str': ",".join(map(_reps_text, reps))}
             except (AttributeError, KeyError, TypeError, ValueError) as e:
                 log.warning("Could not compute the goal projection for %s: %s", exercise_pinned, e)
 
@@ -308,15 +302,14 @@ class ExerciseGraphView(BaseGraphView):
                 'base_size': 6
             })
 
-            self.hover_lines.append({
-                'line': line,
-                'history': history,
-                'axes': [ax, ax2],
-                'goal': goal_meta
-            })
+            self.hover_lines.append({'line': line, 'history': history, 'axes': (ax, ax2),
+                                     'goal': goal_meta})
 
     def on_hover(self, event):
-        if event.inaxes is None or event.x is None or event.y is None:
+        hit = (self._point_under(event)
+               if event.inaxes is not None and event.x is not None and event.y is not None
+               else None)
+        if hit is None:
             if self._last_hovered is not None:
                 for node in self.hover_nodes.values():
                     node.set_visible(False)
@@ -324,83 +317,39 @@ class ExerciseGraphView(BaseGraphView):
                 self._last_hovered = None
             return
 
-        hit_found = False
-        for item in self.hover_lines:
-            line = item['line']
-            allowed_axes = item.get('axes', [line.axes])
+        key, axes, (x, y), text = hit
+        if self._last_hovered == key:
+            return
+        for node in self.hover_nodes.values():
+            node.set_visible(False)
+        node = self.hover_nodes.get(axes)
+        if node is not None:
+            node.set_data([x], [y])
+            node.set_visible(True)
+        QToolTip.setFont(QFont("Fira Code", 10))
+        QToolTip.showText(QCursor.pos() + QPoint(15, 15), text, self.canvas)
+        self._last_hovered = key
 
-            if event.inaxes in allowed_axes:
-                xy_data = line.get_xydata()
-                xy_pixels = line.axes.transData.transform(xy_data)
-                dx = xy_pixels[:, 0] - event.x
-                dy = xy_pixels[:, 1] - event.y
-                distances = np.hypot(dx, dy)
+    def _point_under(self, event):
+        """Return (key, axes, point, tooltip) for the point within reach, or None."""
+        item = next((item for item in self.hover_lines if event.inaxes in item['axes']), None)
+        if item is None:
+            return None
+        line, goal = item['line'], item['goal']
+        pixels = line.axes.transData.transform(line.get_xydata())
+        distances = np.hypot(pixels[:, 0] - event.x, pixels[:, 1] - event.y)
+        nearest = int(np.argmin(distances)) if len(distances) else -1
+        nearest_px = distances[nearest] if nearest >= 0 else np.inf
 
-                min_idx = np.argmin(distances) if len(distances) > 0 else -1
-                min_dist = distances[min_idx] if min_idx != -1 else float('inf')
-
-                goal_dist = float('inf')
-                if item.get('goal'):
-                    goal_x_idx = len(item['history'])
-                    goal_pixel = line.axes.transData.transform((goal_x_idx, item['goal']['onerm']))
-                    goal_dist = np.hypot(goal_pixel[0] - event.x, goal_pixel[1] - event.y)
-
-                if goal_dist < min_dist and goal_dist <= 10:
-                    current_hover = (id(line), "goal")
-                    if self._last_hovered == current_hover:
-                        hit_found = True
-                        break
-
-                    for node in self.hover_nodes.values():
-                        node.set_visible(False)
-
-                    hover_node = self.hover_nodes.get(line.axes)
-                    if hover_node:
-                        hover_node.set_data(["Goal"], [item['goal']['onerm']])
-                        hover_node.set_visible(True)
-
-                    g = item['goal']
-                    text = f"Target Milestone Goal\nWeight: {g['weight']:.1f} kg\nSets: [{g['sets_str']}]"
-                    QToolTip.setFont(QFont("Fira Code", 10))
-                    QToolTip.showText(QCursor.pos() + QPoint(15, 15), text, self.canvas)
-
-                    self._last_hovered = current_hover
-                    hit_found = True
-                    break
-
-                elif min_dist <= 10:
-                    idx = min_idx
-                    current_hover = (id(line), idx)
-                    if self._last_hovered == current_hover:
-                        hit_found = True
-                        break
-
-                    dt = item['history'][idx][0]
-                    onerm = item['history'][idx][2]
-
-                    for node in self.hover_nodes.values():
-                        node.set_visible(False)
-
-                    hover_node = self.hover_nodes.get(line.axes)
-                    if hover_node:
-                        hover_node.set_data([dt], [onerm])
-                        hover_node.set_visible(True)
-
-                    sets_str = item['history'][idx][3]
-                    wt = item['history'][idx][4]
-                    rpe = item['history'][idx][5]
-
-                    text = f"Date: {dt}\nSets: [{sets_str}]\nWeight: {wt:.1f} kg\nRPE: {rpe:.1f}"
-                    QToolTip.setFont(QFont("Fira Code", 10))
-                    QToolTip.showText(QCursor.pos() + QPoint(15, 15), text, self.canvas)
-
-                    self._last_hovered = current_hover
-                    hit_found = True
-                    break
-
-        if not hit_found:
-            if self._last_hovered is not None:
-                for node in self.hover_nodes.values():
-                    node.set_visible(False)
-                QToolTip.hideText()
-                self._last_hovered = None
+        if goal:
+            goal_x, goal_y = line.axes.transData.transform(goal['marker'].get_xydata()[0])
+            goal_px = np.hypot(goal_x - event.x, goal_y - event.y)
+            if goal_px < nearest_px and goal_px <= HOVER_REACH_PX:
+                return ((id(line), "goal"), line.axes, ("Goal", goal['onerm']),
+                        f"Target Milestone Goal\nWeight: {goal['weight']:.1f} kg\n"
+                        f"Sets: [{goal['sets_str']}]")
+        if nearest_px > HOVER_REACH_PX:
+            return None
+        date, _volume, onerm, sets_str, weight, rpe = item['history'][nearest]
+        return ((id(line), nearest), line.axes, (date, onerm),
+                f"Date: {date}\nSets: [{sets_str}]\nWeight: {weight:.1f} kg\nRPE: {rpe:.1f}")

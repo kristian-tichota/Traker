@@ -81,3 +81,23 @@ class TestHoveringOnceDataIsThere:
         view.on_hover(MoveEvent(view.ax, xdata=9999.0))
 
         assert view._last_hovered is None
+
+    def test_the_exercise_goal_is_found_after_a_day_logged_twice(self, make_view):
+        from src.domain import formulas
+
+        view = make_view(ExerciseGraphView)
+        view.profile.data = {"exercise_goals": {
+            "back-squat": {"target_weight": 100, "target_reps": "5, 5, 5"}}}
+        history = [("2026-09-01", 1200.0, 90.0, "5,5,5", 80.0, 8.0),
+                   ("2026-09-01", 1200.0, 91.0, "5,5,5", 80.0, 8.0),
+                   ("2026-09-03", 1275.0, 95.0, "5,5,5", 85.0, 8.5)]
+        view.reset_axes()
+        view.draw_chart([("Back Squat", history)] + [("None", None)] * 3)
+        ax = view.flat_axes[0]
+        event = MoveEvent(ax)
+        event.x, event.y = ax.transData.transform(
+            (ax.xaxis.convert_units("Goal"), formulas.one_rep_max_or_weight(100.0, 5.0)))
+
+        view.on_hover(event)
+
+        assert view._last_hovered[1] == "goal"
