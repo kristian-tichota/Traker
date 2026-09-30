@@ -6,7 +6,7 @@ from src.gui.commands import (COMMANDS, belongs_to, candidates_for,
                               commands_for)
 from src.gui.components.cmd_line import CommandLineEdit
 from src.gui.components.command_menu import MAX_ROWS, CommandMenu, rows_for
-from src.gui.domains import BEVERAGE, CHORE, EXERCISE, FOOD, POMODORO, SUPPLEMENT
+from src.domain.tables import BEVERAGE, CHORE, EXERCISE, FOOD, POMODORO, SUPPLEMENT
 
 pytestmark = [pytest.mark.gui, pytest.mark.accessibility]
 

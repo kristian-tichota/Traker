@@ -1,9 +1,5 @@
 from src.domain.tables import (BEVERAGE, CHORE, EVERY_DOMAIN, EXERCISE, FOOD, MOBILITY,
-                               PLAN, POMODORO, SUPPLEMENT, TABLE_DOMAINS, domain_of_table)
-
-__all__ = ["BEVERAGE", "CHORE", "EVERY_DOMAIN", "EXERCISE", "FOOD", "MOBILITY", "PLAN",
-           "POMODORO", "SUPPLEMENT", "TABLE_DOMAINS", "TAB_DOMAINS", "domain_of_table",
-           "domains_for_tab", "tabs_reading"]
+                               PLAN, POMODORO, SUPPLEMENT)
 
 TAB_DOMAINS = {
     "pomodoro": (POMODORO, CHORE),

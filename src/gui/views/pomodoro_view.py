@@ -30,7 +30,7 @@ from src.gui.components.media_surface import MediaSurface
 from src.gui.components.timeline_popup import TimelinePopupWidget
 from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin
-from src.gui.domains import CHORE
+from src.domain.tables import CHORE
 from src.gui.workers import discard, run_in_background
 
 log = logging.getLogger(__name__)

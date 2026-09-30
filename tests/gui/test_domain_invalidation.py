@@ -1,8 +1,9 @@
 import pytest
 
-from src.gui.domains import (
-    BEVERAGE, EVERY_DOMAIN, EXERCISE, FOOD, MOBILITY, POMODORO, SUPPLEMENT,
-    TABLE_DOMAINS, TAB_DOMAINS, domain_of_table, domains_for_tab, tabs_reading)
+from src.domain.tables import (
+    BEVERAGE, EVERY_DOMAIN, EXERCISE, FOOD, MOBILITY, POMODORO, SUPPLEMENT, TABLE_DOMAINS,
+    domain_of_table)
+from src.gui.domains import TAB_DOMAINS, domains_for_tab, tabs_reading
 
 pytestmark = pytest.mark.gui
 
@@ -19,8 +20,6 @@ class TestTheMappingIsComplete:
             assert spec.name in TABLE_DOMAINS, f"{spec.name} belongs to no domain"
 
     def test_a_sets_own_table_cannot_name_a_subject(self):
-        from src.gui.domains import domain_of_table
-
         assert domain_of_table("item_sets") is None
         assert domain_of_table("supplement_set_components") == SUPPLEMENT
 

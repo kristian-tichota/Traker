@@ -1,6 +1,8 @@
 import logging
 import threading
 
+from src.domain.tables import domain_of_table
+
 log = logging.getLogger(__name__)
 
 
@@ -87,6 +89,4 @@ def domain_for_path(path: str):
     subject = rest[1] if rest[0] == "sets" and len(rest) > 1 else rest[0]
     if subject in _PATH_DOMAINS:
         return subject
-    from src.gui.domains import domain_of_table
-
     return domain_of_table(subject)

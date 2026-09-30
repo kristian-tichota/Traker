@@ -8,7 +8,7 @@ from src.database.rows import completion_name
 from src.domain import chores
 from src.domain.clock import as_displayed_date, as_stored_date, minutes_of_day
 from src.gui.completion import ranked_matches
-from src.gui.domains import (
+from src.domain.tables import (
     BEVERAGE, CHORE, EVERY_DOMAIN, EXERCISE, FOOD, MOBILITY, PLAN, POMODORO,
     SUPPLEMENT)
 

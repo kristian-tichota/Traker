@@ -26,7 +26,8 @@ from src.gui.components.cmd_line import CommandLineEdit
 from src.gui.components.command_menu import CommandMenu
 from src.gui.components.filter_line import FilterLineEdit
 from src.gui.components.vim_table_view import VimTableView
-from src.gui.domains import domain_of_table, domains_for_tab, tabs_reading
+from src.domain.tables import domain_of_table
+from src.gui.domains import domains_for_tab, tabs_reading
 from src.gui.sync_listener import SyncListener
 from src.gui.columns import ColumnError, describe, rearranged
 from src.desktop import rest_queue
