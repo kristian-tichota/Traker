@@ -547,11 +547,10 @@ class MainWindow(QMainWindow):
         view = self._filtered_view
         if view is None:
             return
-        view.apply_filter(query)
-        if query:
+        totals = view.apply_filter(query)
+        if query and totals is not None:
             self.status_bar.setText(
-                f" Filter: {view.matched_totals().rows:,} of "
-                f"{view.model_for(0).rowCount():,} rows.")
+                f" Filter: {totals.rows:,} of {view.model_for(0).rowCount():,} rows.")
 
     def _commit_filter(self):
         """Keep the filter and drop into the sheet on the first match."""

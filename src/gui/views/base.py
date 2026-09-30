@@ -305,9 +305,9 @@ class BaseManagedView(ShutdownMixin, QWidget):
         return self._table_proxies[table_idx]
 
     def apply_filter(self, query, table_idx=0):
-        """Show only the rows matching query, and describe what is left."""
+        """Show only the rows matching query, returning what the matched rows come to."""
         self._table_proxies[table_idx].set_query(query)
-        self._update_summary(table_idx)
+        return self._update_summary(table_idx)
 
     def clear_filter(self, table_idx=0):
         self._table_proxies[table_idx].clear_query()
@@ -337,16 +337,16 @@ class BaseManagedView(ShutdownMixin, QWidget):
         return MatchedTotals.of(self._table_proxies[table_idx].matched_rows())
 
     def _update_summary(self, table_idx=0):
-        """Update the line under the table with what the matched set comes to."""
+        """Describe the matched rows under the table, returning their totals, or None."""
         if self.summary_label is None or table_idx != 0:
-            return
-        proxy = self._table_proxies[table_idx]
-        if not proxy.is_filtered():
+            return None
+        if not self._table_proxies[table_idx].is_filtered():
             self.summary_label.hide()
-            return
-        self.summary_label.setText(summary_line(self.matched_totals(table_idx),
-                                                self.column_layout(table_idx).visible))
+            return None
+        totals = self.matched_totals(table_idx)
+        self.summary_label.setText(summary_line(totals, self.column_layout(table_idx).visible))
         self.summary_label.show()
+        return totals
 
     def on_context_menu_requested(self, table_index, pos):
         self.show_context_menu(self._table_widgets[table_index], table_index, pos)
