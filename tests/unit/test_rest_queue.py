@@ -23,6 +23,14 @@ class TestReading:
 
         assert rest_queue.read(str(path)) == ["/tmp/a.mp4", "/tmp/b.mp4"]
 
+    def test_a_path_that_is_not_utf_8_is_kept_byte_for_byte(self, queue_path):
+        import os
+
+        rest_queue.append(os.fsdecode(b"/tmp/\x8c\x8e.mp4"), queue_path)
+        rest_queue.append("/tmp/b.mp4", queue_path)
+
+        assert rest_queue.read(queue_path)[0] == os.fsdecode(b"/tmp/\x8c\x8e.mp4")
+
     def test_an_unreadable_file_is_reported_rather_than_raised(self, tmp_path, caplog):
         with caplog.at_level("WARNING"):
             assert rest_queue.read(str(tmp_path)) == []

@@ -92,7 +92,9 @@ class TestTheFileItself:
         assert f"/x/{rest_positions.KEEP + 19}.mkv" in stored
 
     def test_an_unwritable_store_is_not_the_reason_a_break_does_not_end(self, tmp_path):
-        rest_positions.remember("/x/a.mkv", 1000, str(tmp_path / "a" / "b" / "x.json"))
+        (tmp_path / "a").write_text("not a folder")
+
+        rest_positions.remember("/x/a.mkv", 1000, str(tmp_path / "a" / "x.json"))
 
     def test_something_else_writing_nonsense_into_it_is_ignored(self, store, tmp_path):
         odd = tmp_path / "odd.json"

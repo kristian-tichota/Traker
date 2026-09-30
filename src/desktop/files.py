@@ -11,7 +11,7 @@ def write(path, text):
     os.makedirs(folder, exist_ok=True)
     handle, temporary = tempfile.mkstemp(dir=folder, prefix=".", suffix=".part")
     try:
-        with os.fdopen(handle, "w", encoding="utf-8") as f:
+        with os.fdopen(handle, "w", encoding="utf-8", errors="surrogateescape") as f:
             f.write(text)
         if os.path.exists(target):
             shutil.copymode(target, temporary)

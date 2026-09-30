@@ -1,6 +1,8 @@
 import logging
 import os
 
+from src.desktop import files
+
 log = logging.getLogger(__name__)
 
 DEFAULT_PATH = os.path.expanduser("~/.config/traker/rest-queue.m3u")
@@ -13,8 +15,7 @@ HEADER = ("# Traker: what to watch on the next break, newest last.\n"
 
 def path_for(profile) -> str:
     """Return this member's queue file, from [strict_break.queue] path."""
-    written = str((profile.get_metric("strict_break", "queue", {}) or {})
-                  .get("path") or "").strip()
+    written = str(profile.get_metric("strict_break.queue", "path", "") or "").strip()
     return os.path.expanduser(written) if written else DEFAULT_PATH
 
 
@@ -29,7 +30,7 @@ def describe(entries) -> str:
 def read(path=None) -> list:
     """Return the queued paths, in the order they were added."""
     try:
-        with open(path or DEFAULT_PATH, encoding="utf-8") as f:
+        with open(path or DEFAULT_PATH, encoding="utf-8", errors="surrogateescape") as f:
             lines = f.read().splitlines()
     except FileNotFoundError:
         return []
@@ -67,12 +68,8 @@ def clear(path=None) -> list:
 
 
 def write(entries, path=None) -> list:
-    target = path or DEFAULT_PATH
-    body = "".join(f"{entry}\n" for entry in entries)
     try:
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w", encoding="utf-8") as f:
-            f.write(HEADER + body)
+        files.write(path or DEFAULT_PATH, HEADER + "".join(f"{entry}\n" for entry in entries))
     except OSError as e:
         raise ValueError(f"Could not write the break queue: {e}") from e
     return list(entries)

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 
+from src.desktop import files
 from src.domain.media import Place
 
 log = logging.getLogger(__name__)
@@ -64,13 +65,10 @@ def remember(item, position, path=None, duration=0) -> None:
     if int(position or 0) > 0:
         stored[key] = Place(int(position), max(0, int(duration or 0)))
 
-    target = path or DEFAULT_PATH
-    trimmed = list(stored.items())[-KEEP:]
+    kept = {name: {"at": place.at, "of": place.of}
+            for name, place in list(stored.items())[-KEEP:]}
     try:
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w", encoding="utf-8") as f:
-            json.dump({item: {"at": place.at, "of": place.of}
-                       for item, place in trimmed}, f, indent=1, sort_keys=False)
+        files.write(path or DEFAULT_PATH, json.dumps(kept, indent=1))
     except OSError as e:
         log.warning("Could not remember where %s stopped: %s", key, e)
 
