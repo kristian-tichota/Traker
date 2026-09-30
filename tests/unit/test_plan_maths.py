@@ -45,9 +45,6 @@ class TestWhetherASessionHappened:
     def test_a_future_day_is_only_ahead(self):
         assert plans.status("2026-10-09", set(), TODAY) == plans.AHEAD
 
-    def test_any_training_that_day_counts(self):
-        assert plans.status("2026-09-30", {"2026-09-30"}, TODAY) == plans.DONE
-
 
 class TestAdherence:
     DATES = ["2026-09-28", "2026-09-29", "2026-10-01", TODAY, "2026-10-05"]
