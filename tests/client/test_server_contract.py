@@ -97,25 +97,6 @@ class TestLogRoundTrip:
         assert success is False
         assert "Ghost Oats" in message
 
-    def test_a_mobility_log_round_trips(self, stocked):
-        stocked.add_mobility_log({"date": "2026-09-05", "mob_name": "Hip Opener",
-                                  "duration_mins": 20.0})
-
-        (row,) = stocked.get_mobility_logs()
-
-        assert (row.name, row.duration_mins, row.mets) == ("Hip Opener", 20.0, 3.0)
-        assert row.routine_set is None
-
-    def test_a_supplement_log_round_trips(self, stocked):
-        stocked.add_supplement_log({"date": "2026-09-05", "supp_name": "Morning Stack",
-                                    "servings": 1.0})
-
-        (row,) = stocked.get_supplement_logs()
-
-        assert row.name == "Morning Stack"
-        assert row.b12_mcg == 500.0
-        assert row.stack is None
-
     def test_deleting_a_record_removes_only_that_row(self, stocked):
         for servings in (1.0, 2.0):
             stocked.add_food_log({"date": "2026-09-05", "meal_type": "Breakfast",

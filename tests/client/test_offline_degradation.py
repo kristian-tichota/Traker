@@ -16,7 +16,8 @@ class TestReadsWhileTheServiceIsDown:
         ["get_all_foods", "get_all_beverages", "get_all_exercises",
          "get_all_supplements", "get_all_mobility", "get_all_exercise_names",
          "get_food_logs", "get_beverage_logs", "get_exercise_logs",
-         "get_supplement_logs", "get_mobility_logs", "get_pomodoro_daily_summary"],
+         "get_supplement_logs", "get_mobility_logs", "get_pomodoro_daily_summary",
+         "get_daily_aggregates"],
     )
     def test_a_read_returns_empty_rather_than_raising(self, offline_client, method):
         assert getattr(offline_client, method)() == []
@@ -34,11 +35,6 @@ class TestReadsWhileTheServiceIsDown:
 
         assert len(caplog.records) == 1
         assert "/api/logs/food" in caplog.text
-
-    def test_derived_reads_survive_an_empty_response(self, offline_client):
-        assert offline_client.get_exercise_logs() == []
-        assert offline_client.get_beverage_logs() == []
-        assert offline_client.get_daily_aggregates() == []
 
 
 class TestWritesWhileTheServiceIsDown:
