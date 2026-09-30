@@ -78,15 +78,8 @@ class TestExerciseRow:
         assert by_name["Overhead Press"].metric_type == "Reps"
         assert by_name["Plank"].metric_type == "Seconds"
 
-    def test_the_columns_the_exercise_tab_renders_stop_before_the_metric_type(
-        self, db_client, seeded_catalog, member_a
-    ):
-        member_a.post("/api/logs/exercise", json=PRESS)
-
-        (row,) = db_client.get_exercise_logs()
-
-        assert row[1:ExerciseLogRow.DISPLAY_COLUMNS + 1][-1] == row.onerm
-        assert len(row) == ExerciseLogRow.DISPLAY_COLUMNS + 2, "id, the shown columns, metric_type"
+    def test_the_metric_type_follows_every_column_the_exercise_tab_renders(self):
+        assert ExerciseLogRow._fields[-2:] == ("onerm", "metric_type")
 
 
 class TestSupplementRow:

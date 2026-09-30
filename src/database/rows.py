@@ -1,3 +1,4 @@
+from functools import cache
 from typing import NamedTuple, Optional
 
 from src.domain import formulas, plans
@@ -9,24 +10,29 @@ def _count(value):
     return int(number) if number.is_integer() else number
 
 
-def _written(value) -> str:
-    return str(int(value)) if float(value).is_integer() else str(value)
-
-
 def total(rows, field: str) -> float:
     """Sum one field across rows, counting an orphan's None as zero."""
     return sum(float(getattr(row, field, None) or 0.0) for row in rows)
 
-_HEADING_TYPES = {}
+
+def _by_name(cls, row):
+    """Return row, a JSON object, as cls, matched field by field."""
+    try:
+        return cls(*(row[field] for field in cls._fields))
+    except (KeyError, TypeError) as missing:
+        raise ValueError(
+            f"{cls.__name__} cannot be built from {sorted(row)}: {missing}") from None
 
 
+def _in_order(cls, row):
+    """Return row, a JSON array, as cls."""
+    return cls(*row)
+
+
+@cache
 def heading_type(row_type):
     """Return row_type again, marked as a heading."""
-    made = _HEADING_TYPES.get(row_type)
-    if made is None:
-        made = type(f"{row_type.__name__}Heading", (row_type,), {"is_heading": True})
-        _HEADING_TYPES[row_type] = made
-    return made
+    return type(f"{row_type.__name__}Heading", (row_type,), {"is_heading": True})
 
 
 def heading_over(rows):
@@ -159,21 +165,12 @@ class MatchedTotals(NamedTuple):
     def of(cls, rows) -> "MatchedTotals":
         rows = [row for row in rows
                 if row is not None and not getattr(row, "is_heading", False)]
-        dates = sorted(str(date) for date in
-                       (getattr(row, "date", None) for row in rows) if date)
+        dates = [str(date) for date in
+                 (getattr(row, "date", None) for row in rows) if date]
         return cls(len(rows), total(rows, "servings"), total(rows, "grams"),
                    *(total(rows, field) for field in NUTRIENT_FIELDS),
                    sum(1 for row in rows if getattr(row, "estimated", False)),
-                   dates[0] if dates else None, dates[-1] if dates else None)
-
-
-def _by_name(cls, row):
-    """Return row, a JSON object, as cls, matched field by field."""
-    try:
-        return cls(*(row[field] for field in cls._fields))
-    except (KeyError, TypeError) as missing:
-        raise ValueError(
-            f"{cls.__name__} cannot be built from {sorted(row)}: {missing}") from None
+                   min(dates, default=None), max(dates, default=None))
 
 
 def completion_name(row) -> str:
@@ -199,9 +196,7 @@ class FoodItemRow(NamedTuple):
 
     COMPLETION_FIELD = "name"
 
-    @classmethod
-    def from_server(cls, row) -> "FoodItemRow":
-        return _by_name(cls, row)
+    from_server = classmethod(_by_name)
 
 
 class BeverageItemRow(NamedTuple):
@@ -214,9 +209,7 @@ class BeverageItemRow(NamedTuple):
 
     COMPLETION_FIELD = "name"
 
-    @classmethod
-    def from_server(cls, row) -> "BeverageItemRow":
-        return _by_name(cls, row)
+    from_server = classmethod(_by_name)
 
 
 class ExerciseItemRow(NamedTuple):
@@ -235,9 +228,7 @@ class ExerciseItemRow(NamedTuple):
 
     COMPLETION_FIELD = "name"
 
-    @classmethod
-    def from_server(cls, row) -> "ExerciseItemRow":
-        return _by_name(cls, row)
+    from_server = classmethod(_by_name)
 
 
 class SupplementItemRow(NamedTuple):
@@ -260,9 +251,7 @@ class SupplementItemRow(NamedTuple):
 
     COMPLETION_FIELD = "name"
 
-    @classmethod
-    def from_server(cls, row) -> "SupplementItemRow":
-        return _by_name(cls, row)
+    from_server = classmethod(_by_name)
 
 
 class MobilityItemRow(NamedTuple):
@@ -275,9 +264,7 @@ class MobilityItemRow(NamedTuple):
 
     COMPLETION_FIELD = "name"
 
-    @classmethod
-    def from_server(cls, row) -> "MobilityItemRow":
-        return _by_name(cls, row)
+    from_server = classmethod(_by_name)
 
 
 class SetComponentRow(NamedTuple):
@@ -290,13 +277,7 @@ class SetComponentRow(NamedTuple):
 
     COMPLETION_FIELD = "set_name"
 
-    @property
-    def grams(self) -> Optional[float]:
-        return self.amount
-
-    @classmethod
-    def from_server(cls, row) -> "SetComponentRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class WorkoutComponentRow(NamedTuple):
@@ -315,9 +296,7 @@ class WorkoutComponentRow(NamedTuple):
 
     COMPLETION_FIELD = "set_name"
 
-    @classmethod
-    def from_server(cls, row) -> "WorkoutComponentRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class BeverageLogRow(NamedTuple):
@@ -364,8 +343,6 @@ class ExerciseLogRow(NamedTuple):
     onerm: str
     metric_type: Optional[str]
 
-    DISPLAY_COLUMNS = 15
-
     SET_FIELD = "workout"
     NAME_FIELD = "name"
     GROUP_FIELDS = ("date",)
@@ -373,15 +350,12 @@ class ExerciseLogRow(NamedTuple):
 
     @classmethod
     def from_server(cls, row) -> "ExerciseLogRow":
-        (id_, date, name, workout, s1, s2, s3, s4, s5, weight, rpe,
-         muscle_group, metric_type) = row
-        sets = [_count(value) for value in (s1, s2, s3, s4, s5)]
-        total_reps = sum(sets)
-        max_reps = max(sets)
+        id_, date, name, workout, *worked, weight, rpe, muscle_group, metric_type = row
+        sets = [_count(value) for value in worked]
+        total_reps, max_reps = _count(sum(sets)), max(sets)
 
         if metric_type == "Seconds":
-            volume = 0.0
-            onerm = "N/A"
+            volume, onerm = 0.0, "N/A"
         else:
             volume = formulas.training_volume(total_reps, weight)
             estimate = formulas.estimated_1rm(weight, max_reps)
@@ -390,16 +364,12 @@ class ExerciseLogRow(NamedTuple):
         return cls(
             id_, date, name, workout, *sets,
             weight, rpe, muscle_group,
-            _count(total_reps), _count(max_reps), volume, onerm, metric_type,
+            total_reps, max_reps, volume, onerm, metric_type,
         )
 
     @property
     def sets(self):
         return (self.set1, self.set2, self.set3, self.set4, self.set5)
-
-    @property
-    def is_time_based(self) -> bool:
-        return self.metric_type == "Seconds"
 
     @property
     def active_sets(self) -> int:
@@ -412,12 +382,12 @@ class ExerciseLogRow(NamedTuple):
         worked = list(self.sets)
         while len(worked) > 1 and worked[-1] == 0:
             worked.pop()
-        return ",".join(_written(value) for value in worked)
+        return ",".join(map(str, worked))
 
     @property
     def one_rep_max(self) -> float:
         """Return the estimate as a number, for a timeline that must plot one."""
-        if self.is_time_based:
+        if self.metric_type == "Seconds":
             return 0.0
         return formulas.one_rep_max_or_weight(self.weight_kg, self.max_reps)
 
@@ -450,9 +420,7 @@ class SupplementLogRow(NamedTuple):
                       "dha_mg", "epa_mg", "calcium_mg", "magnesium_mg",
                       "zinc_mg", "c_mg", "l_theanine_mg")
 
-    @classmethod
-    def from_server(cls, row) -> "SupplementLogRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class MobilityLogRow(NamedTuple):
@@ -470,9 +438,7 @@ class MobilityLogRow(NamedTuple):
     GROUP_FIELDS = ("date",)
     HEADING_TOTALS = ("duration_mins",)
 
-    @classmethod
-    def from_server(cls, row) -> "MobilityLogRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class PomodoroDailyRow(NamedTuple):
@@ -484,9 +450,7 @@ class PomodoroDailyRow(NamedTuple):
     focus_overtime_mins: int
     rest_overtime_mins: int
 
-    @classmethod
-    def from_server(cls, row) -> "PomodoroDailyRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class TrainingPlanRow(NamedTuple):
@@ -501,9 +465,7 @@ class TrainingPlanRow(NamedTuple):
 
     COMPLETION_FIELD = "name"
 
-    @classmethod
-    def from_server(cls, row) -> "TrainingPlanRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class PlanSessionRow(NamedTuple):
@@ -517,9 +479,7 @@ class PlanSessionRow(NamedTuple):
     notes: Optional[str]
     movement_count: int
 
-    @classmethod
-    def from_server(cls, row) -> "PlanSessionRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class PlanMovementRow(NamedTuple):
@@ -540,9 +500,7 @@ class PlanMovementRow(NamedTuple):
     notes: Optional[str]
     metric_type: Optional[str]
 
-    @classmethod
-    def from_server(cls, row) -> "PlanMovementRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class PlannedMovementRow(NamedTuple):
@@ -560,8 +518,6 @@ class PlannedMovementRow(NamedTuple):
     logged: str
     result: str
     notes: Optional[str]
-
-    DISPLAY_COLUMNS = 11
 
     @classmethod
     def of(cls, movement, log_row) -> "PlannedMovementRow":
@@ -589,9 +545,7 @@ class ChoreRow(NamedTuple):
 
     COMPLETION_FIELD = "name"
 
-    @classmethod
-    def from_server(cls, row) -> "ChoreRow":
-        return _by_name(cls, row)
+    from_server = classmethod(_by_name)
 
 
 class ChoreDoneRow(NamedTuple):
@@ -602,9 +556,7 @@ class ChoreDoneRow(NamedTuple):
     name: str
     done_by: Optional[str]
 
-    @classmethod
-    def from_server(cls, row) -> "ChoreDoneRow":
-        return cls(*row)
+    from_server = classmethod(_in_order)
 
 
 class ChoreBoardRow(NamedTuple):
