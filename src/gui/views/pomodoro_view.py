@@ -43,6 +43,9 @@ RELEASE_KEY_NAME = "ESC"
 UNDO_KEY = Qt.Key.Key_Backspace
 UNDO_KEY_NAME = "BACKSPACE"
 
+PAGE_BACK_KEY = Qt.Key.Key_0
+PAGE_BACK_KEY_NAME = "CTRL 0"
+
 LONG_BREAK_EVENT = "long_break_started"
 
 HOLD_TICK_MS = 50
@@ -1558,6 +1561,8 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("0", "back to the decks" if getattr(pane, "from_list", False)
                  else "back to Traker"),
             ]
+        elif kind == break_activities.PAGE:
+            hints = [(PAGE_BACK_KEY_NAME, "back to Traker")]
         elif kind == break_activities.BOOK:
             ahead, behind = (("\u2190", "\u2192") if getattr(pane, "rtl", False)
                              else ("\u2192", "\u2190"))
@@ -1575,7 +1580,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("\u2191 \u2193", "scroll" if paging else "volume"),
                 zero,
             ]
-        if len(self._offers) > 1:
+        if len(self._offers) > 1 and kind != break_activities.PAGE:
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
         if self.prompts_for_focus():
             hints.append((RELEASE_KEY_NAME, "start focus"))
@@ -1704,7 +1709,7 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _playing(self) -> tuple:
         """Return what is showing and where it has reached: (name, place, unit)."""
         if (self._showing is None or self.media_surface is None
-                or self._showing.kind == break_activities.SHELF):
+                or self._showing.kind in (break_activities.SHELF, break_activities.PAGE)):
             return None
         place = self.media_surface.place()
         return ((self.media_surface.title(),) + place) if place else None
@@ -1775,6 +1780,13 @@ class PomodoroView(ShutdownMixin, QWidget):
                 self.cancel_hold()
             return True
 
+        if self._strict_engaged and self._page_takes_keys():
+            if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat() \
+                    and event.key() == PAGE_BACK_KEY \
+                    and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                return self._drive_media(PAGE_BACK_KEY)
+            return super().eventFilter(watched, event)
+
         if self._strict_engaged:
             if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat() \
                     and not is_typing_into(watched):
@@ -1790,6 +1802,10 @@ class PomodoroView(ShutdownMixin, QWidget):
                     self.tick_chore(chore.id)
                     return True
         return super().eventFilter(watched, event)
+
+    def _page_takes_keys(self) -> bool:
+        """Report whether a web page shows, which every key reaches but the break's own."""
+        return self._showing is not None and self._showing.kind == break_activities.PAGE
 
     def _activity_for(self, key):
         """Return the offer a key opens, or None for a key left alone."""
@@ -1977,7 +1993,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self._showing is None or self.media_surface is None:
             return
         where = self.media_surface.stop()
-        if self._showing.kind not in (break_activities.DECK, break_activities.SHELF):
+        if self._showing.kind not in (break_activities.DECK, break_activities.SHELF,
+                                      break_activities.PAGE):
             rest_positions.remember(self._showing.path, where.at,
                                     self._positions_path, where.of)
         self._showing = None

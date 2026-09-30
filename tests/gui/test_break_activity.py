@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 import src.profile as profile_module
 from src.desktop import rest_positions, rest_queue
-from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, SHELF, VIDEO,
+from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, VIDEO,
                                     BreakActivity)
 from src.domain.media import Place
 from src.gui.commands import COMMANDS
@@ -39,6 +39,14 @@ deck = "Japanese"
 [[strict_break.activities]]
 name = "Anki"
 deck = "*"
+"""
+
+PAGE_URL = "http://127.0.0.1:9743/?via=break"
+
+PAGE_TOML = f"""
+[[strict_break.activities]]
+name = "Tutor"
+url = "{PAGE_URL}"
 """
 
 
@@ -201,6 +209,14 @@ def with_a_deck(with_no_wait):
 
 
 @pytest.fixture
+def with_a_page(with_no_wait):
+    with_no_wait.write_text(with_no_wait.read_text(encoding="utf-8") + PAGE_TOML,
+                            encoding="utf-8")
+    profile_module.reload_profile()
+    return with_no_wait
+
+
+@pytest.fixture
 def media(tmp_path):
     folder = tmp_path / "Media"
     for name in ("Books/a.epub", "Books/b.epub", "Videos/e1.mkv", "Videos/e2.mkv"):
@@ -233,6 +249,11 @@ def library_timer(qapp, app_id, with_library, recording_db):
 
 @pytest.fixture
 def deck_timer(qapp, app_id, with_a_deck, recording_db):
+    yield from a_view(recording_db)
+
+
+@pytest.fixture
+def page_timer(qapp, app_id, with_a_page, recording_db):
     yield from a_view(recording_db)
 
 
@@ -1445,6 +1466,58 @@ class TestADeck:
         send_key(reviewing, Qt.Key.Key_0)
 
         assert rest_positions.read(reviewing._positions_path) == {}
+
+
+def press(view, key, modifiers=Qt.KeyboardModifier.NoModifier) -> bool:
+    return view.eventFilter(view, QKeyEvent(QEvent.Type.KeyPress, key, modifiers))
+
+
+class TestAPage:
+    @pytest.fixture
+    def browsing(self, page_timer):
+        enter_strict_break(page_timer)
+        send_key(page_timer, Qt.Key.Key_3)
+        return page_timer
+
+    def test_its_key_opens_the_url_it_names(self, browsing):
+        assert showing_pane(browsing).activity == BreakActivity("Tutor", PAGE_URL, PAGE)
+
+    @pytest.mark.parametrize("key", [Qt.Key.Key_Return, Qt.Key.Key_1, Qt.Key.Key_0,
+                                     Qt.Key.Key_Space, Qt.Key.Key_Right, Qt.Key.Key_A,
+                                     Qt.Key.Key_Backspace])
+    def test_every_other_key_reaches_the_page(self, browsing, key):
+        assert press(browsing, key) is False
+        assert showing_pane(browsing).calls == []
+        assert browsing._showing.kind == PAGE
+
+    def test_ctrl_0_puts_the_wall_back(self, browsing):
+        assert press(browsing, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier) is True
+
+        assert browsing._showing is None
+
+    def test_the_release_key_is_the_break_s_all_the_same(self, browsing):
+        assert press(browsing, RELEASE_KEY) is True
+
+        assert browsing._hold_timer.isActive() is True
+
+    def test_the_strip_under_it_names_both_keys_in_place_of_the_card(self, browsing):
+        surface = browsing.media_surface
+
+        assert surface.keys.isVisible() is False
+        assert surface.strip.text().endswith(
+            "CTRL 0 BACK TO TRAKER · ESC 10s LEAVE THE BREAK")
+
+    def test_it_leaves_no_place_behind_to_resume(self, browsing):
+        press(browsing, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier)
+
+        assert rest_positions.read(browsing._positions_path) == {}
+
+    def test_the_hook_hears_a_page(self, browsing, settled):
+        browsing.hook = told = Told()
+        browsing._follow_the_state()
+        settled()
+
+        assert told.states == ["page"]
 
 
 class TestEveryDeck:

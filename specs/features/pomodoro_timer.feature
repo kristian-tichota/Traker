@@ -681,6 +681,19 @@ Feature: Focus timer
       Then the wall beside it counts the cards answered out of those still owed today
       And nothing about a deck is kept where the positions of files are
 
+  Rule: A held break opens a web page I named
+
+    Scenario: The page takes the keyboard
+      Given my profile names an activity with a url
+      When I press that offer's key
+      Then the wall shows that page with the keyboard focus
+      And every key reaches the page except the release key and CTRL+0, which puts the wall back
+      And the strip under the page names those two keys
+
+    Scenario: The page is not answering
+      When I press that offer's key and the page does not load
+      Then that screen says it cannot open the url, and the break goes on
+
   Rule: What to open on a break is queued, not configured
 
     Scenario: Queuing something

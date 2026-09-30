@@ -256,7 +256,8 @@ do_not_disturb = true
 anki_url = "http://127.0.0.1:8765"
 
 # What a break may open on the screen it took: a PDF is read, an EPUB is read
-# as a book, anything else is played, and a deck is reviewed in Anki. The queue
+# as a book, anything else is played, a deck is reviewed in Anki, and a url is
+# opened as a web page. The queue
 # is offered first, then these entries, then the library below, each only on
 # its key: the first on Enter, the rest on 1-9 in that order.
 #
@@ -270,7 +271,8 @@ anki_url = "http://127.0.0.1:8765"
 # and RIGHT answer Good, LEFT answers Again, and BACKSPACE takes the last answer
 # back. A deck of "*" lists every deck in Anki first: UP/DOWN choose one,
 # LEFT/RIGHT skip to one with cards due, SPACE reviews it, and 0 in it goes back
-# to the list.
+# to the list. A web page takes every key but ESC; CTRL+0 puts the wall back,
+# and its storage is kept in ~/.config/traker/pages.
 #
 # [[strict_break.activities]]
 # name = "Reading"
@@ -283,6 +285,10 @@ anki_url = "http://127.0.0.1:8765"
 # [[strict_break.activities]]
 # name = "Anki"
 # deck = "*"
+#
+# [[strict_break.activities]]
+# name = "Notes"
+# url = "http://127.0.0.1:8080/"
 
 # Where the queue of paths added with ":rest <path>" is kept. It is a plain
 # file, one path per line, m3u-shaped, so anything else may append to it.

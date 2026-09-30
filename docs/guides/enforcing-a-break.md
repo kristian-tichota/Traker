@@ -34,19 +34,23 @@ path per line, so any process can append to it; `:rest` reads, extends and prune
 kept in `rest-positions.json`, so a film or a book spans several breaks.
 
 A film needs the `video` extra and the system `libmpv` (`media-video/mpv` with `USE="libmpv"`), which
-no lockfile carries; an EPUB and an Anki deck need QtWebEngine, the `anki` extra. Without them the
-screen displays `COULD NOT PLAY`, `COULD NOT READ` or `COULD NOT REVIEW`, and the break still holds.
+no lockfile carries; an EPUB, an Anki deck and a web page need QtWebEngine, the `anki` extra. Without
+them the screen displays `COULD NOT PLAY`, `COULD NOT READ`, `COULD NOT REVIEW` or `COULD NOT OPEN`,
+and the break still holds.
 
 A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`, which chooses, schedules
 and sounds every card; the wall draws it in Solarized light, forwards the keys and confirms each
 answer on the next card. A `deck` of `*` lists every deck first. Anki MUST be running, its window MAY
 stay minimized, and its timebox MUST be 0.
 
+A `url` opens as a web page that takes every key except `Esc` and `Ctrl+0`, which puts the wall back.
+It stays loaded until the walls go, and its storage persists in `~/.config/traker/pages`.
+
 ## State hook
 
 `[hooks] state` is a shell command run each time what the break shows changes, with `{state}` replaced
-by `focus`, `break`, `video`, `document`, `book` or `deck`. Runs go one at a time off the interface
-thread; a burst of changes is one run of its last state, and quitting tells `focus`.
+by `focus`, `break`, `video`, `document`, `book`, `deck` or `page`. Runs go one at a time off the
+interface thread; a burst of changes is one run of its last state, and quitting tells `focus`.
 
 ## Session verification
 

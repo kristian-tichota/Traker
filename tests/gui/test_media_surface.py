@@ -1,3 +1,4 @@
+import socket
 import sys
 import tempfile
 import time
@@ -15,12 +16,13 @@ from src.desktop.activities import (ANY_DECK, BOOK, BreakActivity, DECK, DOCUMEN
 from src.config import PALETTE
 from src.domain import media
 from src.domain.media import Place
-from src.gui.components import media_progress
+from src.gui.components import media_progress, media_surface
 from src.gui.components.book_pane import BookPane
 from src.gui.components.media_surface import (AGAIN_SAID, ANSWER, GOOD_SAID, QUESTION,
                                               UNDONE, DeckPane, DocumentPane,
                                               LibraryPane, MediaSurface, MpvScreen,
-                                              VideoPane, build_pane, card_page)
+                                              PagePane, VideoPane, build_pane,
+                                              card_page)
 from tests.anki_double import FakeAnki
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact, pytest.mark.accessibility]
@@ -330,6 +332,63 @@ class TestReadingABook:
         settled()
 
         assert list(scratch.iterdir()) == []
+
+
+@pytest.fixture
+def browsing(qapp, monkeypatch):
+    from PyQt6.QtWebEngineCore import QWebEngineProfile
+    profile = QWebEngineProfile()
+    monkeypatch.setattr(media_surface, "_page_profile", lambda: profile)
+    opened = []
+
+    def _open(url):
+        pane = PagePane(url)
+        opened.append(pane)
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not (pane.loaded or failure_of(pane)):
+            qapp.processEvents()
+            time.sleep(0.005)
+        return pane
+
+    yield _open
+    for pane in opened:
+        pane.shutdown()
+
+
+def closed_port() -> int:
+    with socket.socket() as bound:
+        bound.bind(("127.0.0.1", 0))
+        return bound.getsockname()[1]
+
+
+class TestOpeningAPage:
+    def test_a_page_that_loads_is_shown(self, browsing):
+        pane = browsing("data:text/html,<p>x</p>")
+
+        assert pane.loaded and failure_of(pane) == ""
+
+    def test_the_same_url_again_keeps_the_page_as_it_was_left(self, browsing, monkeypatch):
+        pane = browsing("data:text/html,<p>x</p>")
+        loads = []
+        monkeypatch.setattr(pane.view, "load", loads.append)
+
+        pane.open("data:text/html,<p>x</p>")
+
+        assert loads == []
+
+    def test_a_page_that_does_not_answer_says_so(self, browsing):
+        url = f"http://127.0.0.1:{closed_port()}/"
+
+        pane = browsing(url)
+
+        assert f"COULD NOT OPEN {url}" == failure_of(pane).replace("\n", " ")
+
+    def test_a_machine_without_the_web_engine_says_so(self, qapp, monkeypatch):
+        monkeypatch.setitem(sys.modules, "PyQt6.QtWebEngineWidgets", None)
+
+        pane = PagePane()
+
+        assert pane.view is None and "COULD NOT OPEN" in failure_of(pane)
 
 
 class TestPlayingAVideo:

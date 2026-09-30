@@ -3,7 +3,7 @@ import os
 import pytest
 
 from src.desktop import activities as break_activities
-from src.desktop.activities import BOOK, DECK, DOCUMENT, SHELF, VIDEO, BreakActivity
+from src.desktop.activities import BOOK, DECK, DOCUMENT, PAGE, SHELF, VIDEO, BreakActivity
 from src.domain.media import Place
 
 pytestmark = pytest.mark.exact
@@ -37,9 +37,18 @@ class TestTheStandingEntries:
 
         assert read == [break_activities.BreakActivity("Japanese", "Japanese", DECK)]
 
-    def test_one_naming_both_a_file_and_a_deck_is_skipped(self):
-        assert break_activities.read([{"name": "R", "path": "/x/a.pdf",
-                                       "deck": "Japanese"}]) == []
+    def test_a_url_is_opened_as_a_page(self):
+        read = break_activities.read([{"name": "Tutor", "url": "http://127.0.0.1:9743/"}])
+
+        assert read == [BreakActivity("Tutor", "http://127.0.0.1:9743/", PAGE)]
+
+    @pytest.mark.parametrize("entry", [
+        {"name": "R", "path": "/x/a.pdf", "deck": "Japanese"},
+        {"name": "R", "path": "/x/a.pdf", "url": "http://x/"},
+        {"name": "R", "deck": "Japanese", "url": "http://x/"},
+    ])
+    def test_one_naming_more_than_one_thing_to_show_is_skipped(self, entry):
+        assert break_activities.read([entry]) == []
 
     def test_the_order_is_the_members(self):
         read = break_activities.read([{"name": "B", "path": "/x/b.mkv"},

@@ -1,3 +1,4 @@
+import functools
 import logging
 import os
 import re
@@ -6,13 +7,13 @@ from PyQt6 import sip
 from PyQt6.QtCore import QPointF, QThreadPool, QUrl, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QOpenGLContext, QPalette
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtWidgets import (QAbstractItemView, QFrame, QHeaderView, QLabel,
+from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QFrame, QHeaderView, QLabel,
                              QStackedWidget, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
 from src.config import PALETTE
 from src.desktop import anki, rest_positions, rest_queue
-from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, SHELF, contents,
+from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, contents,
                                     kind_of, library_for, readout_of)
 from src.domain.media import UNKNOWN, Place, as_elapsed, finished, how_far
 from src.gui.components.book_pane import BookPane
@@ -27,6 +28,8 @@ SEEK_MS = 30_000
 
 VOLUME_STEP = 0.1
 SCROLL_STEP_PX = 160
+
+PAGE_STORAGE = os.path.expanduser("~/.config/traker/pages")
 
 QUESTION, ANSWER = "question", "answer"
 
@@ -832,6 +835,93 @@ def _how_far_into(entry, places) -> tuple:
     return ("" if said == UNKNOWN else said), finished(place, unit)
 
 
+@functools.cache
+def _page_profile():
+    """Return the profile every web page shares, whose storage outlives the break."""
+    from PyQt6.QtWebEngineCore import QWebEngineProfile
+    profile = QWebEngineProfile(os.path.basename(PAGE_STORAGE), QApplication.instance())
+    profile.setPersistentStoragePath(PAGE_STORAGE)
+    profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
+    return profile
+
+
+class PagePane(QWidget):
+    """One web page, which every key reaches but the break's own."""
+
+    def __init__(self, url=None, start_at=0, parent=None):
+        super().__init__(parent)
+        self.url = ""
+        self.loaded = False
+        self.view = None
+        self._message = None
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        try:
+            from PyQt6.QtWebEngineCore import QWebEnginePage
+            from PyQt6.QtWebEngineWidgets import QWebEngineView
+        except ImportError as error:
+            log.warning("No web page in a break: %s", error)
+            self._show_message(f"COULD NOT OPEN\n{error}")
+            return
+
+        self.view = QWebEngineView(self)
+        self.view.setPage(QWebEnginePage(_page_profile(), self.view))
+        self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        self.view.page().setBackgroundColor(QColor(PALETTE['base3']))
+        self.view.loadFinished.connect(self._finished)
+        layout.addWidget(self.view)
+        if url:
+            self.open(url, start_at)
+
+    def open(self, url, start_at=0):
+        """Load url and take the keyboard, keeping a page already loaded as it was left."""
+        if self.view is None:
+            return
+        if str(url) != self.url or not self.loaded:
+            self.url = str(url)
+            self._clear_message()
+            self.view.load(QUrl(self.url))
+        self.view.setFocus()
+
+    def position(self) -> int:
+        return 0
+
+    def duration(self) -> int:
+        return 0
+
+    def stop(self):
+        """Leave the page loaded, to be shown again as it was left."""
+
+    def shutdown(self):
+        """Destroy the web view at once."""
+        if self.view is not None:
+            sip.delete(self.view)
+            self.view = None
+
+    def _finished(self, ok):
+        self.loaded = bool(ok)
+        if ok:
+            self._clear_message()
+            return
+        log.warning("Could not open %s in a break.", self.url)
+        self._show_message(f"COULD NOT OPEN\n{self.url}")
+
+    def _show_message(self, text):
+        self._clear_message()
+        if self.view is not None:
+            self.view.hide()
+        self._message = _failure_label(self, text)
+        self.layout().addWidget(self._message)
+
+    def _clear_message(self):
+        if self._message is not None:
+            self._message.deleteLater()
+            self._message = None
+        if self.view is not None:
+            self.view.show()
+
+
 class LibraryPane(QWidget, _MarkedList):
     """The media folder as a list, a folder at a time, to open a file from."""
 
@@ -958,6 +1048,8 @@ def build_pane(activity, start_at=0, parent=None) -> QWidget:
         return BookPane(activity.path, start_at, parent)
     if activity.kind == SHELF:
         return LibraryPane(activity.path, start_at, parent)
+    if activity.kind == PAGE:
+        return PagePane(activity.path, start_at, parent)
     return VideoPane(activity.path, start_at, parent)
 
 
@@ -1028,21 +1120,26 @@ class MediaSurface(QWidget):
             pane.open(activity.path, start_at)
 
         self.activity = activity
-        self._dress(light=activity.kind in (BOOK, DECK, SHELF))
+        self._dress(light=activity.kind in (BOOK, DECK, SHELF, PAGE))
         self.stack.setCurrentWidget(pane)
         self.set_keys(key_hints)
         if self.progress is not None:
-            self.progress.setVisible(activity.kind != SHELF)
+            self.progress.setVisible(activity.kind not in (SHELF, PAGE))
             self.show_progress()
         self._place_the_overlays()
         self.update_display()
         return pane
 
     def set_keys(self, hints):
-        """Name the keys that drive what is showing, or none of them."""
+        """Name the keys that drive what is showing, under a page and over anything else."""
         self.keys.set_hints(hints)
-        self.keys.setVisible(bool(hints) and self._only_screen)
+        self.keys.setVisible(bool(hints) and self._only_screen and not self._under_a_page())
         self._place_the_overlays()
+        self.update_display()
+
+    def _under_a_page(self) -> bool:
+        """Report whether a web page fills the surface, leaving the keys to the strip."""
+        return self.activity is not None and self.activity.kind == PAGE
 
     def stop(self):
         """Stop what is showing and return the place it reached."""
@@ -1060,7 +1157,7 @@ class MediaSurface(QWidget):
         return where
 
     def _dress(self, light):
-        """Paint the surface Solarized light around a book, a deck or a list, else dark."""
+        """Paint the surface Solarized light around a book, a deck, a page or a list."""
         self.setStyleSheet(f"#mediaSurface {{ background-color: "
                            f"{PALETTE['base3' if light else 'base03']}; }}")
         self.keys.set_light(light)
@@ -1121,14 +1218,14 @@ class MediaSurface(QWidget):
             left = max(0, int(round(self.timer_ref.release_hold_secs * (1.0 - fraction))))
             self.strip.setText(f"LEAVING IN {left}s")
             return
+        way_on = (" · ".join(f"{key} {says.upper()}" for key, says in self.keys.hints)
+                  if self._under_a_page() else self.timer_ref.wall_hint())
         if self.timer_ref.waiting_for_work_start:
             self.strip.setText(
-                f"BREAK OVER +{as_elapsed(self.timer_ref.over_by_ms())}"
-                f" · {self.timer_ref.wall_hint()}")
+                f"BREAK OVER +{as_elapsed(self.timer_ref.over_by_ms())} · {way_on}")
             return
         mins, secs = divmod(int(self.timer_ref.time_left_ms // 1000), 60)
-        self.strip.setText(
-            f"REST {mins:02d}:{secs:02d} · {self.timer_ref.wall_hint()}")
+        self.strip.setText(f"REST {mins:02d}:{secs:02d} · {way_on}")
 
     def show_hold(self, fraction, visible):
         """Show how much of the exit hold has been paid."""
