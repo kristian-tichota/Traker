@@ -70,10 +70,6 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         return run_in_background(self.threadpool, fn, on_result, on_error,
                                  *args, **kwargs)
 
-    def refresh_profile(self):
-        """Re-read the profile this chart draws against, before drawing."""
-        self.profile.reload()
-
     paused_timer_attribute = "pulse_timer"
 
     @property
@@ -109,8 +105,8 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
         self._needs_bg_recapture = True
 
     def refresh(self):
-        """Read this chart's rows and draw them, all on a worker thread."""
-        self.refresh_profile()
+        """Re-read the profile, then read and draw this chart's rows on a worker thread."""
+        self.profile.reload()
         self.prepare_refresh()
         self._render(read=True)
 

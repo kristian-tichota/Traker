@@ -29,25 +29,19 @@ class ChartCanvas(QWidget):
         self.spinner = LoadingSpinner(self)
 
     @property
-    def figure(self):
-        return self._agg.figure
-
-    @property
     def device_pixel_ratio(self) -> float:
         return self._agg.device_pixel_ratio
 
     def mpl_connect(self, signal, func):
-        """Return the matplotlib callback registry, unchanged."""
+        """Connect func to a matplotlib event, returning the connection id."""
         return self._agg.mpl_connect(signal, func)
 
     def size_figure_for(self, size, ratio):
         """Resize the figure to a canvas size measured on the interface thread."""
         figure = self._agg.figure
-        if figure is None:
-            return
         self._agg._set_device_pixel_ratio(ratio or 1.0)
-        width = max(1, size.width()) * self._agg.device_pixel_ratio
-        height = max(1, size.height()) * self._agg.device_pixel_ratio
+        width = max(1, size.width()) * self.device_pixel_ratio
+        height = max(1, size.height()) * self.device_pixel_ratio
         figure.set_size_inches(width / figure.dpi, height / figure.dpi, forward=False)
 
     def draw_offscreen(self):
