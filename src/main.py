@@ -5,11 +5,12 @@ import sys
 os.environ["QT_LOGGING_RULES"] = "qt.qpa.services=false;qt.qpa.services.warning=false"
 os.environ["QT_QPA_PLATFORM"] = "wayland;xcb"
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(ROOT_DIR)
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette, QColor
-from PyQt6.QtCore import QLoggingCategory, Qt
+from PyQt6.QtCore import Qt
 from src.database import DatabaseClient
 from src.desktop.kwin import release_stale_hold
 from src.gui.main_window import MainWindow
@@ -20,19 +21,17 @@ from backup import execute_safe_backup
 log = logging.getLogger(__name__)
 
 
+PALETTE_ROLES = {
+    "Window": "base3", "WindowText": "base00", "Base": "base3", "AlternateBase": "base2",
+    "ToolTipBase": "base3", "ToolTipText": "base00", "Text": "base00", "Button": "base2",
+    "ButtonText": "base01", "Highlight": "base2", "HighlightedText": "base02",
+}
+
+
 def create_solarized_palette() -> QPalette:
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(PALETTE['base3']))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(PALETTE['base00']))
-    palette.setColor(QPalette.ColorRole.Base, QColor(PALETTE['base3']))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(PALETTE['base2']))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(PALETTE['base3']))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(PALETTE['base00']))
-    palette.setColor(QPalette.ColorRole.Text, QColor(PALETTE['base00']))
-    palette.setColor(QPalette.ColorRole.Button, QColor(PALETTE['base2']))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(PALETTE['base01']))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(PALETTE['base2']))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(PALETTE['base02']))
+    for role, colour in PALETTE_ROLES.items():
+        palette.setColor(getattr(QPalette.ColorRole, role), QColor(PALETTE[colour]))
     return palette
 
 
@@ -42,12 +41,11 @@ def ensure_desktop_entry():
     if not os.path.exists(desktop_file):
         try:
             os.makedirs(desktop_dir, exist_ok=True)
-            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             entry_content = f"""[Desktop Entry]
 Type=Application
 Name=Traker
-Exec={sys.executable} {os.path.join(root_dir, 'src', 'main.py')}
-Path={root_dir}
+Exec={sys.executable} {os.path.join(ROOT_DIR, 'src', 'main.py')}
+Path={ROOT_DIR}
 Terminal=false
 Categories=Utility;Health;
 """
@@ -59,7 +57,6 @@ Categories=Utility;Health;
 
 def main():
     configure_logging()
-    QLoggingCategory.setFilterRules("qt.qpa.services=false\nqt.qpa.services.warning=false")
     ensure_desktop_entry()
 
     execute_safe_backup()
