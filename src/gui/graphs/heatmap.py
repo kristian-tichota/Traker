@@ -20,7 +20,19 @@ def calendar_start(today: datetime.date) -> datetime.date:
         year -= 1
     return datetime.date(year, month, 1)
 
+
 CELL = 0.85
+
+LABEL = {"fontname": "Fira Code", "in_layout": False}
+
+EMPTY_RGB = mcolors.to_rgb(PALETTE['base2'])
+FULL_RGB = mcolors.to_rgb(PALETTE['green'])
+
+
+def _fill(extra_kcal):
+    """Return a day's colour, from empty towards green as 1000 kcal is reached."""
+    ratio = min(max(extra_kcal, 0.0) / 1000.0, 1.0)
+    return tuple(empty + (full - empty) * ratio for empty, full in zip(EMPTY_RGB, FULL_RGB))
 
 
 class ActivityHeatmapView(BaseGraphView):
@@ -71,80 +83,60 @@ class ActivityHeatmapView(BaseGraphView):
 
     def draw_chart(self, data):
         weight = float(self.profile.get_metric("biometrics", "weight_kg", 75.0))
-
         today = datetime.date.today()
         start_date = calendar_start(today)
-
         days_total = (today - start_date).days + 1
-        dates = [start_date + datetime.timedelta(days=i) for i in range(days_total)]
 
-        base2 = mcolors.to_rgb(PALETTE['base2'])
-        green = mcolors.to_rgb(PALETTE['green'])
-
-        def get_color(val):
-            if val <= 0: return PALETTE['base2']
-            ratio = min(val / 1000.0, 1.0)
-            r = base2[0] + (green[0] - base2[0]) * ratio
-            g = base2[1] + (green[1] - base2[1]) * ratio
-            b = base2[2] + (green[2] - base2[2]) * ratio
-            return (r, g, b)
-
-        day_labels = {6: "Mon", 4: "Wed", 2: "Fri"}
-        for y, label in day_labels.items():
-            self.ax.text(-0.5, y + 0.425, label, color=PALETTE['base01'], fontsize=8, ha='right', va='center', fontname='Fira Code')
+        for y, label in ((6, "Mon"), (4, "Wed"), (2, "Fri")):
+            self.ax.text(-0.5, y + 0.425, label, color=PALETTE['base01'], fontsize=8,
+                         ha='right', va='center', **LABEL)
 
         last_month = -1
         squares = []
-        for d in dates:
+        for offset in range(days_total):
+            d = start_date + datetime.timedelta(days=offset)
             d_iso = d.isoformat()
             day_data = data.get(d_iso, {"breakdown": {}})
-
             breakdown = day_data.get("breakdown", {})
             mob_kcal = kcal_from_met_hours(breakdown.get("Mobility", 0.0), weight)
             ex_kcal = kcal_from_met_hours(breakdown.get("Exercise_MET_hrs", 0.0), weight)
-
             extra_kcal = mob_kcal + ex_kcal
-            day_data["extra_kcal"] = extra_kcal
-            day_data["mob_kcal"] = mob_kcal
-            day_data["ex_kcal"] = ex_kcal
+            day_data.update(extra_kcal=extra_kcal, mob_kcal=mob_kcal, ex_kcal=ex_kcal)
 
-            diff_days = (d - start_date).days
-            x = (diff_days + start_date.weekday()) // 7
+            x = (offset + start_date.weekday()) // 7
             y = 6 - d.weekday()
-
-            squares.append(patches.Rectangle((x, y), CELL, CELL, facecolor=get_color(extra_kcal),
+            squares.append(patches.Rectangle((x, y), CELL, CELL, facecolor=_fill(extra_kcal),
                                              edgecolor=PALETTE['base1'], linewidth=0.3))
             self.cells[(x, y)] = {'date': d_iso, 'data': day_data}
 
-            text_color = PALETTE['base01'] if extra_kcal == 0 else PALETTE['base03']
-            font_weight = 'bold' if extra_kcal > 0 else 'normal'
-
             if extra_kcal > 0:
-                self.ax.text(x + 0.425, y + 0.55, str(d.day), color=text_color, fontsize=8, ha='center', va='center', fontname='Fira Code', weight=font_weight)
-                self.ax.text(x + 0.425, y + 0.25, f"{extra_kcal:.0f} kcal", color=text_color, fontsize=5.5, ha='center', va='center', fontname='Fira Code')
+                self.ax.text(x + 0.425, y + 0.55, str(d.day), color=PALETTE['base03'],
+                             fontsize=8, weight='bold', ha='center', va='center', **LABEL)
+                self.ax.text(x + 0.425, y + 0.25, f"{extra_kcal:.0f} kcal",
+                             color=PALETTE['base03'], fontsize=5.5, ha='center', va='center',
+                             **LABEL)
             else:
-                self.ax.text(x + 0.425, y + 0.425, str(d.day), color=text_color, fontsize=8, ha='center', va='center', fontname='Fira Code', weight=font_weight)
+                self.ax.text(x + 0.425, y + 0.425, str(d.day), color=PALETTE['base01'],
+                             fontsize=8, ha='center', va='center', **LABEL)
 
-            next_day = d + datetime.timedelta(days=1)
-            next_week = d + datetime.timedelta(days=7)
-
-            if d.month != next_day.month and d.weekday() != 6:
-                self.ax.plot([x - 0.075, x + 0.925], [y - 0.075, y - 0.075], color=PALETTE['base01'], linewidth=2)
-
-            if d.month != next_week.month:
-                self.ax.plot([x + 0.925, x + 0.925], [y - 0.075, y + 0.925], color=PALETTE['base01'], linewidth=2)
+            if d.month != (d + datetime.timedelta(days=1)).month and d.weekday() != 6:
+                self.ax.plot([x - 0.075, x + 0.925], [y - 0.075, y - 0.075],
+                             color=PALETTE['base01'], linewidth=2)
+            if d.month != (d + datetime.timedelta(days=7)).month:
+                self.ax.plot([x + 0.925, x + 0.925], [y - 0.075, y + 0.925],
+                             color=PALETTE['base01'], linewidth=2)
 
             if d.month != last_month and d.day <= 7:
-                self.ax.text(x, 7.5, d.strftime("%b"), color=PALETTE['base00'], fontsize=10, ha='left', fontname='Fira Code', weight='bold')
+                self.ax.text(x, 7.5, d.strftime("%b"), color=PALETTE['base00'], fontsize=10,
+                             ha='left', weight='bold', **LABEL)
                 last_month = d.month
 
             if d == today:
-                today_glow = patches.Rectangle((x, y), CELL, CELL, fill=False, edgecolor=PALETTE['cyan'], linewidth=1.5, zorder=5, animated=True)
+                today_glow = patches.Rectangle((x, y), CELL, CELL, fill=False,
+                                               edgecolor=PALETTE['cyan'], linewidth=1.5,
+                                               zorder=5, animated=True)
                 self.ax.add_patch(today_glow)
-                self.anim_nodes.append({
-                    'artist': today_glow,
-                    'ax': self.ax
-                })
+                self.anim_nodes.append({'artist': today_glow, 'ax': self.ax})
 
         self.ax.add_collection(PatchCollection(squares, match_original=True),
                                autolim=False)
