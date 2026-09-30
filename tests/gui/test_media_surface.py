@@ -170,6 +170,11 @@ class TestReadingADocument:
         assert pane.view.isHidden() is True
         assert "COULD NOT READ" in failure_of(pane)
 
+    def test_and_keeps_the_page_it_was_left_on(self, qapp, tmp_path):
+        pane = DocumentPane(str(tmp_path / "nothing.pdf"), start_at=7)
+
+        assert pane.position() == 7
+
     def test_a_second_file_goes_through_the_same_pane(self, qapp, paper, tmp_path):
         pane = DocumentPane(paper)
         pane.step(2)
@@ -419,6 +424,11 @@ class TestPlayingAVideo:
 
         assert pane.screen_widget.isHidden() is True
         assert failure_of(pane) == "COULD NOT PLAY\nlibmpv would not load: undefined symbol"
+
+    def test_and_keeps_the_place_it_was_left_at(self, qapp, tmp_path, refused):
+        pane = VideoPane(str(tmp_path / "talk.mkv"), start_at=754_000)
+
+        assert pane.position() == 754_000
 
     def test_it_takes_its_keys_without_raising(self, qapp, tmp_path):
         pane = VideoPane(str(tmp_path / "talk.mkv"))

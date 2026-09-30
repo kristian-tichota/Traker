@@ -178,21 +178,23 @@ class VideoPane(BreakPane):
 
     def __init__(self, path=None, start_at=0, parent=None):
         super().__init__(parent)
+        self._start_ms = 0
         self.screen_widget = MpvScreen(self)
         self.screen_widget.playback_failed.connect(self._show_failure)
         self.layout().addWidget(self.screen_widget)
         self.player = self.screen_widget.player
         if self.player is None:
             self._show_failure(self.screen_widget.player_error)
-        elif path:
+        if path:
             self.open(path, start_at)
 
     def open(self, path, start_at=0):
         """Play path from where it was left."""
+        self._start_ms = max(0, int(start_at or 0))
         if self.player is None:
             return
         self._clear_message()
-        self.screen_widget.play(os.path.abspath(path), max(0, int(start_at or 0)) / 1000.0)
+        self.screen_widget.play(os.path.abspath(path), self._start_ms / 1000.0)
 
     def _shown(self):
         return self.screen_widget
@@ -223,8 +225,9 @@ class VideoPane(BreakPane):
         self.player.volume = max(0.0, min(100.0, wanted))
 
     def position(self) -> int:
-        """Return milliseconds in, or zero before mpv has read the file."""
-        return max(0, int((getattr(self.player, "time_pos", None) or 0) * 1000))
+        """Return milliseconds in, or where it was opened at until mpv has read it."""
+        seconds = getattr(self.player, "time_pos", None)
+        return self._start_ms if seconds is None else max(0, int(seconds * 1000))
 
     def duration(self) -> int:
         """Return the file length, or zero until mpv has read it."""
@@ -248,7 +251,7 @@ class DocumentPane(BreakPane):
         from PyQt6.QtPdf import QPdfDocument
         from PyQt6.QtPdfWidgets import QPdfView
 
-        self._resume_at = 0
+        self._resume_at = self._asked = 0
         self.document = QPdfDocument(self)
         self.view = QPdfView(self)
         self.view.setDocument(self.document)
@@ -271,15 +274,14 @@ class DocumentPane(BreakPane):
         """Read path from the page it was left on."""
         from PyQt6.QtPdf import QPdfDocument
 
-        self._resume_at = 0
+        self._resume_at, self._asked = 0, max(0, int(start_at or 0))
         error = self.document.load(os.path.abspath(path))
         if error != QPdfDocument.Error.None_:
             log.warning("Could not read %s: %s", path, error)
             self._show_message(f"COULD NOT READ\n{error.name}")
             return
         self._clear_message()
-        last = max(0, self.document.pageCount() - 1)
-        self._resume_at = max(0, min(int(start_at or 0), last))
+        self._resume_at = min(self._asked, max(0, self.document.pageCount() - 1))
         self._turn_to(self._resume_at)
 
     def _page_changed(self, page):
@@ -320,7 +322,8 @@ class DocumentPane(BreakPane):
         bar.setValue(bar.value() - int(direction) * SCROLL_STEP_PX)
 
     def position(self) -> int:
-        return self.pages.currentPage()
+        """Return the page shown, or the page asked for where there is no document."""
+        return self.pages.currentPage() if self.document.pageCount() else self._asked
 
     def duration(self) -> int:
         """Return how many pages there are."""
