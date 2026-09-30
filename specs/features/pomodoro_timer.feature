@@ -214,6 +214,7 @@ Feature: Focus timer
     Scenario: A session that will not say how long I have been idle
       Given the desktop does not answer how long the session has been idle
       Then the timer runs as it would without the feature, and says so once in the log
+      And the timer asks again a minute later
 
   Rule: Stopping a running focus interval is held for, not clicked
 
