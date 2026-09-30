@@ -32,10 +32,11 @@ def make_view(qapp, profile_path, recording_db):
     yield _make
 
     from PyQt6.QtCore import QThreadPool
+    for view in built:
+        view.shutdown()
     QThreadPool.globalInstance().waitForDone(2000)
     qapp.processEvents()
     for view in built:
-        view.shutdown()
         view.deleteLater()
 
 
