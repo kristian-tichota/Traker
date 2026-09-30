@@ -107,6 +107,14 @@ Feature: Command line logging
     Scenario: A time is defaulted to now rather than to a fixed hour
       Then the clock is read at the moment the command is submitted
 
+    Scenario: A time is stored the way the ledger sorts it
+      When I submit "bevlog 8:05 Black Coffee"
+      Then the beverage log records the time as "08:05"
+
+    Scenario: Only digits make a number
+      When I submit "chorenew 7 Nan visit"
+      Then the chore is called "Nan visit" rather than "Nan" being read as its grace
+
     Scenario: A value of the wrong shape is reported rather than shifted along
       When I submit "log x b Rolled Oats"
       Then the amount is reported as unreadable

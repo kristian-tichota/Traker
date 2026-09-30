@@ -8,37 +8,26 @@ from src.database.rows import completion_name
 from src.domain import chores
 from src.domain.clock import as_displayed_date, as_stored_date, minutes_of_day
 from src.gui.completion import ranked_matches
+from src.gui.domains import (
+    BEVERAGE, CHORE, EVERY_DOMAIN, EXERCISE, FOOD, MOBILITY, PLAN, POMODORO,
+    SUPPLEMENT)
 
 
 class CommandError(ValueError):
     """A command the user must correct: bad syntax, bad value, or refusal."""
 
 MEAL_SHORTCUTS = {"b": "Breakfast", "l": "Lunch", "d": "Dinner", "s": "Supplement"}
-
-CLEARING_WORDS = ("clear", "rm", "delete")
+MEALS = tuple(MEAL_SHORTCUTS.values())
 
 HIDE, SHOW, MOVE, RESET, TOGGLE = "hide", "show", "move", "reset", "toggle"
-COLUMN_ACTIONS = (HIDE, SHOW, MOVE, RESET)
-
 QUEUE_ADD, QUEUE_REMOVE, QUEUE_CLEAR = "add", "rm", "clear"
-QUEUE_ACTIONS = (QUEUE_REMOVE, QUEUE_CLEAR)
-
 BREAK_LONG, BREAK_CANCEL = "long", "cancel"
-BREAK_ACTIONS = (BREAK_LONG, BREAK_CANCEL)
-
-from src.gui.domains import (
-    BEVERAGE, CHORE, EVERY_DOMAIN, EXERCISE, FOOD, MOBILITY, PLAN, POMODORO,
-    SUPPLEMENT)
-
-EVERY_DOMAIN_WRITTEN = EVERY_DOMAIN
 
 MEAL_SET = "meal_set"
 BEVERAGE_SET = "beverage_set"
 SUPPLEMENT_SET = "supplement_set"
 MOBILITY_SET = "mobility_set"
 EXERCISE_SET = "exercise_set"
-
-CHORE_CATALOG = "chore"
 
 SET_CATALOG_DOMAINS = {
     MEAL_SET: FOOD,
@@ -54,43 +43,52 @@ CATALOG_READERS = {
     EXERCISE: lambda db: db.get_all_exercises(),
     SUPPLEMENT: lambda db: db.get_all_supplements(),
     MOBILITY: lambda db: db.get_all_mobility(),
-    CHORE_CATALOG: lambda db: db.get_chores(),
+    CHORE: lambda db: db.get_chores(),
     **{key: (lambda db, domain=domain: db.get_sets(domain))
        for key, domain in SET_CATALOG_DOMAINS.items()},
 }
 EVERY_CATALOG = tuple(CATALOG_READERS)
 
+_NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?", re.IGNORECASE)
+_AMOUNT = re.compile(_NUMBER.pattern + "g?", re.IGNORECASE)
+_CLOCK = re.compile(r"\d{1,2}:\d{1,2}")
+_DATE = re.compile(r"\d{1,2}\.\d{1,2}\.\d{4}")
 
-def catalog_names(db, catalogs) -> list[str]:
-    """Return the item names of the given shared catalogs, in catalog order."""
-    names = []
-    for key in catalogs:
-        names.extend(completion_name(row) for row in CATALOG_READERS[key](db))
-    return list(dict.fromkeys(names))
+
+def catalog_names(db, catalog) -> list[str]:
+    """Return the item names of one shared catalog, in catalog order."""
+    return list(dict.fromkeys(completion_name(row) for row in CATALOG_READERS[catalog](db)))
 
 
 @dataclass(frozen=True)
 class Param:
-    """One argument: how it is advertised, and how it becomes payload fields."""
+    """One argument: how it is advertised, and the payload field it fills."""
 
+    name: str | None
     label: str
-    read: Callable[[str], dict]
-    expects: str = "a value"
+    read: Callable[[str, str], Any]
+    expects: str
     rest: bool = False
     catalogs: tuple = ()
-    default: Callable[[], dict] = None
-    looks_like: Callable[[str], bool] = None
+    default: Callable[[], Any] | None = None
+    looks_like: Callable[[str], Any] | None = None
     path: bool = False
     choices: tuple = ()
 
-    def parse(self, token: str) -> dict:
-        token = token.strip()
-        try:
-            return self.read(token)
-        except CommandError:
-            raise
-        except Exception as exc:  # broad: any parser failure is reported as this argument
-            raise CommandError(f"{self.label} expects {self.expects}, got '{token}'") from exc
+    def parse(self, token: str | None) -> dict:
+        """Return the payload fields token gives, or the default's where it is None."""
+        if token is None:
+            value = self.default()
+        else:
+            token = token.strip()
+            try:
+                value = self.read(token, self.label)
+            except CommandError:
+                raise
+            except Exception as exc:  # broad: any parser failure is reported as this argument
+                raise CommandError(
+                    f"{self.label} expects {self.expects}, got '{token}'") from exc
+        return value if self.name is None else {self.name: value}
 
     @property
     def optional(self) -> bool:
@@ -98,12 +96,14 @@ class Param:
 
     def recognises(self, token: str) -> bool:
         """Report whether token could be this argument's value."""
-        if self.looks_like is None:
-            return True
-        return bool(self.looks_like(token.strip()))
+        return self.looks_like is None or bool(self.looks_like(token.strip()))
 
 
-def _finite(written, label: str) -> float:
+def _today() -> str:
+    return datetime.date.today().isoformat()
+
+
+def _finite(written: str, label: str) -> float:
     """Read written as a number, refusing the infinities float accepts."""
     quantity = float(written)
     if not math.isfinite(quantity):
@@ -111,137 +111,161 @@ def _finite(written, label: str) -> float:
     return quantity
 
 
-def _read_number(name: str, label: str):
-    def read(value):
-        return {name: _finite(value, label)}
-
-    return read
+def _as_written(value: str, label: str) -> str:
+    return value
 
 
-def number(name: str, label: str = None) -> Param:
-    label = label or f"[{name}]"
-    return Param(label, _read_number(name, label), "a number")
+def _non_empty(value: str, label: str) -> str:
+    if not value:
+        raise CommandError(f"{label} must not be empty.")
+    return value
 
 
-def text(name: str, label: str = None) -> Param:
-    return Param(label or f"[{name}]", lambda v: {name: v}, "some text")
+def number(name: str, label: str = None, default=None) -> Param:
+    return Param(name, label or f"[{name}]", _finite, "a number", default=default,
+                 looks_like=_NUMBER.fullmatch)
 
 
-def _read_non_empty(name: str, label: str):
-    def read(value):
-        if not value:
-            raise CommandError(f"{label} must not be empty.")
-        return {name: value}
-
-    return read
+def text(name: str, label: str = None, rest: bool = False, default=None) -> Param:
+    return Param(name, label or f"[{name}]", _as_written, "some text", rest=rest,
+                 default=default)
 
 
 def required_text(name: str, label: str = None, expects: str = "a name",
                   rest: bool = False) -> Param:
     """Declare a name that must be given."""
-    label = label or f"[{name}]"
-    return Param(label, _read_non_empty(name, label), expects, rest=rest)
-
-
-def free_text(name: str, label: str = None) -> Param:
-    """Declare a trailing field that may contain the field separator."""
-    return Param(label or f"[{name}]", lambda v: {name: v}, "some text", rest=True)
+    return Param(name, label or f"[{name}]", _non_empty, expects, rest=rest)
 
 
 def item(name: str, label: str, catalogs) -> Param:
     """Declare a trailing catalog item name, the argument Tab completes."""
-    return Param(label, _read_non_empty(name, label), "a catalog item name",
+    return Param(name, label, _non_empty, "a catalog item name", rest=True,
+                 catalogs=tuple(catalogs))
+
+
+def one_of(name: str, label: str, allowed, refusal: str, default=None) -> Param:
+    """Declare one of a fixed set of words, which a default lets be left out."""
+    def read(value, label):
+        if value not in allowed:
+            raise CommandError(refusal)
+        return value
+
+    return Param(name, label, read, "one of " + ", ".join(allowed), default=default,
+                 looks_like=allowed.__contains__, choices=tuple(allowed))
+
+
+def display_date(name: str, label: str, default=None) -> Param:
+    """Declare a date as DD.MM.YYYY, which a default lets be left out."""
+    return Param(name, label, _read_display_date, "a date as DD.MM.YYYY",
+                 default=default, looks_like=_DATE.fullmatch)
+
+
+def optional_position(name: str, label: str) -> Param:
+    """Declare a position counted from 1, which may be left out."""
+    return Param(name, label, _read_position, "a column position from 1",
+                 default=lambda: None, looks_like=_NUMBER.fullmatch)
+
+
+def components(name: str, label: str, unit: str, catalogs) -> Param:
+    """Declare the component list of a named set: Item 100; Other Item 50."""
+    shape = f"needs a name and an amount in {unit}, as 'Rolled Oats 100'."
+
+    def read(value, label):
+        parsed = []
+        for field, item_name, (written,) in _each_component(value, 1, shape):
+            if not _AMOUNT.fullmatch(written):
+                raise CommandError(
+                    f"'{written}' is not an amount in {unit}, in '{field}'.")
+            quantity = _finite(written.rstrip("gG"), label)
+            if quantity <= 0:
+                raise CommandError(f"{item_name} needs more than zero {unit}.")
+            parsed.append({"item_name": item_name, "amount": quantity})
+        if not parsed:
+            raise CommandError("A set needs at least one component.")
+        return parsed
+
+    example = label.strip("[]").split(";")[0].strip()
+    return Param(name, label, read, f"one or more '{example}', separated by ';', in {unit}",
                  rest=True, catalogs=tuple(catalogs))
 
 
-def _looks_like_an_amount(token: str) -> bool:
-    try:
-        float(token.rstrip("gG"))
-    except ValueError:
-        return False
-    return True
+def _read_amount(value: str, label: str) -> dict:
+    """Read servings, or grams where the amount ends in g."""
+    if not _AMOUNT.fullmatch(value):
+        raise CommandError(
+            f"'{value}' is not an amount — 2 for servings, or 100g for grams.")
+    in_grams = value[-1:].lower() == "g"
+    quantity = _finite(value[:-1] if in_grams else value, label)
+    if quantity <= 0:
+        raise CommandError("An amount has to be more than zero.")
+    return {"grams" if in_grams else "servings": quantity}
 
 
-def _looks_like_a_number(token: str) -> bool:
-    try:
-        float(token)
-    except ValueError:
-        return False
-    return True
-
-_CLOCK_SHAPE = re.compile(r"^\d{1,2}:\d{1,2}$")
+def _read_display_date(value: str, label: str) -> str:
+    stored = as_stored_date(value, default="")
+    if not stored:
+        raise CommandError(f"{label} must be a date, as 25.12.2026.")
+    return stored
 
 
-def _looks_like_a_clock_time(token: str) -> bool:
-    return bool(_CLOCK_SHAPE.match(token))
+def _read_cadence(value: str, label: str) -> int:
+    """Read days between occurrences, or weeks with a w: 7, 2w, 4w."""
+    weeks = value[-1:].lower() == "w"
+    days = _finite(value[:-1] if weeks else value, label)
+    if weeks:
+        days *= chores.DAYS_IN_WEEK
+    if days < 1:
+        raise CommandError(f"{label} is at least one day.")
+    return int(days)
 
 
-def amount(label: str = "[1 or 100g]") -> Param:
-    """Declare an amount: servings, or grams where it ends in g."""
-    def read(value):
-        value = value.strip()
-        if not _looks_like_an_amount(value):
-            raise CommandError(
-                f"'{value}' is not an amount — 2 for servings, or 100g for grams.")
-        in_grams = value[-1:] in ("g", "G")
-        quantity = _finite(value.rstrip("gG"), label)
-        if quantity <= 0:
-            raise CommandError("An amount has to be more than zero.")
-        return {"grams" if in_grams else "servings": quantity}
-
-    return Param(label, read, "servings, or grams as 100g",
-                 default=lambda: {"servings": 1.0},
-                 looks_like=_looks_like_an_amount)
-
-_LOOKS_LIKE_A_DATE = re.compile(r"^\d{1,2}\.\d{1,2}\.\d{4}$")
+def _read_clock_time(value: str, label: str) -> str:
+    """Read a 24-hour time, stored zero-padded so that it sorts as text."""
+    minutes = minutes_of_day(value)
+    if minutes is None:
+        raise CommandError(f"{label} must be a 24-hour time as HH:MM, not '{value}'.")
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
-def _read_display_date(name: str, label: str):
-    def read(value):
-        stored = as_stored_date(value, default="")
-        if not stored:
-            raise CommandError(f"{label} must be a date, as 25.12.2026.")
-        return {name: stored}
-
-    return read
-
-
-def optional_display_date(name: str, label: str) -> Param:
-    """Declare a leading date that may be left out, meaning today."""
-    return Param(label, _read_display_date(name, label), "a date as DD.MM.YYYY",
-                 default=lambda: {name: datetime.date.today().isoformat()},
-                 looks_like=lambda token: bool(_LOOKS_LIKE_A_DATE.match(token.strip())))
-
-_LOOKS_LIKE_A_CADENCE = re.compile(r"^\d+(\.\d+)?[wW]?$")
+def _read_meal(value: str, label: str) -> str:
+    meal = MEAL_SHORTCUTS.get(value.lower(), value).capitalize()
+    if meal not in MEALS:
+        raise CommandError(
+            f"'{value}' is not a meal — one of {'/'.join(MEALS)}, "
+            f"or {'/'.join(MEAL_SHORTCUTS)}.")
+    return meal
 
 
-def cadence(name: str, label: str) -> Param:
-    """Declare days between occurrences, or weeks with a w: 7, 2w, 4w."""
-    def read(value):
-        text = value.strip()
-        weeks = text[-1:].lower() == "w"
-        days = _finite(text[:-1] if weeks else text, label)
-        if weeks:
-            days *= chores.DAYS_IN_WEEK
-        if days < 1:
-            raise CommandError(f"{label} is at least one day.")
-        return {name: int(days)}
-
-    return Param(label, read, "days, or weeks as 2w",
-                 looks_like=lambda token: bool(
-                     _LOOKS_LIKE_A_CADENCE.match(token.strip())))
+def _read_set_scheme(value: str, label: str) -> dict:
+    """Read 7,7,7 as the five set columns."""
+    reps = value.split(",")
+    if len(reps) > 5:
+        raise CommandError(f"{label} takes at most five sets.")
+    counts = [_finite(rep, label) for rep in reps] + [0.0] * (5 - len(reps))
+    return {f"set{n}": count for n, count in enumerate(counts, 1)}
 
 
-def optional_number(name: str, label: str, fallback: float = 1.0) -> Param:
-    """Declare a leading count that may be left out, meaning fallback."""
-    return Param(label, _read_number(name, label), "a number",
-                 default=lambda: {name: fallback},
-                 looks_like=_looks_like_a_number)
+def _read_slot(value: str, label: str) -> int:
+    slot = int(value)
+    if not 1 <= slot <= 9:
+        raise CommandError(f"{label} must be between 1 and 9.")
+    return slot
 
 
-def _example(label: str) -> str:
-    """Read a label back as the example it is."""
-    return label.strip("[]").split(";")[0].strip()
+def _read_position(value: str, label: str) -> int:
+    counted = int(value)
+    if counted < 1:
+        raise CommandError(f"{label} counts from 1.")
+    return counted
+
+
+def _read_dsi(value: str, label: str):
+    """Read a stress-index override, or one of the words that removes it."""
+    if value.lower() in ("clear", "rm", "delete"):
+        return None
+    if not _NUMBER.fullmatch(value):
+        raise CommandError("DSI value must be a number or 'clear'.")
+    return _finite(value, label)
 
 
 def _each_component(value: str, trailing: int, shape: str):
@@ -256,178 +280,24 @@ def _each_component(value: str, trailing: int, shape: str):
         yield field, parts[0].strip(), parts[1:]
 
 
-def components(name: str, label: str, unit: str, catalogs) -> Param:
-    """Declare the component list of a named set: Item 100; Other Item 50."""
-    shape = f"needs a name and an amount in {unit}, as 'Rolled Oats 100'."
-
-    def read(value):
-        parsed = []
-        for field, item_name, (written,) in _each_component(value, 1, shape):
-            if not _looks_like_an_amount(written):
-                raise CommandError(
-                    f"'{written}' is not an amount in {unit}, in '{field}'.")
-            quantity = _finite(written.rstrip("gG"), label)
-            if quantity <= 0:
-                raise CommandError(f"{item_name} needs more than zero {unit}.")
-            parsed.append({"item_name": item_name, "amount": quantity})
-        if not parsed:
-            raise CommandError("A set needs at least one component.")
-        return {name: parsed}
-
-    return Param(label, read,
-                 f"one or more '{_example(label)}', separated by ';', in {unit}",
-                 rest=True, catalogs=tuple(catalogs))
-
-
-def workout_components(name: str, label: str) -> Param:
-    """Declare the movement list of a workout: Bench 8,8,6 60 8; Plank 60 0 6."""
+def _read_workout(value: str, label: str) -> list:
+    """Read the movement list of a workout: Bench 8,8,6 60 8; Plank 60 0 6."""
     shape = ("needs a movement, its sets, its weight and its effort, "
              "as 'Bench Press 8,8,6 60 8'.")
-
-    def read(value):
-        parsed = []
-        for _field, ex_name, rest in _each_component(value, 3, shape):
-            written_sets, written_weight, written_rpe = rest
-            entry = {"item_name": ex_name}
-            entry.update(_read_set_scheme(written_sets, label))
-            entry["weight_kg"] = _finite(written_weight, label)
-            entry["rpe"] = _finite(written_rpe, label)
-            if not 0 <= entry["rpe"] <= 10:
-                raise CommandError(
-                    f"{ex_name}: effort is 0 to 10, not '{written_rpe}'.")
-            parsed.append(entry)
-        if not parsed:
-            raise CommandError("A workout needs at least one movement.")
-        return {name: parsed}
-
-    return Param(label, read,
-                 f"one or more '{_example(label)}', separated by ';'",
-                 rest=True, catalogs=(EXERCISE,))
+    parsed = []
+    for _field, ex_name, (sets, weight, rpe) in _each_component(value, 3, shape):
+        entry = {"item_name": ex_name, **_read_set_scheme(sets, label),
+                 "weight_kg": _finite(weight, label), "rpe": _finite(rpe, label)}
+        if not 0 <= entry["rpe"] <= 10:
+            raise CommandError(f"{ex_name}: effort is 0 to 10, not '{rpe}'.")
+        parsed.append(entry)
+    if not parsed:
+        raise CommandError("A workout needs at least one movement.")
+    return parsed
 
 
-def _read_clock_time(name: str, label: str):
-    def read(value):
-        if minutes_of_day(value) is None:
-            raise CommandError(f"{label} must be a 24-hour time as HH:MM, not '{value}'.")
-        return {name: value.strip()}
-
-    return read
-
-
-def optional_clock_time(name: str, label: str) -> Param:
-    """Declare a time that may be left out, meaning now."""
-    return Param(label, _read_clock_time(name, label), "a time as HH:MM",
-                 default=lambda: {name: datetime.datetime.now().strftime("%H:%M")},
-                 looks_like=_looks_like_a_clock_time)
-
-MEALS = tuple(MEAL_SHORTCUTS.values())
-
-
-def meal_type(name: str, label: str) -> Param:
-    """Declare one of the four meals, by name or by initial."""
-    def read(value):
-        meal = MEAL_SHORTCUTS.get(value.lower(), value).capitalize()
-        if meal not in MEALS:
-            raise CommandError(
-                f"'{value}' is not a meal — one of {'/'.join(MEALS)}, "
-                f"or {'/'.join(MEAL_SHORTCUTS)}.")
-        return {name: meal}
-
-    return Param(label, read, "a meal type, or one of " + "/".join(MEAL_SHORTCUTS))
-
-
-def _read_set_scheme(value: str, label: str) -> dict:
-    """Read 7,7,7 as the five set columns."""
-    reps = [part.strip() for part in value.split(",")]
-    if len(reps) > 5:
-        raise CommandError(f"{label} takes at most five sets.")
-    counts = [_finite(rep, label) for rep in reps] + [0.0] * (5 - len(reps))
-    return {f"set{n}": counts[n - 1] for n in range(1, 6)}
-
-
-def set_scheme(label: str) -> Param:
-    return Param(label, lambda value: _read_set_scheme(value, label),
-                 "comma-separated rep counts")
-
-
-def readable_date(name: str, label: str) -> Param:
-    def read(value):
-        return {name: datetime.datetime.strptime(value, "%d.%m.%Y").strftime("%Y-%m-%d")}
-
-    return Param(label, read, "a date as DD.MM.YYYY")
-
-
-def graph_slot(name: str, label: str) -> Param:
-    def read(value):
-        slot = int(value)
-        if not 1 <= slot <= 9:
-            raise CommandError(f"{label} must be between 1 and 9.")
-        return {name: slot}
-
-    return Param(label, read, "a slot number from 1 to 9")
-
-
-def _read_one_of(name: str, allowed, refusal: str):
-    def read(value):
-        if value not in allowed:
-            raise CommandError(refusal)
-        return {name: value}
-
-    return read
-
-
-def one_of(name: str, label: str, allowed, refusal: str) -> Param:
-    return Param(label, _read_one_of(name, allowed, refusal),
-                 "one of " + ", ".join(allowed), choices=tuple(allowed))
-
-
-def optional_one_of(name: str, label: str, allowed, refusal: str,
-                    fallback: str) -> Param:
-    """Declare one of a fixed set of words, which may be left out."""
-    return Param(label, _read_one_of(name, allowed, refusal),
-                 "one of " + ", ".join(allowed),
-                 default=lambda: {name: fallback},
-                 looks_like=lambda token: token in allowed, choices=tuple(allowed))
-
-
-def optional_position(name: str, label: str) -> Param:
-    """Declare a position counted from 1, which may be left out."""
-    def read(value):
-        position = int(value)
-        if position < 1:
-            raise CommandError(f"{label} counts from 1.")
-        return {name: position}
-
-    return Param(label, read, "a column position from 1",
-                 default=lambda: {name: None},
-                 looks_like=_looks_like_a_number)
-
-
-def optional_text(name: str, label: str) -> Param:
-    """Declare a trailing name that may be left out altogether."""
-    return Param(label, lambda value: {name: value}, "some text", rest=True,
-                 default=lambda: {name: ""})
-
-
-def optional_path(name: str, label: str) -> Param:
-    """Declare a trailing file path that may be left out, completed from disk."""
-    return Param(label, lambda value: {name: value}, "a file or folder path",
-                 rest=True, default=lambda: {name: ""}, path=True)
-
-
-def dsi_value(name: str, label: str) -> Param:
-    """Declare a stress-index override, or one of the words that removes it."""
-    def read(value):
-        if value.lower() in CLEARING_WORDS:
-            return {name: None}
-        try:
-            return {name: _finite(value, label)}
-        except CommandError:
-            raise
-        except ValueError:
-            raise CommandError("DSI value must be a number or 'clear'.") from None
-
-    return Param(label, read, "a number or 'clear'")
+MEAL_TYPE = Param("meal_type", "[MealType]", _read_meal,
+                  "a meal type, or one of " + "/".join(MEAL_SHORTCUTS))
 
 
 @dataclass(frozen=True)
@@ -450,18 +320,15 @@ class OptimisticRow:
 class Command:
     name: str
     params: tuple
-    invoke: Callable[[Any, dict], tuple]
     confirm: Callable[[dict], str]
+    invoke: Callable[[Any, dict], tuple] | None = None
     separator: str = " "
     dated: bool = False
     reports_result: bool = False
     view_effect: ViewEffect | None = None
-
     window_effect: str | None = None
     domain: str | tuple | None = None
-
-    optimistic: "OptimisticRow | None" = None
-
+    optimistic: OptimisticRow | None = None
     aliases: tuple = ()
 
     def pending_row(self, payload: dict):
@@ -485,184 +352,113 @@ class Command:
         return self.separator.join(param.label for param in self.params)
 
     @property
-    def syntax_hint(self) -> str:
-        return " " + self.usage
-
-    def name_position(self, text: str = "") -> int | None:
-        """Return the token index where the catalog-completed name begins, or None."""
-        if self.separator != " ":
-            return None
-        if not any(param.catalogs for param in self.params):
-            return None
-        return 1 + self._leading_tokens(text.split()[1:])
+    def catalogs(self) -> tuple:
+        return next((param.catalogs for param in self.params if param.catalogs), ())
 
     def _walk(self, tokens):
         """Return (tokens taken, arguments settled) for all but the trailing argument."""
         used = settled = 0
-        ran_out = False
         for param in self.params:
             if param.rest:
                 break
-            token = None if ran_out or used >= len(tokens) else tokens[used]
-            if param.optional:
-                if token is None:
-                    break
-                if not param.recognises(token):
-                    settled += 1
-                    continue
-            if token is None:
-                ran_out = True
-                used += 1
+            token = tokens[used] if used < len(tokens) else None
+            if param.optional and token is None:
+                break
+            if param.optional and not param.recognises(token):
+                settled += 1
                 continue
             used += 1
-            settled += 1
+            settled += token is not None
         return used, settled
+
+    def name_position(self, text: str) -> int | None:
+        """Return the token index where the catalog-completed name begins, or None."""
+        if self.separator != " " or not self.catalogs:
+            return None
+        return 1 + self._walk(text.split()[1:])[0]
 
     def awaiting_name(self, text: str) -> bool:
         """Report whether the catalog name is the only argument left to give."""
         answerable = sum(1 for param in self.params if not param.rest)
         return self._walk(text.split()[1:])[1] == answerable
 
-    def _leading_tokens(self, tokens) -> int:
-        return self._walk(tokens)[0]
-
-    @property
-    def catalogs(self) -> tuple:
-        for param in self.params:
-            if param.catalogs:
-                return param.catalogs
-        return ()
-
-    def name_fragment(self, text: str) -> str:
-        """Return the part of text typed into the name position."""
-        index = self.name_position(text)
-        if index is None:
-            return ""
-        tokens = text.split(maxsplit=index)
-        return tokens[index] if len(tokens) > index else ""
-
-    def _remainder(self, text: str) -> str:
-        tokens = text.split(maxsplit=1)
-        return tokens[1] if len(tokens) > 1 else ""
-
     def trailing_text(self, text: str) -> str:
         """Return what has been typed into the trailing argument, spaces kept."""
-        remainder = self._remainder(text)
-        used = self._leading_tokens(remainder.split())
-        parts = remainder.split(None, used)
-        return parts[used] if len(parts) > used else ""
+        index = 1 + self._walk(text.split()[1:])[0]
+        parts = text.split(maxsplit=index)
+        return parts[index] if len(parts) > index else ""
 
     def path_fragment(self, text: str) -> str:
         """Return the path being typed, or "" where this command takes none."""
-        if self.separator != " " or not (self.params and self.params[-1].path):
+        if self.separator != " " or not self.params[-1].path:
             return ""
         return self.trailing_text(text)
 
     def open_words(self, text: str) -> dict:
         """Return the fixed words a leading argument still accepts, by label."""
-        if self._leading_tokens(self._remainder(text).split()):
+        if self._walk(text.split()[1:])[0]:
             return {}
         return {word: param.label for param in self.params if not param.rest
                 for word in param.choices}
 
-    def hint_for_position(self, position: int, text: str = "") -> str:
-        """Return the arguments still owed, given what has been typed."""
-        if text:
-            typed = text.split()[1:]
-            consumed = self._walk(typed)[1]
-        else:
-            consumed = position - 1
-        if 0 <= consumed < len(self.params):
-            return " " + " ".join(param.label for param in self.params[consumed:])
-        return ""
-
     def current_argument(self, text: str) -> int | None:
         """Return the index of the argument being asked for, None once all are given."""
-        tokens = text.split(maxsplit=1)
-        remainder = tokens[1] if len(tokens) > 1 else ""
         if self.separator != " ":
-            index = remainder.count(";")
+            index = text.count(self.separator)
         else:
-            index = self._walk(remainder.split())[1]
+            index = self._walk(text.split()[1:])[1]
         if index < len(self.params):
             return index
-        if self.params and self.params[-1].rest:
-            return len(self.params) - 1
-        return None
+        return len(self.params) - 1 if self.params[-1].rest else None
 
-    def hint_for_fields(self, remainder: str) -> str:
-        """Return the definition fields still owed, given what follows the name."""
-        index = remainder.count(";")
-        if 0 <= index < len(self.params):
-            return " " + ";".join(param.label for param in self.params[index:])
-        if self.params and self.params[-1].rest:
-            return " " + self.params[-1].label
-        return ""
-
-    def field_being_typed(self, remainder: str):
-        """Return the Param the caret is inside, for a ;-separated command."""
-        index = remainder.count(";")
-        if index >= len(self.params):
-            last = self.params[-1]
-            return last if last.rest else None
-        return self.params[index]
+    def hint(self, text: str) -> str:
+        """Return the arguments still owed, given what has been typed."""
+        index = self.current_argument(text)
+        if index is None:
+            return ""
+        return " " + self.separator.join(param.label for param in self.params[index:])
 
     def field_fragment(self, remainder: str) -> str:
         """Return what has been typed into the catalog name of the current field."""
         field = remainder.rsplit(";", 1)[-1].strip()
-        if not field:
-            return ""
         parts = field.rsplit(maxsplit=1)
-        if len(parts) == 2 and _looks_like_an_amount(parts[1]):
+        if len(parts) == 2 and _AMOUNT.fullmatch(parts[1]):
             return ""
         return field
 
-    def split(self, remainder: str) -> list[str]:
-        """Split into argument tokens, a trailing rest argument keeping its separators."""
-        if not remainder.strip():
-            return []
-        if self.separator != " ":
-            if self.params[-1].rest:
-                return remainder.split(self.separator, len(self.params) - 1)
-            return remainder.split(self.separator)
-        if self.params[-1].rest:
-            return remainder.split(None, self._leading_tokens(remainder.split()))
-        return remainder.split()
-
     def _assign(self, tokens):
         """Pair each argument with its token, or with None where it was left out."""
-        pairs, position = [], 0
+        pairs, used = [], 0
         for param in self.params:
-            token = tokens[position] if position < len(tokens) else None
-            if param.optional and (token is None or (
-                    not param.rest and not param.recognises(token))):
+            token = tokens[used] if used < len(tokens) else None
+            if param.optional and (token is None or not param.recognises(token)):
                 pairs.append((param, None))
                 continue
+            if token is None:
+                raise CommandError(f"Syntax: {self.name} {self.usage}")
             pairs.append((param, token))
-            position += 1
-        if position != len(tokens) or any(
-                token is None and not param.optional for param, token in pairs):
+            used += 1
+        if used != len(tokens):
             raise CommandError(f"Syntax: {self.name} {self.usage}")
         return pairs
 
     def parse(self, remainder: str) -> dict:
-        tokens = self.split(remainder)
+        """Read what follows the command word as the payload of its write."""
+        rest = self.params[-1].rest
         if self.separator != " ":
-            if len(tokens) != len(self.params):
+            tokens = remainder.split(self.separator, len(self.params) - 1 if rest else -1)
+            if not remainder.strip() or len(tokens) != len(self.params):
                 raise CommandError(f"Syntax: {self.name} {self.usage}")
-            pairs = list(zip(self.params, tokens))
+            pairs = zip(self.params, tokens)
         else:
-            pairs = self._assign(tokens)
+            words = remainder.split()
+            pairs = self._assign(
+                remainder.split(None, self._walk(words)[0]) if rest and words else words)
 
-        payload = {"date": datetime.date.today().isoformat()} if self.dated else {}
+        payload = {"date": _today()} if self.dated else {}
         for param, token in pairs:
-            payload.update(param.default() if token is None else param.parse(token))
+            payload.update(param.parse(token))
         return payload
-
-
-def _carried_out_by_the_window(db, payload):
-    """Stand in for the invoke of a command the window carries out."""
-    raise CommandError("This is carried out by the window, not by a write.")
 
 
 def _quantity(value: float) -> str:
@@ -707,7 +503,7 @@ def _definition(name: str, params: tuple, method: str, domain: str) -> Command:
         name=name,
         params=params,
         separator=";",
-        invoke=lambda db, payload, method=method: getattr(db, method)(payload),
+        invoke=lambda db, payload: getattr(db, method)(payload),
         confirm=lambda payload: f" Defined '{payload['name']}' in the shared catalog.",
         domain=domain,
     )
@@ -723,17 +519,19 @@ def _amount_written(payload: dict) -> str:
 def _set_definition(name: str, domain: str, word: str, component_param: Param,
                     label: str, aliases: tuple = ()) -> Command:
     """Build a *set command: one named bundle of catalog items, in a line."""
+    def confirm(payload):
+        count = len(payload["components"])
+        return (f" Defined the {word} '{payload['name']}' from {count} "
+                f"{'component' if count == 1 else 'components'}.")
+
     return Command(
         name=name,
         params=(required_text("name", label,
                               "a name no item or set of this domain already has"),
                 component_param),
         separator=";",
-        invoke=lambda db, payload, domain=domain: db.add_set(domain, payload),
-        confirm=lambda payload, word=word: (
-            f" Defined the {word} '{payload['name']}' from "
-            f"{len(payload['components'])} "
-            f"{'component' if len(payload['components']) == 1 else 'components'}."),
+        invoke=lambda db, payload: db.add_set(domain, payload),
+        confirm=confirm,
         domain=domain,
         aliases=aliases,
     )
@@ -742,8 +540,9 @@ _COMMAND_LIST = [
     Command(
         name="log",
         params=(
-            amount(),
-            meal_type("meal_type", "[MealType]"),
+            Param(None, "[1 or 100g]", _read_amount, "servings, or grams as 100g",
+                  default=lambda: {"servings": 1.0}, looks_like=_AMOUNT.fullmatch),
+            MEAL_TYPE,
             item("food_name", "[Food or Meal Set]", (FOOD, MEAL_SET)),
         ),
         dated=True,
@@ -758,8 +557,8 @@ _COMMAND_LIST = [
         name="quick",
         params=(
             number("energy_kcal", "[kcal]"),
-            meal_type("meal_type", "[MealType]"),
-            free_text("food_name", "[What it was]"),
+            MEAL_TYPE,
+            text("food_name", "[What it was]", rest=True),
         ),
         dated=True,
         invoke=lambda db, payload: db.add_quick_food_log(payload),
@@ -784,8 +583,10 @@ _COMMAND_LIST = [
     Command(
         name="bevlog",
         params=(
-            optional_number("servings", "[1]"),
-            optional_clock_time("time", "[HH:MM=now]"),
+            number("servings", "[1]", default=lambda: 1.0),
+            Param("time", "[HH:MM=now]", _read_clock_time, "a time as HH:MM",
+                  default=lambda: datetime.datetime.now().strftime("%H:%M"),
+                  looks_like=_CLOCK.fullmatch),
             item("bev_name", "[Beverage or Drink Set]", (BEVERAGE, BEVERAGE_SET)),
         ),
         dated=True,
@@ -805,7 +606,7 @@ _COMMAND_LIST = [
     Command(
         name="exlog",
         params=(
-            set_scheme("[sets: 7,7,7]"),
+            Param(None, "[sets: 7,7,7]", _read_set_scheme, "comma-separated rep counts"),
             number("weight_kg", "[weight]"),
             number("rpe"),
             item("ex_name", "[Exercise Name]", (EXERCISE,)),
@@ -829,15 +630,17 @@ _COMMAND_LIST = [
     ),
     Command(
         name="planlog",
-        params=(optional_display_date("date", "[DD.MM.YYYY=today]"),),
+        params=(display_date("date", "[DD.MM.YYYY=today]", _today),),
         invoke=lambda db, payload: db.log_planned_session(payload),
         confirm=lambda p: (
             f" Logged the session planned for {as_displayed_date(p['date'])}."),
         domain=(EXERCISE, PLAN),
     ),
     _set_definition("exset", EXERCISE, "workout",
-                    workout_components("components",
-                                       "[Bench Press 8,8,6 60 8; Plank 60 0 6]"),
+                    Param("components", "[Bench Press 8,8,6 60 8; Plank 60 0 6]",
+                          _read_workout,
+                          "one or more 'Bench Press 8,8,6 60 8', separated by ';'",
+                          rest=True, catalogs=(EXERCISE,)),
                     "[Workout Name]"),
     _definition("exdefine", (
         required_text("name"), text("muscle_group"), text("movement_pattern"),
@@ -849,7 +652,7 @@ _COMMAND_LIST = [
     Command(
         name="supplog",
         params=(
-            optional_number("servings", "[1]"),
+            number("servings", "[1]", default=lambda: 1.0),
             item("supp_name", "[Supplement or Stack]", (SUPPLEMENT, SUPPLEMENT_SET)),
         ),
         dated=True,
@@ -887,7 +690,7 @@ _COMMAND_LIST = [
                                "minutes", (MOBILITY,)),
                     "[Routine Set Name]"),
     _definition("mobdefine", (
-        required_text("name"), number("mets"), free_text("notes"),
+        required_text("name"), number("mets"), text("notes", rest=True),
     ), "add_mobility_item", MOBILITY),
     Command(
         name="rm",
@@ -895,12 +698,12 @@ _COMMAND_LIST = [
         invoke=lambda db, payload: db.delete_item_by_name(payload["name"]),
         confirm=lambda p: f" Removed '{p['name']}'.",
         reports_result=True,
-        domain=EVERY_DOMAIN_WRITTEN,
+        domain=EVERY_DOMAIN,
     ),
     Command(
         name="track",
         params=(
-            graph_slot("slot", "[slot_num: 1-9]"),
+            Param("slot", "[slot_num: 1-9]", _read_slot, "a slot number from 1 to 9"),
             item("name", "[Exercise Name]", (EXERCISE,)),
         ),
         invoke=lambda db, p: db.set_setting(f"ex_graph_slot_{p['slot']}", p["name"]),
@@ -926,13 +729,12 @@ _COMMAND_LIST = [
     Command(
         name="cols",
         params=(
-            optional_one_of("action", "[hide/show/move/reset]", COLUMN_ACTIONS,
-                            "Say hide, show, move or reset — or name a column "
-                            "on its own to switch it off or back on.", TOGGLE),
+            one_of("action", "[hide/show/move/reset]", (HIDE, SHOW, MOVE, RESET),
+                   "Say hide, show, move or reset — or name a column "
+                   "on its own to switch it off or back on.", lambda: TOGGLE),
             optional_position("position", "[position]"),
-            optional_text("column", "[Column]"),
+            text("column", "[Column]", rest=True, default=lambda: ""),
         ),
-        invoke=_carried_out_by_the_window,
         confirm=lambda payload: " Columns rearranged.",
         window_effect="arrange_columns",
         aliases=("columns",),
@@ -940,33 +742,30 @@ _COMMAND_LIST = [
     Command(
         name="break",
         params=(
-            optional_one_of("action", "[long/cancel]", BREAK_ACTIONS,
-                            "Say long to make the next break the long one, or "
-                            "cancel to take that back.", ""),
+            one_of("action", "[long/cancel]", (BREAK_LONG, BREAK_CANCEL),
+                   "Say long to make the next break the long one, or "
+                   "cancel to take that back.", lambda: ""),
         ),
-        invoke=_carried_out_by_the_window,
         confirm=lambda payload: " Next break changed.",
         window_effect="queue_long_break",
     ),
     Command(
         name="rest",
         params=(
-            optional_one_of("action", "[rm/clear]", QUEUE_ACTIONS,
-                            "Say rm with a number, or clear — or name a file "
-                            "on its own to queue it.", QUEUE_ADD),
+            one_of("action", "[rm/clear]", (QUEUE_REMOVE, QUEUE_CLEAR),
+                   "Say rm with a number, or clear — or name a file "
+                   "on its own to queue it.", lambda: QUEUE_ADD),
             optional_position("position", "[n]"),
-            optional_path("entry", "[path]"),
+            Param("entry", "[path]", _as_written, "a file or folder path", rest=True,
+                  default=lambda: "", path=True),
         ),
-        invoke=_carried_out_by_the_window,
         confirm=lambda payload: " Break queue changed.",
         window_effect="queue_rest",
         aliases=("queue",),
     ),
     Command(
         name="chore",
-        params=(
-            item("name", "[Chore]", (CHORE_CATALOG,)),
-        ),
+        params=(item("name", "[Chore]", (CHORE,)),),
         dated=True,
         invoke=lambda db, payload: db.complete_chore(payload),
         confirm=lambda p: f" Ticked '{p['name']}' off today.",
@@ -976,9 +775,10 @@ _COMMAND_LIST = [
     Command(
         name="chorenew",
         params=(
-            cadence("period_days", "[Every N days or Nw]"),
-            optional_display_date("anchor", "[First DD.MM.YYYY]"),
-            optional_number("grace_days", "[Grace days]", None),
+            Param("period_days", "[Every N days or Nw]", _read_cadence,
+                  "days, or weeks as 2w"),
+            display_date("anchor", "[First DD.MM.YYYY]", _today),
+            number("grace_days", "[Grace days]", default=lambda: None),
             required_text("name", "[Chore]",
                           "a name no other chore already has", rest=True),
         ),
@@ -989,8 +789,9 @@ _COMMAND_LIST = [
     Command(
         name="setdsi",
         params=(
-            readable_date("date", "[DD.MM.YYYY]"),
-            dsi_value("override_dsi", "[DSI Value or 'clear']"),
+            display_date("date", "[DD.MM.YYYY]"),
+            Param("override_dsi", "[DSI Value or 'clear']", _read_dsi,
+                  "a number or 'clear'"),
         ),
         invoke=_clear_or_set_dsi,
         confirm=_confirm_dsi,
@@ -1002,6 +803,8 @@ COMMANDS = {command.name: command for command in _COMMAND_LIST}
 for _command in _COMMAND_LIST:
     for _alias in _command.aliases:
         COMMANDS.setdefault(_alias, _command)
+
+_NAMES = tuple(command.name for command in _COMMAND_LIST)
 
 
 def resolve(text: str):
@@ -1023,8 +826,7 @@ def command_word(text: str) -> str:
 
 def naming_a_command(text: str) -> bool:
     """Report whether the caret is still inside the command word itself."""
-    tokens = text.split(maxsplit=1)
-    return len(tokens) <= 1 and not text[-1:].isspace()
+    return len(text.split(maxsplit=1)) <= 1 and not text[-1:].isspace()
 
 
 def command_being_typed(text: str):
@@ -1049,10 +851,9 @@ def belongs_to(command: Command, domains) -> bool:
 
 def commands_for(typed: str, domains=()) -> list:
     """Return every command a half-typed word could become, best answer first."""
-    by_name = {command.name: command for command in _COMMAND_LIST}
-    ranked = ranked_matches(typed, list(by_name),
-                            prefer=lambda name: belongs_to(by_name[name], domains))
-    return [by_name[name] for name in ranked]
+    ranked = ranked_matches(typed, _NAMES,
+                            prefer=lambda name: belongs_to(COMMANDS[name], domains))
+    return [COMMANDS[name] for name in ranked]
 
 
 def token_position(text: str) -> int:

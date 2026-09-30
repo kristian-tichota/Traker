@@ -91,11 +91,11 @@ class TestTheDefinitionCommand:
         ("Blue Oatmeal; A 1; B 2; C 3;", " [Food 100; Other Food 50]"),
     ])
     def test_the_hint_keeps_saying_the_shape_of_an_ingredient(self, typed, hint):
-        assert COMMANDS["mealdefine"].hint_for_fields(typed) == hint
+        assert COMMANDS["mealdefine"].hint(f"mealdefine {typed}") == hint
 
     def test_a_fixed_field_definition_still_runs_out_of_fields(self):
-        assert COMMANDS["mobdefine"].hint_for_fields("a;1") == " [mets];[notes]"
-        assert COMMANDS["mobdefine"].hint_for_fields("a;1;note; more") == " [notes]"
+        assert COMMANDS["mobdefine"].hint("mobdefine a;1") == " [mets];[notes]"
+        assert COMMANDS["mobdefine"].hint("mobdefine a;1;note; more") == " [notes]"
 
     def test_the_confirmation_counts_the_ingredients(self):
         command = COMMANDS["mealdefine"]

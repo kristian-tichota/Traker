@@ -56,7 +56,7 @@ class CommandLineEdit(HintingLineEdit):
 
     def _read_catalog(self, catalog):
         """Read one catalog's names, on a pool thread."""
-        names = catalog_names(self.db, (catalog,))
+        names = catalog_names(self.db, catalog)
         connection = getattr(self.db, "connection", None)
         reachable = connection.online if connection is not None else True
         return catalog, names, reachable
@@ -81,19 +81,11 @@ class CommandLineEdit(HintingLineEdit):
             self._start_catalog_read(key)
         if missing:
             return None
-
-        names = []
-        for key in catalogs:
-            names.extend(self._names_by_catalog[key])
-        return names
+        return [name for key in catalogs for name in self._names_by_catalog[key]]
 
     def catalog_names_for_filter(self):
         """Return every catalog name already cached, for the filter bar."""
-        names = []
-        for cached in self._names_by_catalog.values():
-            if cached:
-                names.extend(cached)
-        return names
+        return [name for names in self._names_by_catalog.values() for name in names]
 
     def set_relevant_domains(self, domains):
         """Record which domains the visible tab is about, for ranking the menu."""
@@ -142,7 +134,7 @@ class CommandLineEdit(HintingLineEdit):
             self.setText(self.completion_text)
             return
 
-        command = COMMANDS.get(text.split(maxsplit=1)[0].lower())
+        command = COMMANDS.get(command_word(text))
         if command is None:
             return
 
@@ -269,33 +261,30 @@ class CommandLineEdit(HintingLineEdit):
         tail = completion_tail(typed, match.name)
         if tail is None:
             self.completion_text = match.name
-            self.hint_text = f" -> ({match.name}){match.syntax_hint}"
+            self.hint_text = f" -> ({match.name}) {match.usage}"
             self.is_fuzzy_replacement = True
         else:
             self.completion_text = tail
-            self.hint_text = tail + match.syntax_hint
+            self.hint_text = f"{tail} {match.usage}"
 
     def _compute_hint(self, text):
-        tokens = text.split(maxsplit=1)
-        typed_command = command_word(text)
-
         if naming_a_command(text):
-            self._suggest_command(typed_command)
+            self._suggest_command(command_word(text))
             return
 
-        command = COMMANDS.get(typed_command)
+        command = COMMANDS.get(command_word(text))
         if command is None:
             return
 
-        remainder = tokens[1] if len(tokens) > 1 else ""
         if command.separator == ";":
-            field = command.field_being_typed(remainder)
-            if field is not None and field.catalogs:
-                fragment = command.field_fragment(remainder)
-                if fragment:
-                    self._suggest_name(fragment, self._catalog_names(field.catalogs))
-                    return
-            self.hint_text = command.hint_for_fields(remainder)
+            index = command.current_argument(text)
+            catalogs = () if index is None else command.params[index].catalogs
+            remainder = text.split(maxsplit=1)[1:]
+            fragment = command.field_fragment(remainder[0]) if catalogs and remainder else ""
+            if fragment:
+                self._suggest_name(fragment, self._catalog_names(catalogs))
+            else:
+                self.hint_text = command.hint(text)
             return
 
         fragment = command.path_fragment(text)
@@ -303,12 +292,11 @@ class CommandLineEdit(HintingLineEdit):
             self._suggest_path(fragment, command.open_words(text))
             return
 
-        position = token_position(text)
         name_starts_at = command.name_position(text)
-        fragment = command.name_fragment(text) if name_starts_at is not None else ""
-        if (name_starts_at is not None and position >= name_starts_at
+        fragment = command.trailing_text(text) if name_starts_at is not None else ""
+        if (name_starts_at is not None and token_position(text) >= name_starts_at
                 and (fragment or command.awaiting_name(text))):
             self._suggest_name(fragment, self._catalog_names(command.catalogs))
         else:
-            self.hint_text = command.hint_for_position(position, text)
+            self.hint_text = command.hint(text)
 

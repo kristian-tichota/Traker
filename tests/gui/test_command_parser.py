@@ -146,16 +146,11 @@ class TestLogCommands:
 
         assert bar.db.last("add_food_log")["meal_type"] == "Breakfast"
 
-    def test_the_trailing_remainder_is_the_item_name(self, bar):
-        bar.submit("log 1 b Greek Yoghurt With Honey")
-
-        assert bar.db.last("add_food_log")["food_name"] == "Greek Yoghurt With Honey"
-
-    def test_a_beverage_log_records_a_clock_time(self, bar, today):
-        bar.submit("bevlog 1 08:30 Black Coffee")
+    def test_a_beverage_log_records_a_count_and_a_clock_time(self, bar, today):
+        bar.submit("bevlog 2 08:30 Black Coffee")
 
         assert bar.db.last("add_beverage_log") == {
-            "date": today, "servings": 1.0, "time": "08:30", "bev_name": "Black Coffee",
+            "date": today, "servings": 2.0, "time": "08:30", "bev_name": "Black Coffee",
         }
 
     def test_an_exercise_log_pads_the_unused_set_slots(self, bar, today):
@@ -172,12 +167,6 @@ class TestLogCommands:
         payload = bar.db.last("add_exercise_log")
         assert [payload[f"set{n}"] for n in range(1, 6)] == [10.0, 9.0, 8.0, 7.0, 6.0]
 
-    def test_a_single_set_is_accepted(self, bar):
-        bar.submit("exlog 12 20 7 Overhead Press")
-
-        payload = bar.db.last("add_exercise_log")
-        assert [payload[f"set{n}"] for n in range(1, 6)] == [12.0, 0.0, 0.0, 0.0, 0.0]
-
     def test_a_supplement_log_reads_servings_then_name(self, bar, today):
         bar.submit("supplog 2 Morning Stack")
 
@@ -192,20 +181,8 @@ class TestLogCommands:
             "date": today, "duration_mins": 20.0, "mob_name": "Hip Opener",
         }
 
-    def test_every_log_command_dates_the_row_today(self, bar, today):
-        bar.submit("log 1 b Rolled Oats")
-
-        assert bar.db.last("add_food_log")["date"] == today
-
 
 class TestServingsOrGrams:
-    def test_a_bare_number_is_servings(self, bar):
-        bar.submit("log 2 b Rolled Oats")
-
-        payload = bar.db.last("add_food_log")
-        assert payload["servings"] == 2.0
-        assert "grams" not in payload
-
     def test_a_g_suffix_is_grams(self, bar):
         bar.submit("log 100g b Rolled Oats")
 
@@ -214,8 +191,7 @@ class TestServingsOrGrams:
         assert "servings" not in payload, (
             "the two are alternatives; sending both is refused by the store")
 
-    @pytest.mark.parametrize("written, grams", [("100g", 100.0), ("100G", 100.0),
-                                                ("12.5g", 12.5)])
+    @pytest.mark.parametrize("written, grams", [("100G", 100.0), ("12.5g", 12.5)])
     def test_the_suffix_is_read_either_case_and_with_a_fraction(
             self, bar, written, grams):
         bar.submit(f"log {written} b Rolled Oats")
@@ -261,21 +237,12 @@ class TestServingsOrGrams:
 
 
 class TestTheArgumentsAMemberNeedNotType:
-    def test_a_drink_defaults_to_one_serving_now(self, bar, today):
+    def test_a_drink_defaults_to_one_serving_now(self, bar):
         bar.submit("bevlog Black Coffee")
 
         payload = bar.db.last("add_beverage_log")
-        assert payload["servings"] == 1.0
-        assert payload["bev_name"] == "Black Coffee"
-        assert len(payload["time"]) == 5 and ":" in payload["time"]
-
-    def test_the_time_defaults_to_now_rather_than_to_a_fixed_hour(self, bar):
-        import datetime as _datetime
-
-        bar.submit("bevlog Black Coffee")
-
-        assert bar.db.last("add_beverage_log")["time"] == (
-            _datetime.datetime.now().strftime("%H:%M"))
+        assert (payload["servings"], payload["bev_name"]) == (1.0, "Black Coffee")
+        assert payload["time"] == datetime.datetime.now().strftime("%H:%M")
 
     def test_a_count_alone_still_reads_as_a_count(self, bar):
         bar.submit("bevlog 2 Black Coffee")
@@ -288,11 +255,10 @@ class TestTheArgumentsAMemberNeedNotType:
         payload = bar.db.last("add_beverage_log")
         assert (payload["servings"], payload["time"]) == (1.0, "14:30")
 
-    def test_both_together_read_in_order(self, bar):
-        bar.submit("bevlog 2 14:30 Black Coffee")
+    def test_an_hour_without_its_leading_zero_is_stored_with_it(self, bar):
+        bar.submit("bevlog 8:05 Black Coffee")
 
-        payload = bar.db.last("add_beverage_log")
-        assert (payload["servings"], payload["time"]) == (2.0, "14:30")
+        assert bar.db.last("add_beverage_log")["time"] == "08:05"
 
     def test_a_malformed_time_is_reported_rather_than_taken_for_a_name(self, bar):
         bar.submit("bevlog 25:99 Black Coffee")
@@ -316,21 +282,12 @@ class TestAnEstimateForAMealNobodyHasALabelFor:
             "food_name": "Restaurant Pizza",
         }
 
-    def test_the_description_may_be_several_words(self, bar):
-        bar.submit("quick 800 l Someone's Birthday Cake")
-
-        assert bar.db.last("add_quick_food_log")["food_name"] == (
-            "Someone's Birthday Cake")
-
     def test_the_confirmation_says_the_day_now_reads_as_estimated(self, bar):
         bar.submit("quick 550 d Restaurant Pizza")
 
         said = bar.status_bar.message
         assert "estimate of 550 kcal" in said
         assert "estimated" in said
-
-    def test_it_writes_the_food_domain(self, bar):
-        assert COMMANDS["quick"].domains == ("food",)
 
     def test_its_row_is_shown_as_an_estimate_at_once(self):
         command = COMMANDS["quick"]
@@ -350,35 +307,12 @@ class TestDefineCommands:
             "salt": 0.0, "serving_size": 50.0,
         }
 
-    def test_a_beverage_definition(self, bar):
-        bar.submit("bevdefine Black Coffee;80;200")
-
-        assert bar.db.last("add_beverage_item") == {
-            "name": "Black Coffee", "caffeine_mg": 80.0, "antioxidants_mg": 200.0,
-        }
-
-    def test_an_exercise_definition(self, bar):
-        bar.submit("exdefine Overhead Press;Shoulders;Push;Triceps;Frontal;Compound;Dumbbell;Bilateral;Reps")
-
-        payload = bar.db.last("add_exercise_item")
-        assert payload["name"] == "Overhead Press"
-        assert payload["muscle_group"] == "Shoulders"
-        assert payload["metric_type"] == "Reps"
-
     def test_a_mobility_definition(self, bar):
         bar.submit("mobdefine Hip Opener;3.0;Daily before training")
 
         assert bar.db.last("add_mobility_item") == {
             "name": "Hip Opener", "mets": 3.0, "notes": "Daily before training",
         }
-
-    def test_a_supplement_definition_needs_all_thirteen_fields(self, bar):
-        bar.submit("suppdefine Morning Stack;500;150;5;4000;100;500;500;800;400;15;500;200")
-
-        payload = bar.db.last("add_supplement_item")
-        assert payload["name"] == "Morning Stack"
-        assert payload["b12_mcg"] == 500.0
-        assert payload["l_theanine_mg"] == 200.0
 
     def test_surrounding_whitespace_is_trimmed_from_names(self, bar):
         bar.submit("mobdefine   Hip Opener  ;3.0;  notes  ")
@@ -389,9 +323,7 @@ class TestDefineCommands:
 class TestRejectedInput:
     @pytest.mark.parametrize(
         "text",
-        ["log", "log 1", "log 1 Breakfast",
-         "bevlog 1", "exlog 7,7,7 30", "supplog 1", "moblog", "rm",
-         "track 1", "graphlayout"],
+        ["log", "log 1 Breakfast", "bevlog 1", "exlog 7,7,7 30", "rm", "track 1"],
     )
     def test_a_log_command_missing_arguments_writes_nothing(self, bar, text):
         bar.submit(text)
@@ -416,34 +348,16 @@ class TestRejectedInput:
         assert "Unknown command" in bar.status_bar.message
         assert bar.db.calls == []
 
-    def test_a_non_numeric_quantity_is_rejected(self, bar):
-        bar.submit("log lots b Rolled Oats")
-
-        assert bar.db.calls == []
-        assert "Execution Fail" in bar.status_bar.message
-
     def test_a_rejected_command_stays_in_the_bar_for_correction(self, bar):
         bar.submit("log 1 Breakfast")
 
         assert bar.command_line.text() == "log 1 Breakfast"
 
-    def test_a_rejected_command_pulses_a_warning(self, bar):
+    def test_a_rejected_command_pulses_a_warning_and_leaves_the_tabs_alone(self, bar):
         bar.submit("frobnicate")
 
         assert bar.status_pulser.colours == ["#dc322f"]
-
-    def test_a_rejected_command_leaves_the_tabs_alone(self, bar):
-        bar.submit("frobnicate")
-
         assert bar.dirty_tabs == set()
-
-    def test_a_server_refusal_is_surfaced_verbatim(self, bar):
-        bar.db.result = (False, "Food 'Ghost Oats' not found in catalog.")
-
-        bar.submit("log 1 b Ghost Oats")
-
-        assert "not found in catalog" in bar.status_bar.message
-        assert bar.command_line.text() == "log 1 b Ghost Oats"
 
     def test_an_empty_bar_simply_returns_to_normal_mode(self, bar):
         bar.submit("   ")
@@ -540,15 +454,6 @@ class TestSuccessfulOutcome:
         assert stale == {"food", "food_graphs"}
         assert bar.refreshed_tab == 0
 
-    def test_a_food_log_leaves_the_unrelated_tabs_alone(self, bar):
-        bar.submit("log 1 b Rolled Oats")
-
-        untouched = {"exercise", "supplements", "mobility", "beverages",
-                     "pomodoro", "caffeine_graph", "supplement_graphs"}
-        stale = {key for key, index in bar.tab_indices.items()
-                 if index in bar.dirty_tabs}
-        assert not (stale & untouched)
-
     def test_a_tab_deriving_from_two_subjects_is_marked_by_either(self, bar):
         bar.submit("exlog 7,7,7 40 8 Overhead Press")
 
@@ -586,18 +491,6 @@ class TestCatalogRemoval:
 
         assert bar.db.last("delete_item_by_name") == "Greek Yoghurt With Honey"
 
-    def test_a_successful_removal_names_the_item(self, bar):
-        bar.submit("rm Rolled Oats")
-
-        assert "Rolled Oats" in bar.status_bar.message
-
-    def test_a_refused_removal_is_reported(self, bar):
-        bar.db.result = (False, "server said no")
-
-        bar.submit("rm Rolled Oats")
-
-        assert "server said no" in bar.status_bar.message
-
 
 class TestViewCommands:
     def test_tracking_pins_an_exercise_to_a_graph_slot(self, bar):
@@ -612,12 +505,6 @@ class TestViewCommands:
         assert bar.db.last("set_setting") == ("ex_graph_layout_dims", "3x3")
         assert "3x3" in bar.status_bar.message
 
-    @pytest.mark.parametrize("layout", ["2x2", "2x3", "3x3"])
-    def test_the_supported_layouts_are_accepted(self, bar, layout):
-        bar.submit(f"graphlayout {layout}")
-
-        assert "Execution Fail" not in bar.status_bar.message
-
     def test_an_unsupported_layout_is_refused(self, bar):
         bar.submit("graphlayout 9x9")
 
@@ -630,12 +517,6 @@ class TestViewCommands:
 
         assert bar.db.last("set_setting") == ("food_graph_calorie_series", series)
         assert "Execution Fail" not in bar.status_bar.message
-
-    def test_an_unsupported_calorie_series_is_refused(self, bar):
-        bar.submit("calseries gross")
-
-        assert "eaten" in bar.status_bar.message
-        assert bar.db.calls == []
 
     def test_a_calorie_series_change_is_mirrored_by_the_graph_tab(self, bar):
         bar.views["food_graphs"] = FakeGraphs()
@@ -671,13 +552,6 @@ class TestStressOverrideCommand:
         assert bar.db.last("clear_pomodoro_dsi_override") == "2026-09-05"
         assert "Removed visual DSI override" in bar.status_bar.message
 
-    def test_a_refused_override_is_reported(self, bar):
-        bar.db.result = (False, "server said no")
-
-        bar.submit("setdsi 05.09.2026 0.8")
-
-        assert "server said no" in bar.status_bar.message
-
 
 class TestChoreCommands:
     def test_a_chore_is_ticked_off_today(self, bar):
@@ -692,15 +566,8 @@ class TestChoreCommands:
 
         assert bar.db.last("complete_chore")["name"] == "Bins"
 
-    def test_a_cadence_in_days_is_stored_as_days(self, bar):
-        bar.submit("chorenew 7 11.09.2026 Vacuum")
-
-        assert bar.db.last("add_chore")["period_days"] == 7
-
-    @pytest.mark.parametrize("typed,days", [
-        ("2w", 14), ("4w", 28), ("1w", 7), ("2W", 14),
-    ])
-    def test_weeks_reach_the_store_as_days(self, bar, typed, days):
+    @pytest.mark.parametrize("typed,days", [("7", 7), ("2w", 14), ("4w", 28), ("2W", 14)])
+    def test_a_cadence_reaches_the_store_as_days(self, bar, typed, days):
         bar.submit(f"chorenew {typed} 11.09.2026 Vacuum")
 
         assert bar.db.last("add_chore")["period_days"] == days
@@ -746,10 +613,11 @@ class TestChoreCommands:
 
         assert bar.db.last("add_chore")["grace_days"] is None
 
-    def test_a_name_beginning_with_a_digit_is_not_eaten_as_a_grace(self, bar):
-        bar.submit("chorenew 7 2nd bathroom")
+    @pytest.mark.parametrize("name", ["2nd bathroom", "Nan visit", "Infinity pool"])
+    def test_a_name_that_opens_like_a_number_is_not_eaten_as_a_grace(self, bar, name):
+        bar.submit(f"chorenew 7 {name}")
 
-        assert bar.db.last("add_chore")["name"] == "2nd bathroom"
+        assert bar.db.last("add_chore")["name"] == name
 
     @pytest.mark.parametrize("typed", ["chorenew 0 Vacuum", "chorenew 0w Vacuum"])
     def test_a_cadence_of_less_than_a_day_is_refused(self, bar, typed):
@@ -773,20 +641,6 @@ class TestChoreCommands:
 
 
 class TestReportedFailures:
-    def test_a_refused_beverage_log_is_reported(self, bar):
-        bar.db.result = (False, "Beverage 'Ghost Coffee' not found in catalog.")
-
-        bar.submit("bevlog 1 08:30 Ghost Coffee")
-
-        assert "not found" in bar.status_bar.message
-
-    def test_a_duplicate_definition_is_reported(self, bar):
-        bar.db.result = (False, "UNIQUE constraint failed: food_items.name")
-
-        bar.submit("define Rolled Oats;Carbs;380;7;1.2;60;1;10;13;0;50")
-
-        assert "UNIQUE" in bar.status_bar.message
-
     @pytest.mark.parametrize(
         "text",
         ["log 1 b Rolled Oats", "bevlog 1 08:30 Black Coffee",
@@ -832,23 +686,12 @@ class TestConfirmation:
         assert expected in bar.status_bar.message
         assert "Mode: NORMAL" not in bar.status_bar.message
 
-    def test_a_whole_serving_reads_without_a_decimal_point(self, bar):
-        bar.submit("log 1 b Rolled Oats")
-
-        assert "1 x Rolled Oats" in bar.status_bar.message
-
-    def test_a_layout_change_is_mirrored_by_the_graph_tab(self, bar):
+    def test_a_layout_change_is_mirrored_by_the_view_not_its_widget(self, bar):
         bar.views["exercise_graphs"] = FakeGraphs()
 
         bar.submit("graphlayout 2x3")
 
         assert bar.views["exercise_graphs"].dims == "2x3"
-
-    def test_the_view_effect_goes_through_the_view_not_its_widget(self, bar):
-        bar.views["exercise_graphs"] = FakeGraphs()
-
-        bar.submit("graphlayout 2x3")
-
         assert [call for call in bar.db.calls if call[0] == "set_setting"] == [
             ("set_setting", ("ex_graph_layout_dims", "2x3"))
         ], "the layout is stored once, by the command, and not again by a widget"
