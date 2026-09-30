@@ -8,6 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, jsonify
 from waitress import serve
 from server import db_session
+from server.database import db_service
 from server.config import CONFIG_PATH, HOST, PORT, USER_TOKENS, write_template
 from server.payload import BadRequest
 from server.routes.system import system_bp
@@ -61,6 +62,7 @@ if __name__ == "__main__":
                   "start again; a member left without a token is given one.", CONFIG_PATH)
         sys.exit(1)
 
+    db_service.init_db()
     app = create_app()
     log.info("Starting the Traker API server on http://%s:%s for %s", HOST, PORT,
              ", ".join(sorted(USER_TOKENS.values())))

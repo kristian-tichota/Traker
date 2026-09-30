@@ -40,14 +40,6 @@ for _key in ("pomodoro", "supplements", "supplement_graphs", "heatmap",
 _profile_file.write_text(_written.replace("on_break = false", "on_break = true"),
                          encoding="utf-8")
 profile.reload_profile()
-import server.config as server_config                            # noqa: E402
-server_config.DB_PATH = str(SANDBOX / "walk.db")
-
-import importlib                                                 # noqa: E402
-import server.database                                           # noqa: E402
-importlib.reload(server.database)
-import server.db_session                                         # noqa: E402
-importlib.reload(server.db_session)
 
 from PyQt6.QtCore import Qt, QThreadPool                         # noqa: E402
 from PyQt6.QtGui import QKeyEvent                                # noqa: E402
@@ -56,6 +48,7 @@ from werkzeug.serving import make_server                         # noqa: E402
 
 from server.app import create_app                                # noqa: E402
 from server.config import USER_TOKENS                            # noqa: E402
+from server.database import db_service                           # noqa: E402
 from src.config import STYLESHEET                                # noqa: E402
 from src.database import DatabaseClient                          # noqa: E402
 from src.domain import plans as plans_maths                      # noqa: E402
@@ -81,6 +74,8 @@ def free_port() -> int:
 
 
 def main() -> int:
+    db_service.db_path = str(SANDBOX / "walk.db")
+    db_service.init_db()
     port = free_port()
     httpd = make_server("127.0.0.1", port, create_app(), threaded=True)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()

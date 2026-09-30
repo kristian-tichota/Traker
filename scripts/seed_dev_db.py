@@ -77,6 +77,7 @@ def seed(target_path, scale, days, seed_value, quiet=False):
                 os.remove(stale)
 
     database = ServerDatabase(target_path)
+    database.init_db()
     conn = database.get_connection()
     user_ids = [row["id"] for row in conn.execute("SELECT id FROM users ORDER BY id")]
     if not user_ids:

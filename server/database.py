@@ -35,8 +35,6 @@ FOOD_LOGS_DDL = """
 class ServerDatabase:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self.init_db()
 
     def get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
@@ -45,6 +43,7 @@ class ServerDatabase:
         return conn
 
     def init_db(self):
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         conn = self.get_connection()
         conn.execute("PRAGMA journal_mode = WAL;")
         with conn:
