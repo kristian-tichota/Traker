@@ -11,7 +11,7 @@ TIMEOUT_SECS = 3.0
 
 
 class StateHook:
-    """Run a shell command for each state it is told, one run at a time, the latest state winning."""
+    """Run a shell command per state, one run at a time, the latest state winning."""
 
     def __init__(self, command="", run=subprocess.run):
         self.command = str(command or "").strip()
@@ -45,8 +45,8 @@ class StateHook:
         self._heard = state
         try:
             finished = self._run(self.command.replace(PLACEHOLDER, shlex.quote(state)),
-                                 shell=True, stdin=subprocess.DEVNULL,
-                                 capture_output=True, text=True, timeout=TIMEOUT_SECS)
+                                 shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.PIPE, text=True, timeout=TIMEOUT_SECS)
         except (OSError, subprocess.SubprocessError) as error:
             self._fail(state, str(error))
             return
