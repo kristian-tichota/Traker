@@ -6,6 +6,19 @@ ISO_DATE = "%Y-%m-%d"
 DISPLAY_DATE = "%d.%m.%Y"
 
 
+def today_iso() -> str:
+    """Return today as the store spells it."""
+    return datetime.date.today().isoformat()
+
+
+def parse_iso(value):
+    """Return an ISO date as a date, or None where it will not read."""
+    try:
+        return datetime.datetime.strptime(str(value).strip(), ISO_DATE).date()
+    except (TypeError, ValueError):
+        return None
+
+
 @lru_cache(maxsize=4096)
 def as_displayed_date(value, default=None):
     """Render "2026-09-05" as "05.09.2026"."""

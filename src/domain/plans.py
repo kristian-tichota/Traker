@@ -1,25 +1,9 @@
-import datetime
-
-from src.domain.clock import ISO_DATE
+from src.domain.clock import parse_iso, today_iso
 
 DONE = "done"
 TODAY = "today"
 AHEAD = "ahead"
 MISSED = "missed"
-
-STATUSES = (DONE, TODAY, AHEAD, MISSED)
-
-
-def today_iso() -> str:
-    return datetime.date.today().strftime(ISO_DATE)
-
-
-def parse_iso(value):
-    """Return value as a date, or None where it is not an ISO one."""
-    try:
-        return datetime.datetime.strptime(str(value), ISO_DATE).date()
-    except (TypeError, ValueError):
-        return None
 
 
 def current_plan(catalogue, today: str = None):

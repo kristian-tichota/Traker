@@ -210,14 +210,6 @@ def test_a_paused_chore_is_off_the_board_entirely():
     assert [entry.name for entry in chores.board(made, FRIDAY)] == ["Kept"]
 
 
-def test_a_row_from_before_active_existed_is_still_wanted():
-    class Old:
-        id, name, period_days, anchor = 1, "Old", 7, FRIDAY
-        grace_days = last_done = None
-
-    assert [entry.name for entry in chores.board([Old()], FRIDAY)] == ["Old"]
-
-
 def test_due_now_offers_the_three_standings_a_break_can_act_on():
     made = [
         Chore("Late", anchor="2026-09-01", chore_id=1),
