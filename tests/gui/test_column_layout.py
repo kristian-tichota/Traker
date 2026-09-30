@@ -30,7 +30,7 @@ class TestALayoutIsAPermutationPlusAHiddenSet:
         assert layout.order == tuple(HEADERS)
         assert layout.visible == tuple(HEADERS)
         assert layout.hidden == frozenset()
-        assert layout.is_default(HEADERS)
+        assert layout == ColumnLayout.declared(HEADERS)
 
     def test_a_hidden_column_keeps_its_place(self):
         layout = declared().hide("Servings")
@@ -414,7 +414,7 @@ class TestTheMouseCanDoWhatTheKeyboardCan:
 
         assert "Sugars" in shown(food)
         assert ColumnLayout.parse(food.db.last("set_setting")[1],
-                                  food.headers[0]).is_default(food.headers[0])
+                                  food.headers[0]) == ColumnLayout.declared(food.headers[0])
 
     def test_the_last_visible_column_cannot_be_switched_off_from_the_menu(
             self, food, monkeypatch):
@@ -438,7 +438,7 @@ class TestTheMouseCanDoWhatTheKeyboardCan:
         food.on_header_menu_requested(0, QPoint(1, 1))
         settled()
 
-        assert food.column_layout(0).is_default(food.headers[0])
+        assert food.column_layout(0) == ColumnLayout.declared(food.headers[0])
 
     def test_dismissing_the_menu_changes_nothing(self, food, settled, monkeypatch):
         monkeypatch.setattr("PyQt6.QtWidgets.QMenu.exec",
@@ -447,7 +447,7 @@ class TestTheMouseCanDoWhatTheKeyboardCan:
         food.on_header_menu_requested(0, QPoint(1, 1))
         settled()
 
-        assert food.column_layout(0).is_default(food.headers[0])
+        assert food.column_layout(0) == ColumnLayout.declared(food.headers[0])
         assert not food.db.called("set_setting")
 
 
@@ -582,7 +582,7 @@ class TestColsFromTheCommandBar:
         assert shown(food_tab)[0] == "Calories"
 
         self.submit(window, "cols reset", settled)
-        assert food_tab.column_layout(0).is_default(food_tab.headers[0])
+        assert food_tab.column_layout(0) == ColumnLayout.declared(food_tab.headers[0])
 
     def test_a_column_whose_name_has_a_space_is_named_in_full(
             self, window, food_tab, settled):

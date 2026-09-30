@@ -59,10 +59,6 @@ class ColumnLayout:
         """Return the columns on screen, in the order they are on screen."""
         return tuple(name for name in self.order if name not in self.hidden)
 
-    def is_default(self, declared) -> bool:
-        """Report whether this is what the table declares, so nothing needs storing."""
-        return self.order == tuple(declared) and not self.hidden
-
     def is_hidden(self, header: str) -> bool:
         return header in self.hidden
 
