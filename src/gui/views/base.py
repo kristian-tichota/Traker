@@ -5,7 +5,7 @@ from src.domain.clock import as_displayed_date, as_stored_date
 from src.gui.animations import ChangeGlow
 from src.gui.columns import ColumnLayout, setting_key
 from src.gui.components.vim_table_view import VimTableView
-from src.gui.domains import domain_of_table
+from src.domain.tables import domain_of_table
 from src.gui.lifecycle import ShutdownMixin
 from src.database.rows import MatchedTotals
 from src.gui.models.filter_proxy import FilterProxyModel
