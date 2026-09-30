@@ -172,10 +172,6 @@ class DatabaseClient(DBAnalyticsMixin):
         shape = WorkoutComponentRow if domain == "exercise" else SetComponentRow
         return self._catalog(f"sets/{domain}", shape)
 
-    def get_set_names(self, domain: str):
-        """Return the set names of one domain, for completion."""
-        return list(dict.fromkeys(row.set_name for row in self.get_sets(domain)))
-
     def add_set(self, domain: str, d: dict):
         return self._post(f"/api/catalog/sets/{domain}", d)
 
@@ -327,9 +323,6 @@ class DatabaseClient(DBAnalyticsMixin):
 
     def add_training_plan(self, d: dict):
         return self._post("/api/plans", d)
-
-    def add_plan_session(self, plan_id: int, d: dict):
-        return self._post(f"/api/plans/{plan_id}/sessions", d)
 
     def log_planned_session(self, d: dict):
         """Write the session planned for one date into the exercise ledger."""
