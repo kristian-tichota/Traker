@@ -441,9 +441,7 @@ class UserProfile:
         for time_range, regime_name in day_schedule.items():
             start, _, end = str(time_range).partition("-")
             start, end = minutes_of_day(start), minutes_of_day(end)
-            if start is None or end is None:
-                continue
-            if within_window(current, start, end):
+            if start is not None and end is not None and within_window(current, start, end):
                 return str(regime_name)
         return "Unscheduled"
 
