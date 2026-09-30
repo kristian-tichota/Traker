@@ -1113,7 +1113,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             self._apply_long_break_controls()
             if not self.long_breaks_per_day:
                 return " No long breaks are configured."
-            return (f" Both of today's {self.long_break_ms // MS_PER_MINUTE}"
+            return (f" Today's {self.long_break_ms // MS_PER_MINUTE}"
                     f"-minute breaks are spent.")
 
         self._long_break_queued = True
