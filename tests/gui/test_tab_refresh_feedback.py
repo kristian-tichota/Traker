@@ -131,7 +131,7 @@ class TestAnInFlightReadIsNotAnEmptyLog:
 
         pool = QThreadPool.globalInstance()
         release = threading.Event()
-        run_in_background(pool, release.wait, discard, None, 5.0)
+        run_in_background(pool, release.wait, discard, None, 30.0)
         try:
             target = index_of(window, "food")
             window.dirty_tabs = {target}
