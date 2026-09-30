@@ -7,11 +7,7 @@ from server.sets import SET_DOMAINS, SET_SPECS
 
 log = logging.getLogger(__name__)
 
-CATALOG_TABLE_NAMES = tuple(spec.catalog_table for spec in SET_SPECS.values())
-
 AD_HOC_CATEGORY = "Ad hoc"
-
-SET_AWARE_LOG_TABLES = tuple(spec.log_table for spec in SET_SPECS.values())
 
 FOOD_LOGS_DDL = """
     CREATE TABLE IF NOT EXISTS {table} (
@@ -332,18 +328,18 @@ class ServerDatabase:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_plan_movements_session "
                          "ON plan_movements(session_id, position)")
 
-            for table in CATALOG_TABLE_NAMES:
-                self._ensure_folded_name_index(conn, table)
+            for spec in SET_SPECS.values():
+                self._ensure_folded_name_index(conn, spec.catalog_table)
 
             self._adopt_generalised_sets(conn)
             self._ensure_food_log_amounts(conn)
             self._drop_superseded_meal_sets(conn)
-            for table in SET_AWARE_LOG_TABLES:
+            for spec in SET_SPECS.values():
                 self._ensure_column(
-                    conn, table, "set_id",
+                    conn, spec.log_table, "set_id",
                     "INTEGER REFERENCES item_sets(id) ON DELETE SET NULL")
-                conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_user_date "
-                             f"ON {table}(user_id, date)")
+                conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{spec.log_table}_user_date "
+                             f"ON {spec.log_table}(user_id, date)")
 
             self._seed_users(conn)
         conn.close()

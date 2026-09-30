@@ -22,11 +22,6 @@ class SetSpec:
     scaled: bool = True
 
     @property
-    def amount_column(self) -> str:
-        """Return the single amount column, for the four domains that have one."""
-        return self.amount_columns[0]
-
-    @property
     def has_single_amount(self) -> bool:
         return self.amount_columns == _AMOUNT
 
@@ -56,14 +51,6 @@ def spec_for(domain: str):
     return SET_SPECS.get(domain)
 
 
-def spec_of_catalog(catalog_table: str):
-    """Return the set registration whose components name items in this catalog."""
-    for spec in _SPECS:
-        if spec.catalog_table == catalog_table:
-            return spec
-    return None
-
-
 def find(conn, domain: str, name: str):
     """Return the item_sets row this domain calls name, or None."""
     return conn.execute(
@@ -72,49 +59,31 @@ def find(conn, domain: str, name: str):
     ).fetchone()
 
 
-def components_of(conn, spec: SetSpec, set_id: int):
-    """Return one row per component: the item name, then its amount columns."""
+def expansion(conn, spec: SetSpec, set_id: int, multiplier: float):
+    """Return what logging this set writes: (item_id, item name, {column: value}) each."""
+    scale = float(multiplier) if spec.scaled else 1.0
     amounts = ", ".join(f"c.{column}" for column in spec.amount_columns)
-    return conn.execute(
-        f"""SELECT i.name AS item_name, i.id AS item_id, {amounts}
+    components = conn.execute(
+        f"""SELECT i.id, i.name, {amounts}
             FROM {spec.components_table} c
             JOIN {spec.catalog_table} i ON i.id = c.{spec.item_column}
             WHERE c.set_id = ?
-            ORDER BY i.name COLLATE NOCASE""", (set_id,)
-    ).fetchall()
-
-
-def expansion(conn, spec: SetSpec, set_id: int, multiplier: float):
-    """Return what logging this set writes: one (item_id, {column: value}) each."""
-    scale = float(multiplier) if spec.scaled else 1.0
-    expanded = []
-    for component in components_of(conn, spec, set_id):
-        values = {}
-        for source, target in zip(spec.amount_columns, spec.log_amount_columns):
-            value = component[source]
-            values[target] = None if value is None else value * scale
-        expanded.append((component["item_id"], component["item_name"], values))
-    return expanded
-
-
-def sets_using(conn, catalog_table: str, item_name: str):
-    """Return the sets that would be left with a hole without this item."""
-    spec = spec_of_catalog(catalog_table)
-    if spec is None:
-        return []
-    return [row["name"] for row in conn.execute(
-        f"""SELECT DISTINCT s.name FROM item_sets s
-            JOIN {spec.components_table} c ON c.set_id = s.id
-            JOIN {spec.catalog_table} i ON i.id = c.{spec.item_column}
-            WHERE s.domain = ? AND i.name = ? COLLATE NOCASE
-            ORDER BY s.name""", (spec.domain, item_name))]
+            ORDER BY i.name COLLATE NOCASE""", (set_id,))
+    return [(item_id, item_name, {target: value * scale for target, value
+                                  in zip(spec.log_amount_columns, values)})
+            for item_id, item_name, *values in components]
 
 
 def every_set_using(conn, item_name: str):
-    """Return (word, [set names]) for every domain the name is a component of."""
+    """Return (spec, [set names]) for every domain the name is a component of."""
     found = []
     for spec in _SPECS:
-        names = sets_using(conn, spec.catalog_table, item_name)
+        names = [row["name"] for row in conn.execute(
+            f"""SELECT DISTINCT s.name FROM item_sets s
+                JOIN {spec.components_table} c ON c.set_id = s.id
+                JOIN {spec.catalog_table} i ON i.id = c.{spec.item_column}
+                WHERE s.domain = ? AND i.name = ? COLLATE NOCASE
+                ORDER BY s.name""", (spec.domain, item_name))]
         if names:
             found.append((spec, names))
     return found
