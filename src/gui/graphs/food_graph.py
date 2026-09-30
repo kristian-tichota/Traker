@@ -24,6 +24,8 @@ CALORIE_TITLES = {
 
 SERIES_BY_LABEL = {label: key for key, label in CALORIE_SERIES.items()}
 
+PERIODS = {1: "1 Day (Raw)", 7: "7 Days (Weekly Average)"}
+
 
 class FoodGraphView(BaseGraphView):
     def __init__(self, db):
@@ -32,7 +34,7 @@ class FoodGraphView(BaseGraphView):
         self.controls_layout = QHBoxLayout()
         self.controls_layout.addWidget(QLabel("<b>Rolling Average Window:</b>"))
         self.period_select = QComboBox()
-        self.period_select.addItems(["1 Day (Raw)", "7 Days (Weekly Average)"])
+        self.period_select.addItems(list(PERIODS.values()))
 
         self.rolling_period = 1
         self.period_select.currentTextChanged.connect(self.on_period_changed)
@@ -56,7 +58,7 @@ class FoodGraphView(BaseGraphView):
     def _read_preferences(self):
         return self.db.get_settings(
             ["food_graph_period", "food_graph_calorie_series"],
-            {"food_graph_period": "1 Day (Raw)",
+            {"food_graph_period": PERIODS[1],
              "food_graph_calorie_series": EATEN})
 
     def _apply_preferences(self, saved):
@@ -109,14 +111,9 @@ class FoodGraphView(BaseGraphView):
         return self.calorie_series == NET_OF_TRAINING
 
     def set_rolling_period(self, days: int):
-        self.rolling_period = days
-        text = "7 Days (Weekly Average)" if days == 7 else "1 Day (Raw)"
-
-        self.period_select.blockSignals(True)
-        self.period_select.setCurrentText(text)
-        self.period_select.blockSignals(False)
-
-        self._remember_period(text)
+        """Adopt a window chosen from the keyboard, store it, and redraw at it."""
+        self._adopt_period(PERIODS[days])
+        self._remember_period(PERIODS[days])
         self.refresh()
 
     def _compute_rolling_avg(self, data: np.ndarray, window: int) -> np.ndarray:
