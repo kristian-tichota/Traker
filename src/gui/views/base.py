@@ -145,11 +145,6 @@ class BaseManagedView(ShutdownMixin, QWidget):
         self._table_glows[table_idx].start()
         return position
 
-    def showEvent(self, event):
-        """Read this member's column layouts on arrival at the tab."""
-        super().showEvent(event)
-        self.load_column_layouts()
-
     def shutdown(self):
         """Stop the row washes before the timers, then hand on up the MRO."""
         for glow in self._table_glows.values():

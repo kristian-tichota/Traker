@@ -99,12 +99,15 @@ class TestAnInFlightReadIsNotAnEmptyLog:
 
         assert window.status_bar.text() == " Saved."
 
-    def test_the_veil_waits_for_the_tabs_own_read(self, window, recording_db, settled):
+    @pytest.mark.parametrize("read", ["get_food_logs", "get_settings"])
+    def test_the_veil_waits_for_the_tabs_rows_and_column_layouts(
+            self, window, recording_db, settled, read):
         import threading
 
         release = threading.Event()
-        rows = recording_db.get_food_logs
-        recording_db.get_food_logs = lambda since=None: release.wait(5.0) and rows(since)
+        answer = getattr(recording_db, read)
+        setattr(recording_db, read,
+                lambda *args, **kwargs: release.wait(5.0) and answer(*args, **kwargs))
         target = index_of(window, "food")
         window.dirty_tabs = {target}
         window._on_tab_changed(target)

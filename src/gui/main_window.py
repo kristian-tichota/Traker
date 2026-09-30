@@ -660,7 +660,7 @@ class MainWindow(QMainWindow):
         self._refresh_tab(index, veil=False)
 
     def _refresh_tab(self, index, veil: bool):
-        """Dispatch the refresh of tab index, veiled until its reads land or in place."""
+        """Refresh tab index in place, or veiled until it and its column layouts are read."""
         widget = self.tabs.widget(index)
         self.dirty_tabs.discard(index)
         if not hasattr(widget, "refresh"):
@@ -673,6 +673,8 @@ class MainWindow(QMainWindow):
         self.status_bar.setText(" Reading…")
         self._veils += 1
         with watched(partial(self._on_tab_read, self._veils)):
+            if hasattr(widget, "load_column_layouts"):
+                widget.load_column_layouts()
             widget.refresh()
 
     def _on_tab_read(self, veil):
