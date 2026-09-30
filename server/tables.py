@@ -166,9 +166,12 @@ def coerce_value(conn, table_name: str, column: str, value):
     except (TypeError, ValueError):
         raise BadValue(f"'{value}' is not a number, but {column} stores one")
     if not math.isfinite(number):
-        # float() takes "inf" and "1e400"; SQLite stores them and every later sum is infinite.
         raise BadValue(f"'{value}' is not a finite number, but {column} stores one")
-    return int(number) if target is int else number
+    if target is float:
+        return number
+    if not number.is_integer():
+        raise BadValue(f"'{value}' is not a whole number, but {column} stores one")
+    return int(number)
 
 
 def reset_type_cache() -> None:

@@ -55,6 +55,13 @@ class TestAValueThatMustNotBeStored:
         assert response.status_code == 400
         assert member_a.get("/api/catalog/beverage").get_json() == []
 
+    def test_a_fraction_in_a_whole_number_column_is_refused_rather_than_cut(self, member_a):
+        chore = {"name": "Vacuum", "anchor": "2026-09-11"}
+
+        assert member_a.post("/api/chores", json=dict(chore, period_days=7.5)).status_code == 400
+        assert member_a.post("/api/chores", json=dict(chore, period_days=7.0)).status_code == 201
+        assert [row["period_days"] for row in member_a.get("/api/chores").get_json()] == [7]
+
     def test_a_stored_number_keeps_its_declared_type(self, member_a, server_db):
         member_a.post("/api/catalog/food", json=dict(OATS, energy="379"))
 
