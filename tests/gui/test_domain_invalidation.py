@@ -211,3 +211,12 @@ class TestTheStreamsEchoNarrowsToo:
         window._on_remote_catalog_update({})
 
         assert window.dirty_tabs == set(range(window.tabs.count())) - {visible}
+
+    def test_the_members_own_change_keeps_their_confirmation(self, window):
+        window.status_bar.setText(" Meal set 'Blue Oatmeal' defined.")
+        window.dirty_tabs = set()
+
+        window._on_remote_catalog_update({"table": "food_set_components", "own": True})
+
+        assert window.status_bar.text() == " Meal set 'Blue Oatmeal' defined."
+        assert window.tab_indices["food"] in window.dirty_tabs

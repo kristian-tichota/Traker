@@ -363,6 +363,7 @@ class MainWindow(QMainWindow):
             self.status_pulser.pulse(PALETTE['red'])
 
     def _on_remote_catalog_update(self, data):
+        """Re-read what another write changed, announcing it unless it was this member's."""
         self.command_line.invalidate_catalog_cache()
         domain = domain_of_table(data.get("table", ""))
         self.db.invalidate((domain,) if domain else None)
@@ -370,6 +371,8 @@ class MainWindow(QMainWindow):
             self.mark_domains_stale((domain,))
         else:
             self.mark_all_tabs_stale()
+        if data.get("own"):
+            return
         self.status_pulser.pulse(PALETTE['cyan'])
         self.status_bar.setText(" Real-time sync: Catalog definitions updated.")
 
