@@ -16,7 +16,7 @@ from src.desktop.activities import (ANY_DECK, BOOK, BreakActivity, DECK, DOCUMEN
 from src.config import PALETTE
 from src.domain import media
 from src.domain.media import Place
-from src.gui.components import media_progress, media_surface
+from src.gui.components import media_progress
 from src.gui.components.book_pane import BookPane
 from src.gui.components.media_surface import (AGAIN_SAID, ANSWER, GOOD_SAID, QUESTION,
                                               UNDONE, DeckPane, DocumentPane,
@@ -335,10 +335,7 @@ class TestReadingABook:
 
 
 @pytest.fixture
-def browsing(qapp, monkeypatch):
-    from PyQt6.QtWebEngineCore import QWebEngineProfile
-    profile = QWebEngineProfile()
-    monkeypatch.setattr(media_surface, "_page_profile", lambda: profile)
+def browsing(qapp):
     opened = []
 
     def _open(url):

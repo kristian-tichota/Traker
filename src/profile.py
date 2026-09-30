@@ -271,8 +271,8 @@ anki_url = "http://127.0.0.1:8765"
 # and RIGHT answer Good, LEFT answers Again, and BACKSPACE takes the last answer
 # back. A deck of "*" lists every deck in Anki first: UP/DOWN choose one,
 # LEFT/RIGHT skip to one with cards due, SPACE reviews it, and 0 in it goes back
-# to the list. A web page takes every key but ESC; CTRL+0 puts the wall back,
-# and its storage is kept in ~/.config/traker/pages.
+# to the list. A web page takes every key but ESC and CTRL+0, which puts the
+# wall back.
 #
 # [[strict_break.activities]]
 # name = "Reading"

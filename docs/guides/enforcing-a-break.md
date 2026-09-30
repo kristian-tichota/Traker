@@ -44,7 +44,7 @@ answer on the next card. A `deck` of `*` lists every deck first. Anki MUST be ru
 stay minimized, and its timebox MUST be 0.
 
 A `url` opens as a web page that takes every key except `Esc` and `Ctrl+0`, which puts the wall back.
-It stays loaded until the walls go, and its storage persists in `~/.config/traker/pages`.
+It stays loaded until the walls go, and Traker writes none of its storage to disk.
 
 ## State hook
 

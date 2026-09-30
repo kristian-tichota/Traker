@@ -1,4 +1,3 @@
-import functools
 import logging
 import os
 import re
@@ -7,7 +6,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import QPointF, QThreadPool, QUrl, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QOpenGLContext, QPalette
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QFrame, QHeaderView, QLabel,
+from PyQt6.QtWidgets import (QAbstractItemView, QFrame, QHeaderView, QLabel,
                              QStackedWidget, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
@@ -28,8 +27,6 @@ SEEK_MS = 30_000
 
 VOLUME_STEP = 0.1
 SCROLL_STEP_PX = 160
-
-PAGE_STORAGE = os.path.expanduser("~/.config/traker/pages")
 
 QUESTION, ANSWER = "question", "answer"
 
@@ -835,16 +832,6 @@ def _how_far_into(entry, places) -> tuple:
     return ("" if said == UNKNOWN else said), finished(place, unit)
 
 
-@functools.cache
-def _page_profile():
-    """Return the profile every web page shares, whose storage outlives the break."""
-    from PyQt6.QtWebEngineCore import QWebEngineProfile
-    profile = QWebEngineProfile(os.path.basename(PAGE_STORAGE), QApplication.instance())
-    profile.setPersistentStoragePath(PAGE_STORAGE)
-    profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
-    return profile
-
-
 class PagePane(QWidget):
     """One web page, which every key reaches but the break's own."""
 
@@ -858,7 +845,6 @@ class PagePane(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         try:
-            from PyQt6.QtWebEngineCore import QWebEnginePage
             from PyQt6.QtWebEngineWidgets import QWebEngineView
         except ImportError as error:
             log.warning("No web page in a break: %s", error)
@@ -866,7 +852,6 @@ class PagePane(QWidget):
             return
 
         self.view = QWebEngineView(self)
-        self.view.setPage(QWebEnginePage(_page_profile(), self.view))
         self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         self.view.page().setBackgroundColor(QColor(PALETTE['base3']))
         self.view.loadFinished.connect(self._finished)
