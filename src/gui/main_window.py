@@ -366,6 +366,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
 
+        self._veils += 1
         connection = getattr(self.db, "connection", None)
         if connection is not None:
             connection.on_change = None

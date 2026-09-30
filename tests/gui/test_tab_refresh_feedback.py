@@ -435,3 +435,28 @@ class TestTheVeilDrivesTheArc:
 
         assert not window.tab_animator.covering
         assert not window.tab_animator.overlay.spinner._timer.isActive()
+
+
+class TestAReadOutlivingTheWindow:
+    def test_it_lands_on_nothing_once_the_window_has_closed(
+            self, qapp, profile_path, recording_db, monkeypatch):
+        import threading
+
+        from PyQt6 import sip
+        from PyQt6.QtCore import QThreadPool
+
+        from src.gui.main_window import MainWindow
+
+        release = threading.Event()
+        rows = recording_db.get_food_logs
+        recording_db.get_food_logs = lambda since=None: release.wait(5.0) and rows(since)
+        monkeypatch.setattr(MainWindow, "SHUTDOWN_GRACE_MS", 10)
+        window = MainWindow(recording_db)
+        window.dirty_tabs = {window.tab_indices["food"]}
+        window._on_tab_changed(window.tab_indices["food"])
+
+        window.close()
+        sip.delete(window)
+        release.set()
+        QThreadPool.globalInstance().waitForDone(5000)
+        qapp.processEvents()
