@@ -6,7 +6,7 @@ from server.db_session import get_db
 from server.events import event_broadcaster
 from server.payload import BadValue, Conflict, NotFound, read_payload
 from server import sets as item_sets
-from server.tables import CATALOG_DOMAINS, NAMED_CATALOG_TABLES
+from server.tables import CATALOG_DOMAINS
 from server.validation import checked_columns, require_known_columns
 
 log = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ def delete_item_by_name(name):
 
     removed = 0
     with conn:
-        for tbl in sorted(NAMED_CATALOG_TABLES):
+        for tbl in (*CATALOG_DOMAINS.values(), "item_sets"):
             removed += conn.execute(
                 f"DELETE FROM {tbl} WHERE name = ? COLLATE NOCASE", (name,)
             ).rowcount

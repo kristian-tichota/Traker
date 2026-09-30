@@ -148,6 +148,12 @@ class TestTheHistory:
                              json={"col": "chore_id", "val": 2})
         assert answer.status_code == 400
 
+    def test_removing_a_catalog_name_leaves_a_chore_of_that_name(self, board):
+        board.post("/api/chores/done", json={"name": "Vacuum", "date": "2026-09-11"})
+
+        assert board.delete("/api/catalog/items/Vacuum").status_code == 404
+        assert rows_by_name(board)["Vacuum"]["done_count"] == 1
+
     def test_deleting_a_chore_takes_its_history_with_it(self, board):
         board.post("/api/chores/done", json={"name": "Vacuum", "date": "2026-09-11"})
         chore_id = rows_by_name(board)["Vacuum"]["id"]

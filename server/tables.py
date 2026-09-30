@@ -14,26 +14,18 @@ class TableSpec:
     mutable_columns: FrozenSet[str]
     row_editable: bool = True
     non_negative: FrozenSet[str] = frozenset()
-    has_name: bool = True
     exclusive: tuple = ()
 
 
-def _spec(name, is_catalog, columns, row_editable=True, non_negative=(),
-          has_name=True, exclusive=()):
+def _spec(name, is_catalog, columns, row_editable=True, non_negative=(), exclusive=()):
     return TableSpec(name=name, is_catalog=is_catalog,
                      mutable_columns=frozenset(columns),
                      row_editable=row_editable,
                      non_negative=frozenset(non_negative),
-                     has_name=has_name,
                      exclusive=tuple(frozenset(group) for group in exclusive))
 
-CATALOG_DOMAINS = {
-    "food": "food_items",
-    "beverage": "beverage_items",
-    "exercise": "exercise_items",
-    "supplement": "supplement_items",
-    "mobility": "mobility_items",
-}
+
+CATALOG_DOMAINS = {domain: spec.catalog_table for domain, spec in SET_SPECS.items()}
 
 _REGISTRY = {
     spec.name: spec
@@ -61,13 +53,13 @@ _REGISTRY = {
         _spec("item_sets", True, {"name"}),
         *(_spec(spec.components_table, True,
                 {spec.item_column, *spec.amount_columns},
-                non_negative=set(spec.amount_columns), has_name=False)
+                non_negative=set(spec.amount_columns))
           for spec in SET_SPECS.values()),
 
         _spec("chores", True,
               {"name", "period_days", "anchor", "grace_days", "notes", "active"},
               non_negative={"period_days", "grace_days"}),
-        _spec("chore_completions", True, {"date"}, has_name=False),
+        _spec("chore_completions", True, {"date"}),
 
         _spec("food_logs", False,
               {"date", "meal_type", "food_item_id", "servings", "grams"},
@@ -96,15 +88,12 @@ _REGISTRY = {
             "exercise_item_id", "position", "sets", "target_low", "target_high",
             "weight_kg", "rpe", "tempo", "grouping", "notes",
         }, non_negative={"position", "sets", "target_low", "target_high",
-                         "weight_kg", "rpe"}, has_name=False),
+                         "weight_kg", "rpe"}),
         _spec("user_settings", False, {"key", "value"}, row_editable=False),
     )
 }
 
 CATALOG_TABLES = frozenset(s.name for s in _REGISTRY.values() if s.is_catalog)
-NAMED_CATALOG_TABLES = frozenset(
-    s.name for s in _REGISTRY.values() if s.is_catalog and s.has_name
-)
 USER_LOG_TABLES = frozenset(
     s.name for s in _REGISTRY.values() if not s.is_catalog and s.row_editable
 )
