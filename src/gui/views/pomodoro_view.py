@@ -1,5 +1,4 @@
 import datetime
-import functools
 import logging
 import math
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -130,6 +129,11 @@ def is_typing_into(watched) -> bool:
     """Report whether a text field receives the key or holds the keyboard focus."""
     return any(isinstance(widget, QLineEdit)
                for widget in (watched, QApplication.focusWidget()))
+
+
+def walk_shelves(offered, folder) -> tuple:
+    """Return what a break offered, with the shelves of the media folder to add to it."""
+    return offered, break_activities.shelves(folder)
 
 
 def read_long_breaks_spent(db) -> tuple:
@@ -1469,13 +1473,13 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Return what this break may be handed to, in key order, the shelves once walked."""
         self._offers = (break_activities.queued(rest_queue.read(self._queue_path))
                         + list(self.activities))
-        run_in_background(self.threadpool, break_activities.shelves,
-                          functools.partial(self._add_shelves, self._offers), None,
-                          self._library_path)
+        run_in_background(self.threadpool, walk_shelves, self._add_shelves, None,
+                          self._offers, self._library_path)
         return self._offers
 
-    def _add_shelves(self, offered, shelves):
+    def _add_shelves(self, payload):
         """Offer the library's shelves after what the break was offering when it began."""
+        offered, shelves = payload
         if not shelves or offered is not self._offers or not self._strict_engaged:
             return
         self._offers = offered + shelves
