@@ -498,13 +498,23 @@ def _confirm_dsi(payload):
             f"{payload['override_dsi']:.2f}")
 
 
+def _writes(method: str):
+    """Return an invoke that hands the payload to one client method."""
+    return lambda db, payload: getattr(db, method)(payload)
+
+
+def _log(name: str, method: str, domain: str, **options) -> Command:
+    """Build a command that writes one row, dated today, through one client method."""
+    return Command(name=name, invoke=_writes(method), dated=True, domain=domain, **options)
+
+
 def _definition(name: str, params: tuple, method: str, domain: str) -> Command:
     """Build a define command: semicolon-separated fields, one catalog write."""
     return Command(
         name=name,
         params=params,
         separator=";",
-        invoke=lambda db, payload: getattr(db, method)(payload),
+        invoke=_writes(method),
         confirm=lambda payload: f" Defined '{payload['name']}' in the shared catalog.",
         domain=domain,
     )
@@ -537,40 +547,30 @@ def _set_definition(name: str, domain: str, word: str, component_param: Param,
         aliases=aliases,
     )
 
+_FOOD_ROW = ("estimated", "date", "meal_type", "food_name", "servings", "grams")
+
 _COMMAND_LIST = [
-    Command(
-        name="log",
-        params=(
-            Param(None, "[1 or 100g]", _read_amount, "servings, or grams as 100g",
-                  default=lambda: {"servings": 1.0}, looks_like=_AMOUNT.fullmatch),
-            MEAL_TYPE,
-            item("food_name", "[Food or Meal Set]", (FOOD, MEAL_SET)),
-        ),
-        dated=True,
-        invoke=lambda db, payload: db.add_food_log(payload),
-        confirm=lambda p: (f" Logged {_amount_written(p)} {p['food_name']} "
-                           f"({p['meal_type']})."),
-        domain=FOOD,
-        optimistic=OptimisticRow("food", (
-            "estimated", "date", "meal_type", "food_name", "servings", "grams")),
-    ),
-    Command(
-        name="quick",
-        params=(
-            number("energy_kcal", "[kcal]"),
-            MEAL_TYPE,
-            text("food_name", "[What it was]", rest=True),
-        ),
-        dated=True,
-        invoke=lambda db, payload: db.add_quick_food_log(payload),
-        confirm=lambda p: (f" Logged '{p['food_name']}' ({p['meal_type']}) as an "
-                           f"estimate of {_quantity(p['energy_kcal'])} kcal — "
-                           f"macros unknown, so the day reads as estimated."),
-        domain=FOOD,
-        optimistic=OptimisticRow("food", (
-            "estimated", "date", "meal_type", "food_name", "servings", "grams"),
-            fixed=(("estimated", True), ("servings", 1.0))),
-    ),
+    _log("log", "add_food_log", FOOD,
+         params=(
+             Param(None, "[1 or 100g]", _read_amount, "servings, or grams as 100g",
+                   default=lambda: {"servings": 1.0}, looks_like=_AMOUNT.fullmatch),
+             MEAL_TYPE,
+             item("food_name", "[Food or Meal Set]", (FOOD, MEAL_SET)),
+         ),
+         confirm=lambda p: (f" Logged {_amount_written(p)} {p['food_name']} "
+                            f"({p['meal_type']})."),
+         optimistic=OptimisticRow("food", _FOOD_ROW)),
+    _log("quick", "add_quick_food_log", FOOD,
+         params=(
+             number("energy_kcal", "[kcal]"),
+             MEAL_TYPE,
+             text("food_name", "[What it was]", rest=True),
+         ),
+         confirm=lambda p: (f" Logged '{p['food_name']}' ({p['meal_type']}) as an "
+                            f"estimate of {_quantity(p['energy_kcal'])} kcal — "
+                            f"macros unknown, so the day reads as estimated."),
+         optimistic=OptimisticRow("food", _FOOD_ROW,
+                                  fixed=(("estimated", True), ("servings", 1.0)))),
     _set_definition("mealset", FOOD, "meal set",
                     components("components", "[Food 100; Other Food 50]",
                                "grams", (FOOD,)),
@@ -581,22 +581,18 @@ _COMMAND_LIST = [
         number("carbs_sugars"), number("fibre"), number("protein"),
         number("salt"), number("serving_size"),
     ), "add_food_item", FOOD),
-    Command(
-        name="bevlog",
-        params=(
-            number("servings", "[1]", default=lambda: 1.0),
-            Param("time", "[HH:MM=now]", _read_clock_time, "a time as HH:MM",
-                  default=lambda: datetime.datetime.now().strftime("%H:%M"),
-                  looks_like=_CLOCK.fullmatch),
-            item("bev_name", "[Beverage or Drink Set]", (BEVERAGE, BEVERAGE_SET)),
-        ),
-        dated=True,
-        invoke=lambda db, payload: db.add_beverage_log(payload),
-        confirm=lambda p: f" Logged {_quantity(p['servings'])} x {p['bev_name']} at {p['time']}.",
-        domain=BEVERAGE,
-        optimistic=OptimisticRow("beverages", (
-            "date", "time", "bev_name", "drink_set", "servings")),
-    ),
+    _log("bevlog", "add_beverage_log", BEVERAGE,
+         params=(
+             number("servings", "[1]", default=lambda: 1.0),
+             Param("time", "[HH:MM=now]", _read_clock_time, "a time as HH:MM",
+                   default=lambda: datetime.datetime.now().strftime("%H:%M"),
+                   looks_like=_CLOCK.fullmatch),
+             item("bev_name", "[Beverage or Drink Set]", (BEVERAGE, BEVERAGE_SET)),
+         ),
+         confirm=lambda p: (f" Logged {_quantity(p['servings'])} x {p['bev_name']} "
+                            f"at {p['time']}."),
+         optimistic=OptimisticRow("beverages", (
+             "date", "time", "bev_name", "drink_set", "servings"))),
     _set_definition("bevset", BEVERAGE, "drink set",
                     components("components", "[Drink 1; Other Drink 2]",
                                "servings", (BEVERAGE,)),
@@ -604,35 +600,25 @@ _COMMAND_LIST = [
     _definition("bevdefine", (
         required_text("name"), number("caffeine_mg"), number("antioxidants_mg"),
     ), "add_beverage_item", BEVERAGE),
-    Command(
-        name="exlog",
-        params=(
-            Param(None, "[sets: 7,7,7]", _read_set_scheme, "comma-separated rep counts"),
-            number("weight_kg", "[weight]"),
-            number("rpe"),
-            item("ex_name", "[Exercise Name]", (EXERCISE,)),
-        ),
-        dated=True,
-        invoke=lambda db, payload: db.add_exercise_log(payload),
-        confirm=lambda p: (f" Logged {p['ex_name']} @ {_quantity(p['weight_kg'])} kg, "
-                           f"RPE {_quantity(p['rpe'])}."),
-        domain=EXERCISE,
-        optimistic=OptimisticRow("exercise", (
-            "date", "ex_name", "workout", "set1", "set2", "set3", "set4", "set5",
-            "weight_kg", "rpe"), fixed=(("workout", ""),)),
-    ),
-    Command(
-        name="wlog",
-        params=(item("name", "[Workout Name]", (EXERCISE_SET,)),),
-        dated=True,
-        invoke=lambda db, payload: db.add_workout_log(payload),
-        confirm=lambda p: f" Logged the workout '{p['name']}'.",
-        domain=EXERCISE,
-    ),
+    _log("exlog", "add_exercise_log", EXERCISE,
+         params=(
+             Param(None, "[sets: 7,7,7]", _read_set_scheme, "comma-separated rep counts"),
+             number("weight_kg", "[weight]"),
+             number("rpe"),
+             item("ex_name", "[Exercise Name]", (EXERCISE,)),
+         ),
+         confirm=lambda p: (f" Logged {p['ex_name']} @ {_quantity(p['weight_kg'])} kg, "
+                            f"RPE {_quantity(p['rpe'])}."),
+         optimistic=OptimisticRow("exercise", (
+             "date", "ex_name", "workout", "set1", "set2", "set3", "set4", "set5",
+             "weight_kg", "rpe"), fixed=(("workout", ""),))),
+    _log("wlog", "add_workout_log", EXERCISE,
+         params=(item("name", "[Workout Name]", (EXERCISE_SET,)),),
+         confirm=lambda p: f" Logged the workout '{p['name']}'."),
     Command(
         name="planlog",
         params=(display_date("date", "[DD.MM.YYYY=today]", _today),),
-        invoke=lambda db, payload: db.log_planned_session(payload),
+        invoke=_writes("log_planned_session"),
         confirm=lambda p: (
             f" Logged the session planned for {as_displayed_date(p['date'])}."),
         domain=(EXERCISE, PLAN),
@@ -650,19 +636,13 @@ _COMMAND_LIST = [
         one_of("metric_type", "[Reps/Seconds]", ("Reps", "Seconds"),
                "Metric type must be 'Reps' or 'Seconds'."),
     ), "add_exercise_item", EXERCISE),
-    Command(
-        name="supplog",
-        params=(
-            number("servings", "[1]", default=lambda: 1.0),
-            item("supp_name", "[Supplement or Stack]", (SUPPLEMENT, SUPPLEMENT_SET)),
-        ),
-        dated=True,
-        invoke=lambda db, payload: db.add_supplement_log(payload),
-        confirm=lambda p: f" Logged {_quantity(p['servings'])} x {p['supp_name']}.",
-        domain=SUPPLEMENT,
-        optimistic=OptimisticRow("supplements", (
-            "date", "supp_name", "stack", "servings")),
-    ),
+    _log("supplog", "add_supplement_log", SUPPLEMENT,
+         params=(
+             number("servings", "[1]", default=lambda: 1.0),
+             item("supp_name", "[Supplement or Stack]", (SUPPLEMENT, SUPPLEMENT_SET)),
+         ),
+         confirm=lambda p: f" Logged {_quantity(p['servings'])} x {p['supp_name']}.",
+         optimistic=OptimisticRow("supplements", ("date", "supp_name", "stack", "servings"))),
     _set_definition("suppset", SUPPLEMENT, "stack",
                     components("components", "[B12 1; Creatine 1]",
                                "servings", (SUPPLEMENT,)),
@@ -673,19 +653,15 @@ _COMMAND_LIST = [
         number("epa_mg"), number("calcium_mg"), number("magnesium_mg"),
         number("zinc_mg"), number("c_mg"), number("l_theanine_mg"),
     ), "add_supplement_item", SUPPLEMENT),
-    Command(
-        name="moblog",
-        params=(
-            number("duration_mins", "[mins or set multiple]"),
-            item("mob_name", "[Routine or Routine Set]", (MOBILITY, MOBILITY_SET)),
-        ),
-        dated=True,
-        invoke=lambda db, payload: db.add_mobility_log(payload),
-        confirm=lambda p: f" Logged {_quantity(p['duration_mins'])} min of {p['mob_name']}.",
-        domain=MOBILITY,
-        optimistic=OptimisticRow("mobility", (
-            "date", "mob_name", "routine_set", "duration_mins")),
-    ),
+    _log("moblog", "add_mobility_log", MOBILITY,
+         params=(
+             number("duration_mins", "[mins or set multiple]"),
+             item("mob_name", "[Routine or Routine Set]", (MOBILITY, MOBILITY_SET)),
+         ),
+         confirm=lambda p: (f" Logged {_quantity(p['duration_mins'])} min of "
+                            f"{p['mob_name']}."),
+         optimistic=OptimisticRow("mobility", (
+             "date", "mob_name", "routine_set", "duration_mins"))),
     _set_definition("mobset", MOBILITY, "routine set",
                     components("components", "[Hip Opener 10; Thoracic 5]",
                                "minutes", (MOBILITY,)),
@@ -764,15 +740,10 @@ _COMMAND_LIST = [
         window_effect="queue_rest",
         aliases=("queue",),
     ),
-    Command(
-        name="chore",
-        params=(item("name", "[Chore]", (CHORE,)),),
-        dated=True,
-        invoke=lambda db, payload: db.complete_chore(payload),
-        confirm=lambda p: f" Ticked '{p['name']}' off today.",
-        domain=CHORE,
-        aliases=("done",),
-    ),
+    _log("chore", "complete_chore", CHORE,
+         params=(item("name", "[Chore]", (CHORE,)),),
+         confirm=lambda p: f" Ticked '{p['name']}' off today.",
+         aliases=("done",)),
     Command(
         name="chorenew",
         params=(
@@ -783,7 +754,7 @@ _COMMAND_LIST = [
             required_text("name", "[Chore]",
                           "a name no other chore already has", rest=True),
         ),
-        invoke=lambda db, payload: db.add_chore(payload),
+        invoke=_writes("add_chore"),
         confirm=_confirm_new_chore,
         domain=CHORE,
     ),
