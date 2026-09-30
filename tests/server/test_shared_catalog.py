@@ -233,6 +233,26 @@ class TestBroadcasts:
         assert event["data"]["action"] == "update"
         assert event["data"]["col"] == "energy"
 
+    def test_defining_a_set_names_the_table_of_its_domain(self, seeded_catalog, listener):
+        self._events(listener)
+
+        seeded_catalog.post("/api/catalog/sets/food", json={
+            "name": "Porridge", "components": [{"item_name": "Rolled Oats", "amount": 80}]})
+
+        (event,) = self._events(listener)
+        assert event["data"]["table"] == "food_set_components"
+
+    def test_ticking_a_chore_names_its_table_and_a_repeat_is_silent(self, member_a, listener):
+        member_a.post("/api/chores", json={"name": "Bins", "period_days": 7,
+                                           "anchor": "2026-09-08"})
+        tick = {"name": "Bins", "date": "2026-09-08"}
+
+        member_a.post("/api/chores/done", json=tick)
+        member_a.post("/api/chores/done", json=tick)
+
+        assert [event["data"]["table"] for event in self._events(listener)] == [
+            "chores", "chore_completions"]
+
     def test_recording_a_personal_log_disturbs_nobody(self, seeded_catalog, member_a, listener):
         self._events(listener)
 

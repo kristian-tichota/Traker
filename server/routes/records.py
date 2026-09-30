@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, g
 
 from server.auth import require_auth
 from server.db_session import get_db
-from server.events import event_broadcaster
+from server.events import catalog_updated
 from server.payload import BadValue, NotFound, read_payload
 from server.tables import exclusive_partners, get_spec
 from server.validation import checked_columns
@@ -38,9 +38,7 @@ def delete_record(table_name, row_id):
         raise NotFound(f"No row {row_id} of {table_name} that this member may delete.")
 
     if spec.is_catalog:
-        event_broadcaster.broadcast(
-            "catalog_updated", {"table": table_name, "action": "delete", "id": row_id}
-        )
+        catalog_updated(table=table_name, action="delete", id=row_id)
     return jsonify({"status": "success"})
 
 
@@ -82,8 +80,5 @@ def update_record(table_name, row_id):
         raise NotFound(f"No row {row_id} of {table_name} that this member may edit.")
 
     if spec.is_catalog:
-        event_broadcaster.broadcast(
-            "catalog_updated",
-            {"table": table_name, "action": "update", "id": row_id, "col": db_col},
-        )
+        catalog_updated(table=table_name, action="update", id=row_id, col=db_col)
     return jsonify({"status": "success"})

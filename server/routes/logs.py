@@ -4,7 +4,7 @@ from server import sets
 from server.auth import require_auth
 from server.database import AD_HOC_CATEGORY
 from server.db_session import get_db
-from server.events import event_broadcaster
+from server.events import catalog_updated
 from server.payload import BadPayload, BadValue, Conflict, read_payload
 from server.validation import (checked_columns, checked_payload,
                                validate_column_value)
@@ -220,8 +220,7 @@ def add_quick_food_log():
             VALUES (?, ?, ?, ?, 1.0, 1)
         """, (g.user_id, v["date"], v["meal_type"], cursor.lastrowid))
 
-    event_broadcaster.broadcast(
-        "catalog_updated", {"table": "food_items", "action": "insert", "name": name})
+    catalog_updated(table="food_items", action="insert", name=name)
     return jsonify({"status": "success", "rows": 1, "estimated": True,
                     "energy_kcal": energy})
 

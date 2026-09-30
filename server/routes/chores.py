@@ -4,7 +4,7 @@ from flask import Blueprint, g, jsonify, request
 
 from server.auth import require_auth
 from server.db_session import get_db
-from server.events import event_broadcaster
+from server.events import catalog_updated
 from server.payload import BadValue, read_payload
 from server.validation import checked_payload, validate_column_value
 
@@ -63,7 +63,7 @@ def add_chore():
         conn.execute(f"INSERT INTO chores ({', '.join(values)}) "
                      f"VALUES ({', '.join('?' * len(values))})", tuple(values.values()))
 
-    event_broadcaster.broadcast("catalog_updated", {"action": "chore", "name": name})
+    catalog_updated(table="chores", action="chore", name=name)
     return jsonify({"status": "success", "name": name}), 201
 
 
@@ -84,8 +84,7 @@ def complete_chore():
             {"chore": chore["id"], "date": values["date"], "by": g.username}).rowcount
 
     if not repeated:
-        event_broadcaster.broadcast(
-            "catalog_updated", {"action": "chore_done", "name": chore["name"]})
+        catalog_updated(table="chore_completions", action="chore_done", name=chore["name"])
     return jsonify({"status": "success", "name": chore["name"],
                     "date": values["date"], "repeated": repeated})
 

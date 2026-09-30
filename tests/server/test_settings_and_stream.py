@@ -65,7 +65,8 @@ class TestEventStream:
         frame = next(stream.response).decode()
         assert json.loads(frame[len("data: "):]) == {
             "event": "catalog_updated",
-            "data": {"domain": "food", "table": "food_items", "action": "insert"},
+            "data": {"domain": "food", "table": "food_items", "action": "insert",
+                     "own": True},
         }
 
     def test_a_subscriber_is_registered_for_the_life_of_the_request(self, stream):

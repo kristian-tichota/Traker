@@ -27,8 +27,18 @@ class TestBroadcast:
             assert message.endswith("\n\n"), "SSE frames must be terminated by a blank line"
             assert json.loads(message[len("data: "):]) == {
                 "event": "catalog_updated",
-                "data": {"domain": "food", "action": "insert"},
+                "data": {"domain": "food", "action": "insert", "own": False},
             }
+
+    def test_only_the_originating_members_streams_read_it_as_their_own(self):
+        broadcaster = EventBroadcaster()
+        author, other, anonymous = (broadcaster.subscribe(1), broadcaster.subscribe(2),
+                                    broadcaster.subscribe())
+
+        broadcaster.broadcast("catalog_updated", {"action": "insert"}, origin=1)
+
+        assert [json.loads(_drain(q)[0][len("data: "):])["data"]["own"]
+                for q in (author, other, anonymous)] == [True, False, False]
 
     def test_broadcasting_with_nobody_listening_is_harmless(self):
         EventBroadcaster().broadcast("catalog_updated", {"action": "delete"})

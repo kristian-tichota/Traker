@@ -19,7 +19,7 @@ def ping():
 def stream_events():
     release_db()
 
-    client_queue = event_broadcaster.subscribe()
+    client_queue = event_broadcaster.subscribe(g.user_id)
 
     def generate_event_stream():
         try:

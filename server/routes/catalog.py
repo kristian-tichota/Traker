@@ -3,7 +3,7 @@ import logging
 from flask import Blueprint, jsonify
 from server.auth import require_auth
 from server.db_session import get_db
-from server.events import event_broadcaster
+from server.events import catalog_updated
 from server.payload import BadValue, Conflict, NotFound, read_payload
 from server import sets as item_sets
 from server.tables import CATALOG_DOMAINS
@@ -45,7 +45,7 @@ def add_catalog_item(domain):
 
     with conn:
         conn.execute(f"INSERT INTO {table} ({col_names}) VALUES ({placeholders})", values)
-    event_broadcaster.broadcast("catalog_updated", {"domain": domain, "table": table, "action": "insert"})
+    catalog_updated(domain=domain, table=table, action="insert")
     return jsonify({"status": "success"})
 
 
@@ -74,7 +74,7 @@ def delete_item_by_name(name):
     if not removed:
         raise NotFound(f"No catalog item named '{name}'.")
 
-    event_broadcaster.broadcast("catalog_updated", {"action": "delete", "name": name})
+    catalog_updated(action="delete", name=name)
     return jsonify({"status": "success", "removed": removed})
 
 
@@ -170,7 +170,6 @@ def add_set(domain):
               *(amounts.get(column, 0) for column in spec.amount_columns))
              for item_id, amounts in resolved.items()])
 
-    event_broadcaster.broadcast(
-        "catalog_updated",
-        {"table": "item_sets", "action": "insert", "domain": spec.domain, "name": name})
+    catalog_updated(table=spec.components_table, action="insert", domain=spec.domain,
+                    name=name)
     return jsonify({"status": "success", "components": len(resolved)})
