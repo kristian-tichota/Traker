@@ -151,6 +151,35 @@ class TestCompletionDoesNotReadThePerKeystroke:
         assert counting_db.reads.count("food") == 2
         bar.deleteLater()
 
+    def test_a_read_begun_before_the_catalog_changed_is_not_kept(self, qapp, profile_path):
+        import threading
+
+        entered, release = threading.Event(), threading.Event()
+
+        class SlowFoods(self.CountingCatalogs):
+            def __init__(self):
+                super().__init__()
+                self.foods = ["Rolled Oats"]
+
+            def get_all_foods(self):
+                held = list(self.foods)
+                entered.set()
+                release.wait(5)
+                return catalog_rows(held, rows.FoodItemRow)
+
+        db = SlowFoods()
+        bar = CommandLineEdit(db)
+        assert entered.wait(5)
+        db.foods.append("Sourdough Bread")
+        bar.invalidate_catalog_cache()
+        release.set()
+        self._settle(qapp)
+
+        bar.setText("log 1 b Sourdo")
+
+        assert bar.completion_text == "ugh Bread"
+        bar.deleteLater()
+
     def test_a_read_that_found_nothing_because_the_service_is_down_is_not_cached(
         self, qapp, profile_path
     ):

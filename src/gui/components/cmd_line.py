@@ -25,6 +25,7 @@ class CommandLineEdit(HintingLineEdit):
         self.db = db_manager
         self._names_by_catalog = {}
         self._reads_in_flight = set()
+        self._generation = 0
         self._threadpool = QThreadPool.globalInstance()
         self.is_fuzzy_replacement = False
         self.completing_command = False
@@ -37,8 +38,10 @@ class CommandLineEdit(HintingLineEdit):
         self.prefetch_catalog_names()
 
     def invalidate_catalog_cache(self):
-        """Forget the cached names and read them again."""
+        """Forget the cached names, and any read still in flight, and read them again."""
+        self._generation += 1
         self._names_by_catalog.clear()
+        self._reads_in_flight.clear()
         self.prefetch_catalog_names()
 
     def prefetch_catalog_names(self):
@@ -52,22 +55,24 @@ class CommandLineEdit(HintingLineEdit):
         self._reads_in_flight.add(catalog)
         run_in_background(self._threadpool, self._read_catalog,
                           self._on_catalog_names, self._on_catalog_read_failed,
-                          catalog)
+                          catalog, self._generation)
 
-    def _read_catalog(self, catalog):
+    def _read_catalog(self, catalog, generation):
         """Read one catalog's names, on a pool thread."""
         names = catalog_names(self.db, catalog)
         connection = getattr(self.db, "connection", None)
         reachable = connection.online if connection is not None else True
-        return catalog, names, reachable
+        return catalog, generation, names, reachable
 
     def _on_catalog_names(self, outcome):
-        catalog, names, reachable = outcome
+        catalog, generation, names, reachable = outcome
+        if generation != self._generation:
+            return
         self._reads_in_flight.discard(catalog)
         if not reachable:
             return
         self._names_by_catalog[catalog] = names
-        self.update_autocomplete_hints(self.text())
+        self._render_hints()
 
     def _on_catalog_read_failed(self, failure):
         error, _formatted = failure
