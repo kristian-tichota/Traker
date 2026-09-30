@@ -442,18 +442,6 @@ class StrictOverlay(QWidget):
 
         layout.addStretch()
 
-    def set_upcoming(self, sections):
-        """Show what the view read when the break began."""
-        self.upcoming.set_sections(sections)
-
-    def set_chores(self, entries):
-        """Show what is due, as the view read it when the break began."""
-        self.chores.set_entries(entries)
-
-    def set_offers_note(self, note):
-        """State how long the offers are still held back, or nothing."""
-        self.upcoming.set_note(self.timer_ref.OFFERS_TITLE, note)
-
     def set_playing(self, playing):
         """Name what is on the screen beside this one, and where it has reached."""
         self.progress.setVisible(playing is not None)
@@ -1515,9 +1503,8 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _say_when_the_offers_open(self):
         """Put the countdown note on every panel listing the offers."""
         note = self.offers_note()
-        self.upcoming.set_note(self.OFFERS_TITLE, note)
-        for overlay in self.overlays:
-            overlay.set_offers_note(note)
+        for panel in self._offer_panels():
+            panel.set_note(self.OFFERS_TITLE, note)
 
     def _say_the_offers_are_open(self):
         """Announce that the wait is up, unless the break holds notifications back."""
@@ -1711,7 +1698,7 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _acknowledge_offer(self, index):
         """Glow the pressed offer on every panel listing it, yellow while offers wait."""
         held = self.opens_in_ms() > 0
-        for panel in [self.upcoming] + [wall.upcoming for wall in self.overlays]:
+        for panel in self._offer_panels():
             panel.glow(self.OFFERS_TITLE, index, held)
 
     def _drive_media(self, key) -> bool:
@@ -1940,9 +1927,8 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _show_chores(self):
         """Hand what is due to every surface with room for it."""
         entries = self._chores if self._strict_engaged else []
-        self.chores_panel.set_entries(entries)
-        for overlay in self.overlays:
-            overlay.set_chores(entries)
+        for panel in self._chore_surfaces():
+            panel.set_entries(entries)
 
     def tick_chore(self, chore_id: int):
         """Mark one chore done today, from a key or a click on the wall."""
@@ -1979,10 +1965,13 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Hand what is coming to every surface with room for it."""
         sections = (self._upcoming + self.offer_section()
                     if self._strict_engaged else [])
-        self.upcoming.set_sections(sections)
-        for overlay in self.overlays:
-            overlay.set_upcoming(sections)
+        for panel in self._offer_panels():
+            panel.set_sections(sections)
         self._say_when_the_offers_open()
+
+    def _offer_panels(self) -> list:
+        """Return every panel listing what is coming, the timer view's included."""
+        return [self.upcoming] + [wall.upcoming for wall in self.overlays]
 
     def _media_screen(self):
         """Return the screen that shows what the break was asked for."""
