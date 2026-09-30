@@ -45,8 +45,7 @@ def execute_safe_backup(db_path: str = None):
     try:
         with closing(sqlite3.connect(db_path)) as src_conn, \
                 closing(sqlite3.connect(backup_path)) as dst_conn:
-            with dst_conn:
-                src_conn.backup(dst_conn)
+            src_conn.backup(dst_conn)
     except (sqlite3.Error, OSError) as e:
         log.error("Backup failed: %s", e)
         return
@@ -57,11 +56,9 @@ def execute_safe_backup(db_path: str = None):
 
 def manage_backup_rotation(max_backups=30):
     backups = sorted(
-        [os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.endswith(".db")],
-        key=os.path.getmtime
-    )
-    while len(backups) > max_backups:
-        oldest = backups.pop(0)
+        (os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.endswith(".db")),
+        key=os.path.getmtime)
+    for oldest in backups[:max(0, len(backups) - max_backups)]:
         os.remove(oldest)
         log.info("Rotated out the oldest backup: %s", oldest)
 

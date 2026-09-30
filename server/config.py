@@ -39,24 +39,17 @@ db_path = "data/traker_server.db"
 """
 
 
-def config_path() -> str:
-    """Return the file the service reads its settings from."""
-    return os.environ.get("TRAKER_SERVER_CONFIG") or DEFAULT_CONFIG_PATH
-
-
-def write_template(path: str) -> bool:
+def write_template(path: str) -> None:
     """Write a commented starting point at path, unless one is already there."""
     if os.path.exists(path):
-        return False
+        return
     try:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(TEMPLATE)
+        os.chmod(path, 0o600)
     except OSError as e:
         log.error("Could not write %s: %s", path, e)
-        return False
-    os.chmod(path, 0o600)
-    return True
 
 
 def _read(path: str) -> dict:
@@ -126,7 +119,7 @@ def _persist(path: str, raw: dict, members) -> None:
 
 
 def _resolve():
-    path = config_path()
+    path = os.environ.get("TRAKER_SERVER_CONFIG") or DEFAULT_CONFIG_PATH
     raw = _read(path)
     server = raw.get("server", {})
     if not isinstance(server, dict):
