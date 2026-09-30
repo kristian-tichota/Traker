@@ -86,9 +86,6 @@ class RecordingDb:
                 next_id += 1
         return rows
 
-    def get_set_names(self, domain):
-        return list(dict.fromkeys(row.set_name for row in self.get_sets(domain)))
-
     def invalidate(self, domains=None):
         self.invalidations.append(None if domains is None else tuple(domains))
 
@@ -164,9 +161,6 @@ class RecordingDb:
 
     def get_plan_movements(self, plan_id):
         return [row for row in getattr(self, "plan_movements", [])]
-
-    def get_exercise_history_by_name(self, name):
-        return self._rows("exercise_history")
 
     def get_daily_burn(self, since=None):
         if since is not None:
