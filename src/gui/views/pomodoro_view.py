@@ -6,7 +6,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QApplication)
 from PyQt6.QtCore import (Qt, QTimer, pyqtProperty, QPropertyAnimation, QDateTime,
                           QEvent, QRect, QThreadPool, pyqtSignal)
-from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap, QIcon, QPainterPath
+from PyQt6.QtGui import (QPainter, QColor, QPen, QPixmap, QIcon, QPainterPath,
+                         QKeySequence)
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 
 from src.config import PALETTE
@@ -18,11 +19,12 @@ from src.desktop.hooks import StateHook
 from src.desktop.idle import idle_ms as session_idle_ms
 from src.desktop.kwin import KWinPin, default_app_id
 from src.desktop.kwin_rules import REST_GROUP, RestRule, prune
+from src.desktop.screen_power import ScreenPower
 from src.desktop.switch_guard import SwitchGuard
 from src.domain import chores, formulas, media, plans
 from src.domain.clock import as_displayed_date, minutes_covered
 from src.profile import (DEFAULT_IDLE_PAUSE_SECS, DEFAULT_STOP_HOLD_SECS,
-                         UserProfile)
+                         UserProfile, get_qt_key)
 from src.gui.components.chore_panel import KEYS as CHORE_KEYS, ChorePanel
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
@@ -849,6 +851,11 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self.profile.get_metric("strict_break", "do_not_disturb", True):
             self.do_not_disturb = notify_service.DoNotDisturb()
 
+        self.screen_power = ScreenPower()
+        self._screens_off_key = get_qt_key(self.profile.get_metric(
+            "strict_break", "screens_off_key", "Tab"), Qt.Key.Key_Tab)
+        self._screens_off_name = QKeySequence(self._screens_off_key).toString().upper()
+
         prune((REST_GROUP,))
         self.rest_rule = None
         if self.profile.get_metric("strict_break", "pin_with_rule", True):
@@ -1429,6 +1436,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Return the way on, for the state the break is in."""
         if self.prompts_for_focus():
             return f"PRESS {RELEASE_KEY_NAME} TO START FOCUS"
+        if self.screen_power.available:
+            return f"{self.release_hint()} · {self._screens_off_name} SCREENS OFF"
         return self.release_hint()
 
     def media_key_hints(self, kind) -> list:
@@ -1690,6 +1699,9 @@ class PomodoroView(ShutdownMixin, QWidget):
             return super().eventFilter(watched, event)
 
         if not typing:
+            if (key == self._screens_off_key and self.holds_the_screens()
+                    and self.screen_power.off()):
+                return True
             index = self._offer_index(key)
             if index is not None:
                 self._show_activity(self._offers[index])
@@ -2169,8 +2181,10 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._read_chores()
 
     def _stand_down_enforcement(self):
-        """Stop enforcing, with the walls still up and still in front."""
+        """Stop enforcing, with the walls still up, still in front and lit."""
         standing = bool(self.overlays)
+
+        self.screen_power.wake()
 
         if self.switch_guard is not None:
             self.switch_guard.release()

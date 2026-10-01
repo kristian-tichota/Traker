@@ -387,6 +387,13 @@ Feature: Focus timer
       When a break begins
       Then notifications arrive as they would without one
 
+    Scenario: Switching the monitors off for a break away from them
+      Given breaks take the screens and one is running
+      When I press the screens-off key
+      Then every monitor is switched off and the break goes on holding
+      And the next key press switches them on and does nothing else
+      And the end of the break switches them on, so the walls can say it is over
+
   Rule: A strict break has one exit, and it costs seconds
 
     Scenario: Pausing is refused while the screens are held

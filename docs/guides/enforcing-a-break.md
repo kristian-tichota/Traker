@@ -15,7 +15,9 @@ Everything in this section applies only where `strict = true`. A desktop or acti
 reversed, and a KWin window rule places each wall on every desktop and activity. Every screen is
 covered; the application window stays behind the walls, and the keyboard starts on the wall covering
 its screen. The walls hold Plasma's Do Not Disturb through `Notifications.Inhibit` and ask a
-restarted notification server again; Plasma drops the hold when Traker exits.
+restarted notification server again; Plasma drops the hold when Traker exits. On Wayland,
+`screens_off_key` switches the monitors off until the next key press, which reaches nothing else, a
+pointer movement or the end of the break.
 
 Holding `Esc` for `release_hold_secs` abandons the break, and the remaining time is recorded as
 `overridden_break`. When the break ends the walls stay but give up the desktops, the switch and the

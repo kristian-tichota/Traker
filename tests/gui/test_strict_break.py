@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget
 
 import src.gui.views.pomodoro_view as pomodoro_view
 from src.desktop.activities import VIDEO, BreakActivity
+from src.desktop.screen_power import ScreenPower
 from src.gui.views.pomodoro_view import RELEASE_KEY, PomodoroView, StrictOverlay
 from tests.gui.conftest import advance
 
@@ -752,6 +753,49 @@ class TestNothingElseInterruptsABreak:
             view.shutdown()
             QThreadPool.globalInstance().waitForDone(2000)
             view.deleteLater()
+
+
+class Starts(list):
+    def __call__(self, *arguments):
+        self.append(arguments)
+        return True
+
+
+def switchable(view):
+    starts = Starts()
+    view.screen_power = ScreenPower(start=starts, reachable=lambda: True)
+    return starts
+
+
+class TestSwitchingTheScreensOff:
+    def test_the_key_switches_them_off_and_the_break_holds(self, timer):
+        enter_strict_break(timer)
+        starts = switchable(timer)
+        timer.overlays[0].update_display()
+
+        send_key(timer, Qt.Key.Key_Tab)
+
+        assert starts == [("--dpms", "off")]
+        assert timer.holds_the_screens()
+        assert timer.overlays[0].lbl_hint.text().endswith("TAB SCREENS OFF")
+
+    def test_the_end_of_the_break_switches_them_on(self, timer):
+        enter_strict_break(timer)
+        starts = switchable(timer)
+        send_key(timer, Qt.Key.Key_Tab)
+
+        advance(timer, timer.break_ms + 1000)
+        send_key(timer, Qt.Key.Key_Tab)
+
+        assert starts == [("--dpms", "off"), ("--dpms", "on")]
+
+    def test_a_session_kscreen_doctor_cannot_reach_offers_nothing(self, timer):
+        enter_strict_break(timer)
+
+        send_key(timer, Qt.Key.Key_Tab)
+
+        assert timer.screen_power.darkened is False
+        assert "SCREENS OFF" not in timer.overlays[0].lbl_hint.text()
 
 
 class TestAWallRefusesToBeClosed:

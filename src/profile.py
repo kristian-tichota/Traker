@@ -254,6 +254,11 @@ pin_with_rule = true
 # Disturb, until focus starts or Traker exits. While it holds, only the walls
 # say when the wait is up.
 do_not_disturb = true
+# The key that switches every monitor off while a break holds, through
+# kscreen-doctor on a Wayland KWin session. KWin switches them on at the next
+# key press or pointer movement and hands that press to nothing else; the end of
+# the break switches them on as well. A key name such as "Tab" or "F12".
+screens_off_key = "Tab"
 # Where AnkiConnect listens, for an activity that names a deck. Anki has to be
 # running, and its window may stay minimized. Its timebox (Preferences, Review)
 # has to be 0: the timebox dialog holds the next card until it is answered.
