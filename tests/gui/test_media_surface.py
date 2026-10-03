@@ -51,6 +51,7 @@ def timer_double():
         release_hold_secs = 10
         waiting_for_work_start = False
         over_by_ms = staticmethod(lambda: 83_000)
+        is_absent = staticmethod(lambda: False)
 
         def wall_hint(self):
             return ("PRESS ESC TO START FOCUS" if self.waiting_for_work_start

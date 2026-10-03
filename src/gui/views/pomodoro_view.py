@@ -469,7 +469,9 @@ class StrictOverlay(QWidget):
 
     def update_display(self):
         """Update the countdown and the way on, both on every tick."""
-        if self.timer_ref.waiting_for_work_start:
+        if self.timer_ref.is_absent():
+            self.label.setText(f"AWAY\n+{media.as_elapsed(self.timer_ref.absent_for_ms())}")
+        elif self.timer_ref.waiting_for_work_start:
             self.label.setText(
                 f"BREAK OVER\n+{media.as_elapsed(self.timer_ref.over_by_ms())}")
         else:
@@ -787,6 +789,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.waiting_for_work_start = True
         self.waiting_for_break_start = False
         self._over_since_ms = 0
+        self._absent_since_ms = 0
+        self._owed_until_ms = 0
+        self._phase_said = None
 
         self.last_frame_timestamp = 0
         self.last_tray_second = -1
@@ -976,9 +981,15 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.btn_long.setStyleSheet(self.btn_skip.styleSheet())
         self.btn_long.clicked.connect(self.toggle_long_break)
 
+        self.btn_away = QPushButton("I'm Away")
+        self.btn_away.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_away.setStyleSheet(self.btn_skip.styleSheet())
+        self.btn_away.clicked.connect(self.step_away)
+
         btn_layout.addWidget(self.btn_play)
         btn_layout.addWidget(self.btn_skip)
         btn_layout.addWidget(self.btn_long)
+        btn_layout.addWidget(self.btn_away)
         layout.addLayout(btn_layout)
 
         self.hold_ring = HoldRing(self.release_hold_secs)
@@ -1054,8 +1065,10 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _get_current_state(self):
         """Return which of the four states this second accrues to."""
         if self.is_running:
-            return 'focus' if self.current_phase == 'work' else 'rest'
-        if self._idled or self.waiting_for_work_start:
+            if self.current_phase != 'work':
+                return 'rest'
+            return 'focus_overtime' if self.rest_owed_ms() else 'focus'
+        if self._idled or self.is_absent() or self.waiting_for_work_start:
             return 'rest_overtime'
         return 'focus_overtime'
 
@@ -1239,6 +1252,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             if new_regime != self.current_regime_str:
                 self.current_regime_str = new_regime
                 self.lbl_regime.setText(f"REGIME: {new_regime.upper()}")
+            if self._focus_is_running():
+                self._say_running_phase()
             self._update_tray()
 
         self._redraw_break_surfaces()
@@ -1254,6 +1269,10 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         if self._focus_is_running():
             log.debug("Stop refused: a running focus interval is held, not clicked.")
+            return
+
+        if self.is_absent():
+            self.come_back()
             return
 
         if self.waiting_for_break_start:
@@ -1295,16 +1314,62 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _say_phase(self, text, colour="blue"):
         """Set the phase line, in the palette colour of the state it names."""
+        if (text, colour) == self._phase_said:
+            return
+        self._phase_said = (text, colour)
         self.lbl_phase.setText(text)
         self.lbl_phase.setStyleSheet(
             f"color: {PALETTE[colour]}; font-size: 10px; font-weight: bold; "
             f"font-family: 'Fira Code'; letter-spacing: 2px;")
 
     def _say_running_phase(self):
-        """Name the interval now on the clock, in its colour."""
+        """Name the interval now on the clock in its colour, and any rest still owed."""
         phase = self.current_phase
+        owed = self.rest_owed_ms() if phase == "work" else 0
+        if owed:
+            self._say_phase(f"FOCUS OVERTIME · REST OWED {media.as_elapsed(owed)}", "red")
+            return
         self._say_phase("FOCUS INTERVAL" if phase == "work"
                         else phase.upper().replace("_", " "), PHASE_COLOURS[phase])
+
+    def rest_owed_ms(self) -> int:
+        """Return how long running focus still counts as overtime, for a break left early."""
+        return max(0, self._owed_until_ms - QDateTime.currentMSecsSinceEpoch())
+
+    def is_absent(self) -> bool:
+        """Report whether walls stand for an absence declared during focus."""
+        return self._absent_since_ms > 0
+
+    def absent_for_ms(self) -> int:
+        """Return how long the declared absence has lasted."""
+        if not self.is_absent():
+            return 0
+        return max(0, QDateTime.currentMSecsSinceEpoch() - self._absent_since_ms)
+
+    def can_step_away(self) -> bool:
+        """Report whether focus is in hand with no walls up."""
+        return (self.current_phase == "work" and not self._strict_engaged
+                and not self.waiting_for_break_start)
+
+    def step_away(self):
+        """Stop focus where it stands and wall every screen until the release key."""
+        if not self.can_step_away():
+            return
+        self.cancel_hold()
+        self._paid_stop_hold = False
+        self._idled = False
+        self.waiting_for_work_start = False
+        self._halt("away_focus", f"AWAY - PRESS {RELEASE_KEY_NAME} TO RETURN", "green",
+                   int(max(0, self.time_left_ms)))
+        self._enforce_strict_mode()
+        self._absent_since_ms = QDateTime.currentMSecsSinceEpoch()
+        self._apply_exit_controls()
+        self._redraw_break_surfaces()
+
+    def come_back(self):
+        """Take the walls of an absence down and run focus on from where it stopped."""
+        self._clear_overlays()
+        self._resume_or_pause()
 
     def _begin_stop_hold(self):
         """Begin the stop hold, the play button being the stop while running."""
@@ -1341,8 +1406,9 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _reattribute_the_inactivity(self):
         """Reclassify the inactivity that proved the absence as rest."""
-        moved = min(self.intra_ms["focus"], self.idle_pause_ms)
-        self.intra_ms["focus"] -= moved
+        running = self._get_current_state()
+        moved = min(self.intra_ms[running], self.idle_pause_ms)
+        self.intra_ms[running] -= moved
         self.intra_ms["rest_overtime"] += moved
 
         ended = datetime.datetime.now()
@@ -1352,7 +1418,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             return
 
         stored = len(minutes) * MS_PER_MINUTE
-        self.live_ms["focus"] = max(0, self.live_ms["focus"] - stored)
+        self.live_ms[running] = max(0, self.live_ms[running] - stored)
         self.live_ms["rest_overtime"] += stored
         run_in_background(self.threadpool, rewrite_as_rest,
                           self._absence_rewritten, None, self.db, minutes)
@@ -1375,6 +1441,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._next_phase()
 
     def _next_phase(self):
+        if self.is_absent():
+            self._clear_overlays()
         self.last_tray_second = -1
         self.cancel_hold()
         self._idled = False
@@ -1434,11 +1502,15 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def wall_hint(self) -> str:
         """Return the way on, for the state the break is in."""
-        if self.prompts_for_focus():
+        if self.is_absent():
+            said = f"PRESS {RELEASE_KEY_NAME} TO RESUME FOCUS"
+        elif self.prompts_for_focus():
             return f"PRESS {RELEASE_KEY_NAME} TO START FOCUS"
+        else:
+            said = self.release_hint()
         if self.screen_power.available:
-            return f"{self.release_hint()} · {self._screens_off_name} SCREENS OFF"
-        return self.release_hint()
+            return f"{said} · {self._screens_off_name} SCREENS OFF"
+        return said
 
     def media_key_hints(self, kind) -> list:
         """Return every key that drives what is showing, in reading order."""
@@ -1490,7 +1562,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         if len(self._offers) > 1 and kind != break_activities.PAGE:
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
         if self.prompts_for_focus():
-            hints.append((RELEASE_KEY_NAME, "start focus"))
+            hints.append((RELEASE_KEY_NAME,
+                          "resume focus" if self.is_absent() else "start focus"))
         else:
             hints.append((f"{RELEASE_KEY_NAME} {self.release_hold_secs:.0f}s",
                           "leave the break"))
@@ -1668,6 +1741,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         holding = self.holds_the_screens()
         self.btn_play.setEnabled(not holding)
         self.btn_skip.setEnabled(not holding)
+        self.btn_away.setEnabled(self.can_step_away())
         self.lbl_release_hint.setText(
             self.release_hint() if holding else self.stop_hint())
         self.lbl_release_hint.setVisible(holding or self._focus_is_running())
@@ -1699,7 +1773,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             return super().eventFilter(watched, event)
 
         if not typing:
-            if (key == self._screens_off_key and self.holds_the_screens()
+            if (key == self._screens_off_key
+                    and (self.holds_the_screens() or self.is_absent())
                     and self.screen_power.off()):
                 return True
             index = self._offer_index(key)
@@ -1817,10 +1892,15 @@ class PomodoroView(ShutdownMixin, QWidget):
             surface.show_hold(fraction, visible)
 
     def _release_strict_break(self):
-        """Give the screens back once the hold is paid, and record the cost."""
-        self._record("overridden_break", int(max(0, self.time_left_ms)))
+        """Give the screens back once the hold is paid and run focus, owing the break's rest."""
+        left = int(max(0, self.time_left_ms))
+        self._record("overridden_break", left)
+        self._owed_until_ms = max(self._owed_until_ms,
+                                  QDateTime.currentMSecsSinceEpoch() + left)
         self._clear_overlays()
         self._next_phase()
+        self.waiting_for_work_start = False
+        self._resume_or_pause()
 
     def _warn_of_coming_break(self):
         """Announce a coming strict break while there is still time to leave."""
@@ -2146,7 +2226,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._redraw_break_surfaces()
 
     def _enforce_strict_mode(self):
-        """Take every screen for the length of a strict break."""
+        """Take every screen with a wall of its own."""
         self._clear_overlays()
 
         self.take_offers()
@@ -2230,6 +2310,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._stand_down_enforcement()
 
         self._strict_engaged = False
+        self._absent_since_ms = 0
         self._apply_engine_cadence()
         self._apply_exit_controls()
         self._show_upcoming()

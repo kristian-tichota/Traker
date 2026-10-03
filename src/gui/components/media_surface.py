@@ -1023,6 +1023,10 @@ class MediaSurface(QWidget):
             return
         way_on = (" · ".join(f"{key} {says.upper()}" for key, says in self.keys.hints)
                   if self._under_a_page() else self.timer_ref.wall_hint())
+        if self.timer_ref.is_absent():
+            self.strip.setText(
+                f"AWAY +{as_elapsed(self.timer_ref.absent_for_ms())} · {way_on}")
+            return
         if self.timer_ref.waiting_for_work_start:
             self.strip.setText(
                 f"BREAK OVER +{as_elapsed(self.timer_ref.over_by_ms())} · {way_on}")

@@ -87,6 +87,23 @@ def start_recording(recording_db):
     recording_db.calls.clear()
 
 
+def events_named(recording_db, event_type):
+    QThreadPool.globalInstance().waitForDone(2000)
+    return [args[0] for called, args in recording_db.calls
+            if called == "log_pomodoro_event" and args[0]["event_type"] == event_type]
+
+
+def leave_early(view, left_ms):
+    view.time_left_ms = left_ms
+    hold_for(view, view.release_hold_secs)
+
+
+def step_away_from_focus(view):
+    view._toggle_timer()
+    view.time_left_ms = 600_000
+    view.step_away()
+
+
 class TestHoldingEveryDesktop:
     def test_a_strict_break_asks_kwin_to_hold_it(self, timer, desktop_session):
         enter_strict_break(timer)
@@ -912,14 +929,15 @@ class TestPauseAndSkipAreRefused:
 
 
 class TestTheOneExit:
-    def test_holding_the_key_long_enough_abandons_the_break(self, timer):
+    def test_holding_the_key_long_enough_abandons_the_break_for_focus(self, timer):
         enter_strict_break(timer)
 
         hold_for(timer, timer.release_hold_secs)
 
         assert timer.current_phase == "work"
-        assert timer.waiting_for_work_start is True
-        assert timer.is_running is False
+        assert timer.waiting_for_work_start is False
+        assert timer.is_running is True
+        assert timer.time_left_ms == timer.work_ms
         assert timer._strict_engaged is False
         assert timer.kwin_pin.engaged is False
 
@@ -930,10 +948,8 @@ class TestTheOneExit:
 
         hold_for(timer, timer.release_hold_secs)
 
-        QThreadPool.globalInstance().waitForDone(2000)
-        event = recording_db.last("log_pomodoro_event")
-        assert event["event_type"] == "overridden_break"
-        assert event["amount_ms"] == 300_000
+        assert [event["amount_ms"] for event in
+                events_named(recording_db, "overridden_break")] == [300_000]
 
     def test_a_hold_that_is_let_go_of_early_costs_nothing(self, timer, recording_db):
         enter_strict_break(timer)
@@ -991,6 +1007,96 @@ class TestTheOneExit:
         hold_for(timer, timer.release_hold_secs)
 
         assert not recording_db.called("log_pomodoro_event")
+
+
+class TestTheRestABreakLeftEarlyOwes:
+    def test_focus_is_overtime_until_the_break_would_have_ended(self, timer):
+        enter_strict_break(timer)
+
+        leave_early(timer, 300_000)
+
+        assert timer._get_current_state() == "focus_overtime"
+        assert "REST OWED" in timer.lbl_phase.text()
+
+    def test_then_it_is_focus_again(self, timer):
+        enter_strict_break(timer)
+        leave_early(timer, 300_000)
+
+        timer._owed_until_ms -= 300_000
+        advance(timer, 1000)
+
+        assert timer._get_current_state() == "focus"
+        assert timer.lbl_phase.text() == "FOCUS INTERVAL"
+
+    def test_a_second_exit_owes_the_later_end_and_not_the_sum(self, timer):
+        enter_strict_break(timer)
+        leave_early(timer, 300_000)
+        timer._skip_phase()
+
+        leave_early(timer, 200_000)
+
+        assert 290_000 < timer.rest_owed_ms() <= 300_000
+
+    def test_an_absence_meanwhile_is_rest(self, timer):
+        enter_strict_break(timer)
+        leave_early(timer, 300_000)
+
+        timer.step_away()
+
+        assert timer._get_current_state() == "rest_overtime"
+
+
+class TestAnAbsenceDeclaredDuringFocus:
+    def test_it_stops_the_clock_where_it_stood_and_walls_every_screen(self, timer):
+        step_away_from_focus(timer)
+
+        assert timer.is_running is False
+        assert timer.time_left_ms == 600_000
+        assert timer.overlays
+        assert timer.holds_the_screens() is False
+        assert timer._get_current_state() == "rest_overtime"
+
+    def test_it_is_recorded_with_the_focus_left(self, timer, recording_db):
+        start_recording(recording_db)
+
+        step_away_from_focus(timer)
+
+        assert [event["amount_ms"] for event in
+                events_named(recording_db, "away_focus")] == [600_000]
+
+    def test_the_walls_say_so_and_name_the_way_back(self, timer):
+        step_away_from_focus(timer)
+        wall = timer.overlays[0]
+
+        assert wall.label.text().startswith("AWAY\n+")
+        assert wall.lbl_hint.text().startswith("PRESS ESC TO RESUME FOCUS")
+
+    def test_one_press_of_the_release_key_runs_focus_on(self, timer):
+        step_away_from_focus(timer)
+
+        send_key(timer, RELEASE_KEY)
+
+        assert timer.overlays == []
+        assert timer.is_absent() is False
+        assert timer.is_running is True
+        assert timer.time_left_ms == 600_000
+
+    def test_the_screens_off_key_works_on_it(self, timer):
+        starts = switchable(timer)
+        step_away_from_focus(timer)
+
+        send_key(timer, Qt.Key.Key_Tab)
+
+        assert starts == [("--dpms", "off")]
+
+    def test_it_is_refused_during_a_break(self, timer):
+        enter_strict_break(timer)
+
+        timer.step_away()
+
+        assert timer.btn_away.isEnabled() is False
+        assert timer.is_absent() is False
+        assert timer.holds_the_screens()
 
 
 class TestWhenTheBreakRunsOut:

@@ -1,13 +1,15 @@
 # Focus timer and enforced breaks
 
 There is one split for the whole day, with a long break that may be queued a set number of times a
-day. There are no timer modes. `:break long` makes the next break the long one, `:break cancel`
-withdraws it, and `:break` reports how many the day has left; the choice is spent when that break
-begins. Contract: `specs/features/pomodoro_timer.feature`. The generated profile documents every key.
+day. `:break long` makes the next break the long one, `:break cancel` withdraws it, and `:break`
+reports how many the day has left. Contract: `specs/features/pomodoro_timer.feature`. The generated
+profile documents every key.
 
 After `idle_pause_secs` without input, a focus interval stops itself and that window is stored again
 as rest overtime, the one case that rewrites a stored minute. Stopping a running interval by hand
-requires `stop_hold_secs` held on the play button, and that time is focus overtime.
+requires `stop_hold_secs` held on the play button, and that time is focus overtime. `I'm Away` stops
+focus and raises a break's walls in any mode; the wait is rest overtime, and one `Esc` takes the walls
+down and runs focus on from where it stopped.
 
 ## Strict break behaviour
 
@@ -19,13 +21,15 @@ restarted notification server again; Plasma drops the hold when Traker exits. On
 `screens_off_key` switches the monitors off until the next key press, which reaches nothing else, a
 pointer movement or the end of the break.
 
-Holding `Esc` for `release_hold_secs` abandons the break, and the remaining time is recorded as
-`overridden_break`. When the break ends the walls stay but give up the desktops, the switch and the
-focus: the countdown becomes `BREAK OVER` and a count up in a frame on each wall that shows no
-activity, faint at first and at full size after `over_ramp_secs`, a file goes on playing, and the
-press that starts focus takes the walls away. A wall shows the session, the chores that are due and,
-after `away_secs`, the offers; a pressed offer glows, yellow while the offers are held back. The
-chore tick is the one surface that writes to the service.
+Holding `Esc` for `release_hold_secs` abandons the break, records the remaining time as
+`overridden_break` and runs focus at once. Running focus is focus overtime until the moment the break
+would have ended; a second early exit owes the later of the two moments, not their sum. When the
+break ends the walls stay but give up the desktops, the switch and the focus: the countdown becomes
+`BREAK OVER` and a count up in a frame on each wall that shows no activity, faint at first and at
+full size after `over_ramp_secs`, a file goes on playing, and the press that starts focus takes the
+walls away. A wall shows the session, the chores that are due and, after `away_secs`, the offers; a
+pressed offer glows, yellow while the offers are held back. The chore tick is the one surface that
+writes to the service.
 
 ## Break activities
 
@@ -41,10 +45,8 @@ no lockfile carries; an EPUB, an Anki deck and a web page need QtWebEngine, the 
 them the screen displays `COULD NOT PLAY`, `COULD NOT READ`, `COULD NOT REVIEW` or `COULD NOT OPEN`,
 and the break still holds.
 
-A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`, which chooses, schedules
-and sounds every card; the wall draws it in Solarized light, forwards the keys and confirms each
-answer on the next card. A `deck` of `*` lists every deck first. Anki MUST be running, its window MAY
-stay minimized, and its timebox MUST be 0.
+A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`; a `deck` of `*` lists
+every deck first. Anki MUST be running, its window MAY stay minimized, and its timebox MUST be 0.
 
 A `url` opens as a web page that takes every key except `Esc` and `Ctrl+0`, which puts the wall back.
 It stays loaded until the walls go, and Traker writes none of its storage to disk.

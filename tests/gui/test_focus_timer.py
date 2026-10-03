@@ -610,6 +610,19 @@ class TestWalkingAway:
         assert timer.hold_ring.isHidden() is True
 
 
+class TestDeclaringAnAbsence:
+    def test_its_walls_stand_without_strict_breaks_until_a_skip(self, timer):
+        timer._toggle_timer()
+        timer.step_away()
+        assert timer.overlays
+
+        timer._skip_phase()
+
+        assert timer.overlays == []
+        assert timer.current_phase == "break"
+        assert timer.is_running is True
+
+
 class TestManualActionsAndHeartbeats:
     def test_pausing_records_an_event_but_no_heartbeat(self, timer, recording_db):
         timer._toggle_timer()

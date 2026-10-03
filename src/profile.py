@@ -219,6 +219,7 @@ intensity = 1.0
 # Seconds of audible warning before a strict break takes the screens; 0 is off.
 warn_secs = 60
 # Seconds the release key (Escape) must be held to abandon a strict break.
+# Focus then runs at once, as focus overtime until the break would have ended.
 release_hold_secs = 10
 # Seconds at the start of a break before an activity may be opened. The offers
 # are listed throughout and say when they open, and the chores stay tickable.

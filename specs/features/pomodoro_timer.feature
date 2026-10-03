@@ -72,11 +72,13 @@ Feature: Focus timer
       Examples:
         | condition                                        | state          |
         | running in a focus interval                      | focus          |
+        | running in focus while a break I left still owes | focus_overtime |
         | running in a short or long break                 | rest           |
         | waiting for me to start focus                    | rest_overtime  |
         | waiting for me to start a break after focus ended| focus_overtime |
         | paused during a focus interval by my own hand    | focus_overtime |
         | paused during a focus interval by my absence     | rest_overtime  |
+        | walled for an absence I declared                 | rest_overtime  |
         | paused during a break                            | focus_overtime |
 
     Scenario: A fresh timer waits in rest overtime
@@ -215,6 +217,19 @@ Feature: Focus timer
       Given the desktop does not answer how long the session has been idle
       Then the timer runs as it would without the feature, and says so once in the log
       And the timer asks again a minute later
+
+  Rule: An absence I declare walls the screens until I return
+
+    Scenario: Declaring it
+      Given focus is in hand and no walls stand
+      When I press that I am away
+      Then the clock stops with what was left kept, and an event names it
+      And every screen is walled as for a break, counting up how long I have been away
+      And the screens-off key works on those walls
+
+    Scenario: Returning
+      When I press the release key once
+      Then the walls go and focus runs on from where it stopped
 
   Rule: Stopping a running focus interval is held for, not clicked
 
@@ -412,7 +427,12 @@ Feature: Focus timer
       When I hold the release key for the configured hold
       Then the screens are given back
       And an event is recorded naming the break as overridden, carrying the time left on it
-      And the phase becomes focus with the full focus duration on the clock, waiting for me
+      And focus runs at once with the full focus duration on the clock
+
+    Scenario: The rest a break left early still owes
+      Given I left a break with time on it
+      Then running focus is focus overtime until the moment that break would have ended
+      And leaving another break meanwhile owes the later of the two moments, not their sum
 
     Scenario: The hold is shown while it is being paid
       Given I am holding the release key
