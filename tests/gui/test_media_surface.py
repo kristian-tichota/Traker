@@ -655,6 +655,29 @@ class TestReviewingADeck:
 
         assert pane.view is None and "COULD NOT REVIEW" in failure_of(pane)
 
+    def test_math_is_typeset_as_ankis_reviewer_typesets_it(self, qapp, reviewing):
+        pane, _ = reviewing(FakeAnki(cards=(r"\(x^2\) \[\ce{H2O}\] \$5",)))
+        typeset = ("[document.body.style.opacity, document.querySelectorAll("
+                   "'mjx-container').length, document.body.textContent.includes('$5')]")
+
+        deadline = time.monotonic() + 15
+        while (seen := evaluated(qapp, pane.view, typeset)) != ["", 2, True] \
+                and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        assert seen == ["", 2, True]
+        pane.shutdown()
+
+
+def evaluated(qapp, view, script):
+    answer = []
+    view.page().runJavaScript(script, 0, answer.append)
+    deadline = time.monotonic() + 5
+    while not answer and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.005)
+    return answer[0] if answer else None
+
 
 LIBRARY = {"Japanese": ("j1",), "Japanese::Kaishi 1.5k": ("k1", "k2"),
            "Japanese::Kanji": (), "Personal Math": ("p1",)}
@@ -877,6 +900,11 @@ class TestACardPage:
 
     def test_a_card_with_no_verdict_carries_none(self):
         assert "traker-verdict" not in card_page("x", 0)
+
+    def test_a_card_without_math_loads_no_mathjax_and_hides_nothing(self):
+        page = card_page(r"<i>[blah]</i> \$5", 0, answer=True)
+
+        assert "tex-chtml" not in page and "opacity: 0" not in page
 
 
 class TestWhichPaneIsBuilt:

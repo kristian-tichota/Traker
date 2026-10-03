@@ -18,6 +18,7 @@ from src.gui.components.book_pane import BookPane
 from src.gui.components.break_pane import BreakPane, WebPane
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
+from src.gui.icons import ASSETS_DIR
 from src.gui.workers import run_in_background
 from src.profile import UserProfile
 
@@ -31,6 +32,7 @@ SCROLL_STEP_PX = 160
 QUESTION, ANSWER = "question", "answer"
 
 CARD_MARKERS = re.compile(r"\[anki:play:[qa]:\d+\]|\[\[type:[^\]]*\]\]")
+MATH = re.compile(r"\\\[.*?\\\]|\\\(.*?\\\)", re.S)
 
 CARD_CSS = f"""
 :root {{ color-scheme: light; }}
@@ -40,8 +42,18 @@ img {{ max-width: 100%; max-height: 95vh; }}
 hr {{ background-color: {PALETTE['base1']}; margin: 1em 0; border: none; height: 1px; }}
 """
 
-TO_THE_ANSWER = ("<script>addEventListener('load', () => "
-                 "document.getElementById('answer')?.scrollIntoView());</script>")
+MATHJAX = bytes(QUrl.fromLocalFile(
+    os.path.join(ASSETS_DIR, "mathjax", "tex-chtml-full.js")).toEncoded()).decode()
+
+TYPESETTER = ("<script>window.MathJax = {tex: {displayMath: [['\\\\[', '\\\\]']], "
+              "processEscapes: false, processEnvironments: false, processRefs: false, "
+              "packages: {'[+]': ['noerrors', 'mathtools'], '[-]': ['textmacros']}}};</script>"
+              f'<script src="{MATHJAX}"></script>')
+
+ONCE_TYPESET = ("<script>addEventListener('load', () => "
+                "Promise.resolve(window.MathJax?.startup?.promise).finally(() => {{"
+                "document.body.style.opacity = '';{then}}}));</script>")
+TO_THE_ANSWER = "document.getElementById('answer')?.scrollIntoView();"
 
 GOOD_SAID, AGAIN_SAID, UNDONE = "good", "again", "undone"
 VERDICTS = {GOOD_SAID: ("GOOD", 'green'), AGAIN_SAID: ("AGAIN", 'red'),
@@ -338,15 +350,21 @@ class DocumentPane(BreakPane):
 def card_page(side, ordinal, answer=False, verdict=None) -> str:
     """Wrap a card's side as Anki's reviewer does by day, with any verdict on it."""
     body = CARD_MARKERS.sub("", side)
-    said = ""
+    math = MATH.search(body) is not None
+    said = shown = hidden = ""
     if verdict in VERDICTS:
         word, colour = VERDICTS[verdict]
         said = (f'<div id="traker-verdict" style="background: {PALETTE[colour]};">'
                 f"{word}</div>")
+    if math:
+        hidden = ' style="opacity: 0"'
+    if math or answer:
+        shown = ONCE_TYPESET.format(then=TO_THE_ANSWER if answer else "")
     return ('<!doctype html><html><head><meta charset="utf-8">'
-            f"<style>{CARD_CSS}{VERDICT_CSS if said else ''}</style></head>"
-            f'<body class="card card{int(ordinal) + 1} isLin">'
-            f"{said}{body}{TO_THE_ANSWER if answer else ''}</body></html>")
+            f"<style>{CARD_CSS}{VERDICT_CSS if said else ''}</style>"
+            f"{TYPESETTER if math else ''}</head>"
+            f'<body class="card card{int(ordinal) + 1} isLin"{hidden}>'
+            f"{said}{body}{shown}</body></html>")
 
 
 def _attempt(generation, step, *args) -> tuple:

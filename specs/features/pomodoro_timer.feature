@@ -662,6 +662,7 @@ Feature: Focus timer
       And Anki is running with AnkiConnect, its window minimized
       When I press that offer's key
       Then the wall shows the card Anki's own reviewer holds, drawn as Anki draws it by day
+      And its math is typeset offline as Anki's reviewer typesets it
       And the card and the list of decks are Solarized light
       And each answer is Anki's to record, and the next card is Anki's to choose
       And no window of Anki's comes in front of the wall, and the sound is Anki's own

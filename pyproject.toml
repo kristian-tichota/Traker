@@ -5,7 +5,7 @@ description = "Keyboard-centric health and productivity tracker: a PyQt6 client 
 readme = "README.md"
 requires-python = ">=3.13"
 license = "AGPL-3.0-or-later"
-license-files = ["LICENSE", "assets/icons/LICENSE"]
+license-files = ["LICENSE", "assets/icons/LICENSE", "assets/mathjax/LICENSE"]
 keywords = ["health", "nutrition", "pomodoro", "vim", "pyqt6", "self-hosted"]
 authors = [{ name = "Kristian Tichota", email = "kristian.tichota@proton.me" }]
 
