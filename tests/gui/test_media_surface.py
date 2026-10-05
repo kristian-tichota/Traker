@@ -652,8 +652,10 @@ class TestReviewingADeck:
         monkeypatch.setitem(sys.modules, "PyQt6.QtWebEngineWidgets", None)
 
         pane = DeckPane("Japanese", client=FakeAnki())
+        pane.set_letters("ab")
 
         assert pane.view is None and "COULD NOT REVIEW" in failure_of(pane)
+        assert pane.hint("a") is False
 
     def test_math_is_typeset_as_ankis_reviewer_typesets_it(self, qapp, reviewing):
         pane, _ = reviewing(FakeAnki(cards=(r"\(x^2\) \[\ce{H2O}\] \$5",)))
@@ -796,6 +798,15 @@ class TestChoosingADeck:
 
         assert heard == [False, True]
 
+    def test_a_hint_reviews_its_deck_and_a_card_takes_none(self, choosing, settled):
+        pane, fake = choosing()
+
+        assert pane.hint("b") is True
+        settled()
+
+        assert (fake.reviewing, pane.choosing) == ("Japanese::Kaishi 1.5k", False)
+        assert pane.hint("a") is False
+
     def test_a_deck_named_outright_has_no_list_to_go_back_to(self, reviewing):
         pane, _ = reviewing()
 
@@ -818,9 +829,13 @@ def library(qapp, tmp_path):
     return _open
 
 
-def listed(pane):
-    return [pane.chooser.topLevelItem(row).text(0)
+def listed(pane, column=0):
+    return [pane.chooser.topLevelItem(row).text(column)
             for row in range(pane.chooser.topLevelItemCount())]
+
+
+def hints_of(pane):
+    return listed(pane, pane.chooser.columnCount() - 1)
 
 
 class TestChoosingAFile:
@@ -850,6 +865,43 @@ class TestChoosingAFile:
         pane.step(1)
 
         assert chosen == [str(library.root / "Books" / "Series" / "s1.epub")]
+
+    def test_every_entry_carries_its_hint_in_front_of_its_name(self, library):
+        pane = library("Books/b.epub")
+        hints = pane.chooser.columnCount() - 1
+
+        assert hints_of(pane) == ["a", "b", "c"]
+        assert pane.chooser.header().visualIndex(hints) == 0
+
+    def test_a_hint_half_typed_narrows_the_hints_and_the_rest_opens_its_entry(
+            self, library):
+        pane = library("Books/b.epub")
+        chosen = []
+        pane.chosen.connect(chosen.append)
+        pane.set_letters("ab")
+        assert hints_of(pane) == ["a", "ba", "bb"]
+
+        assert pane.hint("b") is True
+        assert hints_of(pane) == ["", "ba", "bb"]
+        pane.hint("b")
+
+        assert chosen == [str(library.root / "Books" / "b.epub")]
+
+    def test_backspace_drops_a_half_typed_hint_before_it_climbs(self, library):
+        pane = library("Books/b.epub")
+        pane.set_letters("ab")
+        pane.hint("b")
+
+        pane.undo()
+        assert (pane.title(), hints_of(pane)) == ("Media/Books", ["a", "ba", "bb"])
+        pane.undo()
+        assert pane.title() == "Media"
+
+    def test_a_letter_that_begins_no_hint_is_left_alone(self, library):
+        pane = library("Books/b.epub")
+
+        assert pane.hint("z") is False
+        assert pane.marked == 2
 
     def test_left_goes_up_a_folder_no_higher_than_the_media_folder(self, library):
         pane = library("Books/a.epub")

@@ -13,6 +13,7 @@ from src.config import PALETTE
 from src.desktop import anki, rest_positions, rest_queue
 from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, contents,
                                     kind_of, library_for, readout_of)
+from src.domain.hints import LETTERS, labels
 from src.domain.media import UNKNOWN, Place, as_elapsed, finished, how_far
 from src.gui.components.book_pane import BookPane
 from src.gui.components.break_pane import BreakPane, WebPane
@@ -405,10 +406,12 @@ def _first_marked(decks, left="") -> int:
 
 
 def _chooser(parent, columns) -> QTreeWidget:
-    """Build a list driven by keys alone, in Solarized light."""
+    """Build a list driven by keys alone, in Solarized light, each row's hint in front."""
     tree = QTreeWidget(parent)
-    tree.setColumnCount(len(columns))
-    tree.setHeaderLabels(columns)
+    tree.setColumnCount(len(columns) + 1)
+    tree.setHeaderLabels((*columns, ""))
+    tree.header().moveSection(len(columns), 0)
+    tree.header().setSectionResizeMode(len(columns), QHeaderView.ResizeMode.ResizeToContents)
     tree.setRootIsDecorated(False)
     tree.setItemsExpandable(False)
     tree.setIndentation(LIST_INDENT_PX)
@@ -485,15 +488,64 @@ def _deck_rows(tree, decks) -> list:
 
 
 class _MarkedList:
-    """A pane choosing from the rows of its chooser, one marked at a time."""
+    """A pane choosing one row of its chooser, by the mark or by a hint."""
 
     marked = 0
+    typed = ""
+    letters = LETTERS
     _rows = ()
+    _labels = ()
+
+    def set_letters(self, letters):
+        """Build the hints from letters, the rows listed included."""
+        self.letters = str(letters)
+        self._label()
+
+    def hint(self, letter) -> bool:
+        """Open the row whose hint the letters typed spell, reporting whether letter was taken."""
+        typed = self.typed + letter
+        if not any(label.startswith(typed) for label in self._labels):
+            typed = letter
+        if not any(label.startswith(typed) for label in self._labels):
+            self._narrow("")
+            return False
+        if typed not in self._labels:
+            self._narrow(typed)
+            return True
+        self._narrow("")
+        self._mark(self._labels.index(typed))
+        self.toggle()
+        return True
+
+    def forget_hint(self) -> bool:
+        """Drop the letters typed towards a hint, reporting whether there were any."""
+        if not self.typed:
+            return False
+        self._narrow("")
+        return True
+
+    def _label(self):
+        """Give every row listed its hint, in list order."""
+        self._labels = labels(len(self._rows), self.letters)
+        self._narrow("")
+
+    def _narrow(self, typed):
+        """Show the hints that begin with typed, and blank the rest."""
+        self.typed = typed
+        if not self._rows:
+            return
+        column = self.chooser.columnCount() - 1
+        for index, row in enumerate(self._rows):
+            label = self._labels[index] if index < len(self._labels) else ""
+            row.setText(column, label if label.startswith(typed) else "")
+            row.setForeground(column, QColor(PALETTE['orange']))
 
     def _mark(self, index):
         """Mark the row at index, within the list, and keep it in view."""
         if not self._rows:
             return
+        if self.typed:
+            self._narrow("")
         self._paint_row(False)
         self.marked = max(0, min(len(self._rows) - 1, int(index)))
         self._paint_row(True)
@@ -574,7 +626,8 @@ class DeckPane(WebPane, _MarkedList):
 
     def undo(self):
         """Take this opening's last answer back and show that card again."""
-        if self.busy or self.choosing or self.answered <= 0 or self.view is None:
+        if (self.forget_hint() or self.busy or self.choosing or self.answered <= 0
+                or self.view is None):
             return
         self._run(anki.take_back, self._taken_back, self.client, self.deck)
 
@@ -617,6 +670,7 @@ class DeckPane(WebPane, _MarkedList):
         """Let go of what was shown, to review a deck or to choose one."""
         self.stop()
         self.answered, self.choosing = 0, choosing
+        self._rows, self._labels, self.typed = [], [], ""
 
     def _review(self, deck):
         """Open Anki's reviewer on deck and show the card it chooses."""
@@ -630,7 +684,7 @@ class DeckPane(WebPane, _MarkedList):
     def _list(self):
         """Read every deck Anki has, with what each owes, to choose one from."""
         self._opening(choosing=True)
-        self.listing, self._rows = [], []
+        self.listing = []
         if self.view is not None:
             self._run(anki.decks, self._listed, self.client)
         self.changed.emit()
@@ -664,6 +718,7 @@ class DeckPane(WebPane, _MarkedList):
         self.listing = list(outcome[1])
         self.chooser.clear()
         self._rows = _deck_rows(self.chooser, self.listing)
+        self._label()
         self._clear_message()
         self._mark(_first_marked(self.listing, self.deck))
 
@@ -820,8 +875,8 @@ class LibraryPane(BreakPane, _MarkedList):
             self.undo()
 
     def undo(self):
-        """List the folder above, the one left marked, no higher than the media folder."""
-        if self.folder != self.root:
+        """Drop a half-typed hint, or list the folder above, up to the media folder."""
+        if not self.forget_hint() and self.folder != self.root:
             self._list(os.path.dirname(self.folder), self.folder)
 
     def nudge(self, direction):
@@ -857,6 +912,7 @@ class LibraryPane(BreakPane, _MarkedList):
             row.setTextAlignment(1, RIGHT)
             self.chooser.addTopLevelItem(row)
             self._rows.append(row)
+        self._label()
         paths = [entry.path for entry in self.entries]
         self.marked = 0
         self._mark(paths.index(mark) if mark in paths else 0)
@@ -890,6 +946,7 @@ class MediaSurface(QWidget):
         self.timer_ref = timer_ref
         self._only_screen = only_screen
         self.activity = None
+        self.letters = LETTERS
         self._hold = (0.0, False)
         self._build_pane = pane_factory or build_pane
         self.panes = {}
@@ -939,6 +996,7 @@ class MediaSurface(QWidget):
                     signal.connect(relay)
             self.panes[activity.kind] = pane
             self.stack.addWidget(pane)
+            self._hand_letters(pane)
         else:
             pane.open(activity.path, start_at)
 
@@ -950,6 +1008,18 @@ class MediaSurface(QWidget):
             self.progress.setVisible(activity.kind not in (SHELF, PAGE))
             self.show_progress()
         return pane
+
+    def set_hint_letters(self, letters):
+        """Build every list's hints from letters."""
+        self.letters = str(letters)
+        for pane in self.panes.values():
+            self._hand_letters(pane)
+
+    def _hand_letters(self, pane):
+        """Hand a pane that lists rows the letters its hints are built from."""
+        taking = getattr(pane, "set_letters", None)
+        if callable(taking):
+            taking(self.letters)
 
     def set_keys(self, hints):
         """Name the keys that drive what is showing, under a page and over anything else."""

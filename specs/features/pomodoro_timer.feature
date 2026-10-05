@@ -692,7 +692,7 @@ Feature: Focus timer
       Then the wall lists every deck Anki's own list shows, with what each owes today
       And the first deck that owes cards is marked
       And up and down mark the deck beside, left and right the next one that owes cards
-      And SPACE reviews the marked deck, and the wall beside it names that deck
+      And SPACE or the deck's hint reviews the marked deck, and the wall beside it names that deck
 
     Scenario: Back from a deck chosen on the wall
       Given a break is reviewing a deck chosen from the list
@@ -766,6 +766,21 @@ Feature: Focus timer
       Given the queue holds a video and a PDF
       Then both are offered, and neither needed anything declared
 
+  Rule: A list on the wall is chosen by its hints
+
+    Scenario: Every row carries a hint
+      Given a break is showing a list of decks or of a folder
+      Then every row carries a hint of letters in front of its name, made for that list
+      And no hint is the start of another, so typing one opens its row at once
+      And rows take one letter while there are enough, and the rest the fewest more
+      And the letters of the chores on the wall are left out, so that a chore still takes its tick
+      And my profile may name the letters hints are made from
+
+    Scenario: A hint half typed
+      When I type the first letter of a longer hint
+      Then only the rows whose hints begin with it keep them
+      And BACKSPACE or a move drops the letter, and a letter no hint continues starts again
+
   Rule: A media folder is offered without queuing
 
     Scenario: One offer per subfolder
@@ -779,6 +794,7 @@ Feature: Focus timer
       And the file I opened last in it is marked, or the next one by name once that one reached its end
       And up and down mark the entry beside, and page up and page down mark one ten away
       And SPACE or right opens the marked folder, or the marked file where I left it
+      And an entry's hint opens that entry the same way
       And left or BACKSPACE goes up a folder, as far as the media folder itself
       And 0 puts the wall back
 
@@ -859,7 +875,7 @@ Feature: Focus timer
       Given my profile names a hook command
       When a break begins, shows a document, and gives the screens back
       Then the command runs with "break", "document" and "focus", in that order
-      And a subfolder's list runs it with "break", and a file opened from it with its kind
+      And a list of decks or of a folder runs it with "list", and what is opened from it with its kind
 
     Scenario: A burst of changes is one change
       When one offer replaces another

@@ -20,6 +20,7 @@ from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.views.pomodoro_view import RELEASE_KEY, PomodoroView, StrictOverlay
 from tests.anki_double import FakeAnki
 from tests.gui.conftest import advance
+from tests.gui.test_break_chores import chore
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact, pytest.mark.accessibility]
 
@@ -100,6 +101,10 @@ class FakeDeckPane(FakePane):
 
     def undo(self):
         self.calls.append("undo")
+
+    def hint(self, letter):
+        self.calls.append(("hint", letter))
+        return self.choosing
 
     def back(self):
         self.calls.append("back")
@@ -246,6 +251,12 @@ def timer(qapp, app_id, with_activities, recording_db):
 
 @pytest.fixture
 def library_timer(qapp, app_id, with_library, recording_db):
+    yield from a_view(recording_db)
+
+
+@pytest.fixture
+def chore_timer(qapp, app_id, with_library, chores_on_break, recording_db):
+    recording_db.chores = [chore("Vacuum", -3, ident=1), chore("Bins", ident=2)]
     yield from a_view(recording_db)
 
 
@@ -1355,6 +1366,7 @@ CARD_KEYS = {
     "↑ ↓": Qt.Key.Key_Up,
     "0": Qt.Key.Key_0,
     "BACKSPACE": Qt.Key.Key_Backspace,
+    pomodoro_view.HINT_KEYS_NAME: Qt.Key.Key_A,
 }
 
 
@@ -1579,6 +1591,25 @@ class TestEveryDeck:
 
         assert listing._showing is None
 
+    def test_a_letter_goes_to_the_list_and_not_to_a_deck_under_review(self, listing):
+        send_key(listing, Qt.Key.Key_B)
+        assert showing_pane(listing).calls[-1] == ("hint", "b")
+
+        self.in_a_deck(listing)
+        send_key(listing, Qt.Key.Key_B)
+        assert listing.hook_state() == "deck"
+
+    def test_the_hook_hears_the_list_and_then_the_deck_chosen(self, deck_timer, settled):
+        deck_timer.hook = told = Told()
+        enter_strict_break(deck_timer)
+        send_key(deck_timer, Qt.Key.Key_4)
+        settled()
+
+        self.in_a_deck(deck_timer)
+        settled()
+
+        assert told.states == ["list", "deck"]
+
     def test_the_wall_beside_names_the_deck_under_review(self, listing):
         self.in_a_deck(listing)
 
@@ -1752,7 +1783,7 @@ class TestTheLibrary:
         send_key(library_timer, Qt.Key.Key_3)
 
         assert marked(library_timer) == str(media / "Books" / "a.epub")
-        assert library_timer.hook_state() == "break"
+        assert library_timer.hook_state() == "list"
 
     def test_a_file_that_reached_its_end_hands_the_mark_to_the_next(self, library_timer,
                                                                     media):
@@ -1804,10 +1835,29 @@ class TestTheLibrary:
         send_key(library_timer, Qt.Key.Key_3)
 
         for label, _says in library_timer.media_surface.keys.hints:
+            send_key(library_timer, Qt.Key.Key_3)
             key = LIST_KEYS.get(label) or key_named(label)
             assert key is not None, f"the card names {label!r} and nothing presses it"
             pressed = QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier)
             assert library_timer.eventFilter(library_timer, pressed) is True, label
+
+    def test_a_letter_opens_the_entry_its_hint_names(self, library_timer, media):
+        enter_with_the_shelves(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+
+        send_key(library_timer, Qt.Key.Key_B)
+
+        assert library_timer.media_pane_factory.last.activity == BreakActivity(
+            "b.epub", str(media / "Books" / "b.epub"), BOOK)
+
+    def test_the_letters_of_the_chores_are_never_a_hint(self, chore_timer, media):
+        enter_with_the_shelves(chore_timer)
+        send_key(chore_timer, Qt.Key.Key_3)
+
+        assert hints_shown(chore_timer.media_surface.pane) == ["c", "d"]
+        send_key(chore_timer, Qt.Key.Key_D)
+        assert chore_timer.media_pane_factory.last.activity.path == str(
+            media / "Books" / "b.epub")
 
     def test_its_key_again_while_its_list_shows_does_nothing(self, library_timer):
         enter_with_the_shelves(library_timer)
@@ -1824,6 +1874,12 @@ class TestTheLibrary:
 def marked(view) -> str:
     pane = view.media_surface.pane
     return pane.entries[pane.marked].path
+
+
+def hints_shown(pane) -> list:
+    column = pane.chooser.columnCount() - 1
+    return [pane.chooser.topLevelItem(row).text(column)
+            for row in range(pane.chooser.topLevelItemCount())]
 
 
 LIST_KEYS = {"\u2191 \u2193": Qt.Key.Key_Up, "SPACE \u2192": Qt.Key.Key_Space,
@@ -2006,8 +2062,8 @@ class TestTheHookFollowsTheBreak:
 
         assert told.states == ["document", "video"]
 
-    def test_a_shelf_s_list_is_the_break_and_its_file_what_it_is(self, library_timer,
-                                                                 settled):
+    def test_a_shelf_s_list_is_a_list_and_its_file_what_it_is(self, library_timer,
+                                                              settled):
         library_timer.hook = told = Told()
         enter_with_the_shelves(library_timer)
 
@@ -2016,7 +2072,7 @@ class TestTheHookFollowsTheBreak:
         send_key(library_timer, Qt.Key.Key_Space)
         settled()
 
-        assert told.states == ["break", "book"]
+        assert told.states == ["break", "list", "book"]
 
     def test_the_walls_standing_after_the_break_are_still_the_break(self, timer, settled):
         timer.hook = told = Told()

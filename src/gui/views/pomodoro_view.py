@@ -23,6 +23,7 @@ from src.desktop.screen_power import ScreenPower
 from src.desktop.switch_guard import SwitchGuard
 from src.domain import chores, formulas, media, plans
 from src.domain.clock import as_displayed_date, minutes_covered
+from src.domain.hints import LETTERS, letters_of
 from src.profile import (DEFAULT_IDLE_PAUSE_SECS, DEFAULT_STOP_HOLD_SECS,
                          UserProfile, get_qt_key)
 from src.gui.components.chore_panel import KEYS as CHORE_KEYS, ChorePanel
@@ -49,12 +50,15 @@ UNDO_KEY_NAME = "BACKSPACE"
 PAGE_BACK_KEY = Qt.Key.Key_0
 PAGE_BACK_KEY_NAME = "CTRL 0"
 
+HINT_KEYS_NAME = "LETTERS"
+
 LONG_BREAK_EVENT = "long_break_started"
 
 HOLD_TICK_MS = 50
 
 FOCUS_STATE = "focus"
 BREAK_STATE = "break"
+LIST_STATE = "list"
 
 HOLD_RELEASE = "release"
 HOLD_STOP = "stop"
@@ -860,6 +864,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._screens_off_key = get_qt_key(self.profile.get_metric(
             "strict_break", "screens_off_key", "Tab"), Qt.Key.Key_Tab)
         self._screens_off_name = QKeySequence(self._screens_off_key).toString().upper()
+        self._hint_keys = letters_of(self.profile.get_metric(
+            "strict_break", "hint_keys", LETTERS))
 
         prune((REST_GROUP,))
         self.rest_rule = None
@@ -1521,6 +1527,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             hints = [
                 ("\u2191 \u2193", "choose"),
                 ("SPACE \u2192", "open"),
+                (HINT_KEYS_NAME, "open by its hint"),
                 (f"{UNDO_KEY_NAME} \u2190", "up a folder"),
                 zero,
             ]
@@ -1529,6 +1536,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("\u2191 \u2193", "choose a deck"),
                 ("\u2190 \u2192", "one with cards due"),
                 ("SPACE", "review it"),
+                (HINT_KEYS_NAME, "review by its hint"),
                 ("0", "back to Traker"),
             ]
         elif kind == break_activities.DECK:
@@ -1677,12 +1685,18 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._follow_the_state()
 
     def hook_state(self) -> str:
-        """Return what the break shows: focus, break, or the kind of what is open."""
-        if self._showing is not None and self._showing.kind != break_activities.SHELF:
-            return self._showing.kind
+        """Return what the break shows: focus, break, a list, or the kind of what is open."""
+        if self._showing is not None:
+            return LIST_STATE if self._lists() else self._showing.kind
         if self.overlays or self.current_phase != "work":
             return BREAK_STATE
         return FOCUS_STATE
+
+    def _lists(self) -> bool:
+        """Report whether what is showing is a list to choose from."""
+        pane = self.media_surface.pane if self.media_surface is not None else None
+        return (self._showing.kind == break_activities.SHELF
+                or getattr(pane, "choosing", False))
 
     def _follow_the_state(self):
         """Tell the hook what the break shows, once the change in hand has settled."""
@@ -1834,6 +1848,8 @@ class PomodoroView(ShutdownMixin, QWidget):
                 self._stop_showing()
         elif key == UNDO_KEY and callable(getattr(pane, "undo", None)):
             pane.undo()
+        elif Qt.Key.Key_A <= key <= Qt.Key.Key_Z and callable(getattr(pane, "hint", None)):
+            return pane.hint(chr(key).lower())
         else:
             return False
         return True
@@ -2037,6 +2053,15 @@ class PomodoroView(ShutdownMixin, QWidget):
             return
         self._chores = list(entries)
         self._show_chores()
+        self._hand_out_hint_letters()
+
+    def _hand_out_hint_letters(self):
+        """Build the lists' hints from the hint keys no chore on the wall holds."""
+        if self.media_surface is None:
+            return
+        held = CHORE_KEYS[:len(self._chores)]
+        self.media_surface.set_hint_letters(
+            "".join(letter for letter in self._hint_keys if letter not in held))
 
     def _show_chores(self):
         """Hand what is due to every surface with room for it."""
@@ -2134,7 +2159,9 @@ class PomodoroView(ShutdownMixin, QWidget):
             only_screen=len(self.overlays) == 1,
             parent=self._media_host.media_parent())
         self.media_surface.pane_changed.connect(self._say_which_keys_drive_it)
+        self.media_surface.pane_changed.connect(self._follow_the_state)
         self.media_surface.file_chosen.connect(self._open_chosen)
+        self._hand_out_hint_letters()
         self._media_host.host_media(self.media_surface)
 
     def _watch_the_outputs(self):

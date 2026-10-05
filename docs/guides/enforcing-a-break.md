@@ -36,9 +36,10 @@ writes to the service.
 Offers come in key order: the queue, the `[[strict_break.activities]]` entries, then one shelf per
 subfolder of the media folder, `Media/` in the checkout unless `[strict_break.library]` names another.
 A shelf lists its folder, the file opened last marked or, once that one ended, the next by name; the
-list climbs to the media folder, and 0 returns from a file to it. The queue is `rest-queue.m3u`, one
-path per line, so any process can append to it; `:rest` reads, extends and prunes it. Positions are
-kept in `rest-positions.json`, so a film or a book spans several breaks.
+list climbs to the media folder, and 0 returns from a file to it. Each row of a list of decks or of a
+folder carries a hint made from `hint_keys` less the chores' letters; typing it opens the row. The
+queue is `rest-queue.m3u`, one path per line, so any process can append to it; `:rest` reads, extends
+and prunes it. Positions are kept in `rest-positions.json`, so a film or a book spans several breaks.
 
 A film needs the `video` extra and the system `libmpv` (`media-video/mpv` with `USE="libmpv"`), which
 no lockfile carries; an EPUB, an Anki deck and a web page need QtWebEngine, the `anki` extra. Without
@@ -54,8 +55,9 @@ It stays loaded until the walls go, and Traker writes none of its storage to dis
 ## State hook
 
 `[hooks] state` is a shell command run each time what the break shows changes, with `{state}` replaced
-by `focus`, `break`, `video`, `document`, `book`, `deck` or `page`. Runs go one at a time off the
-interface thread; a burst of changes is one run of its last state, and quitting tells `focus`.
+by `focus`, `break`, `list` (of decks or of a folder), `video`, `document`, `book`, `deck` or `page`.
+Runs go one at a time off the interface thread; a burst of changes is one run of its last state, and
+quitting tells `focus`.
 
 ## Session verification
 

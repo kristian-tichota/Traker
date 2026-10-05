@@ -260,6 +260,11 @@ do_not_disturb = true
 # key press or pointer movement and hands that press to nothing else; the end of
 # the break switches them on as well. A key name such as "Tab" or "F12".
 screens_off_key = "Tab"
+# The letters a list's hints are made from, handed out in this order. Every row
+# of a list of decks or of a folder carries a hint, and typing it opens the row;
+# no hint is the start of another. The letters of the chores on the walls are
+# left out. Fewer than two letters means a-z.
+hint_keys = "abcdefghijklmnopqrstuvwxyz"
 # Where AnkiConnect listens, for an activity that names a deck. Anki has to be
 # running, and its window may stay minimized. Its timebox (Preferences, Review)
 # has to be 0: the timebox dialog holds the next card until it is answered.
@@ -280,9 +285,9 @@ anki_url = "http://127.0.0.1:8765"
 # or after. On a deck, SPACE, LEFT and RIGHT first show the answer; then SPACE
 # and RIGHT answer Good, LEFT answers Again, and BACKSPACE takes the last answer
 # back. A deck of "*" lists every deck in Anki first: UP/DOWN choose one,
-# LEFT/RIGHT skip to one with cards due, SPACE reviews it, and 0 in it goes back
-# to the list. A web page takes every key but ESC and CTRL+0, which puts the
-# wall back.
+# LEFT/RIGHT skip to one with cards due, SPACE or its hint reviews it, and 0 in
+# it goes back to the list. A web page takes every key but ESC and CTRL+0,
+# which puts the wall back.
 #
 # [[strict_break.activities]]
 # name = "Reading"
@@ -310,10 +315,10 @@ path = ""
 # A folder whose subfolders are offered after the entries above, one offer per
 # subfolder, such as Books, Videos and PDF. Each lists what is in it, with the
 # file open last marked, or the next one by name once that one reached its end.
-# UP/DOWN mark an entry, PgUp/PgDn ten at a time, SPACE or RIGHT opens it, LEFT
-# or BACKSPACE goes up a folder as far as this one, and 0 in a file opened from
-# the list goes back to it. Empty means the Media folder in Traker's own
-# checkout; a folder that does not exist offers nothing.
+# UP/DOWN mark an entry, PgUp/PgDn ten at a time, SPACE, RIGHT or its hint opens
+# it, LEFT or BACKSPACE goes up a folder as far as this one, and 0 in a file
+# opened from the list goes back to it. Empty means the Media folder in Traker's
+# own checkout; a folder that does not exist offers nothing.
 [strict_break.library]
 path = ""
 
@@ -325,8 +330,9 @@ width_em = 32
 height_em = 30
 
 # A shell command run each time what a break shows changes. Every {{state}} in it
-# becomes focus, break, video, document, book or deck, so that another program can
-# follow the break. It MUST finish within 3 s. Empty runs nothing.
+# becomes focus, break, list, video, document, book, deck or page, so that another
+# program can follow the break; list is a list of decks or of a folder. It MUST
+# finish within 3 s. Empty runs nothing.
 [hooks]
 state = ""
 
