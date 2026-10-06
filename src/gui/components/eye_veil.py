@@ -12,8 +12,8 @@ from PyQt6.QtWidgets import QApplication, QWidget
 from src.config import PALETTE
 from src.desktop.files import cache_path
 from src.desktop.kwin_rules import EyeRule
-from src.domain.eye_rest import (GAZE, SET_REPETITION, SET_REPETITIONS, ScreenTime,
-                                 blink_set, length_ms, look_away, step_at)
+from src.domain.eye_rest import (CLOSE, GAZE, LOOK, OPEN, SET_REPETITION, SET_REPETITIONS,
+                                 SQUEEZE, ScreenTime, blink_set, length_ms, look_away, step_at)
 
 log = logging.getLogger(__name__)
 
@@ -26,10 +26,16 @@ PACE_MS = 50
 REST_TITLE = "BLINK CYCLE"
 GAZE_NOTE = "6 M OR FURTHER · BLINK FULLY"
 
-TICK = "tick"
-CHIME = "chime"
-TONES = {TICK: ((1320.0,), 0.08, 0.10), CHIME: ((660.0, 990.0), 0.9, 0.16)}
-TONE_RATE = 44100
+DONE = "done"
+CUES = {
+    CLOSE: (((988.0,), 0.16), ((659.0,), 0.3)),
+    OPEN: (((659.0,), 0.16), ((988.0,), 0.3)),
+    SQUEEZE: (((440.0, 880.0), 0.1),) * 3,
+    LOOK: (((784.0, 1568.0), 1.2),),
+    DONE: (((523.0, 659.0, 784.0), 1.4),),
+}
+CUE_AMPLITUDE = 0.45
+TONE_RATE = 22050
 TONE_ATTACK_S = 0.005
 
 
@@ -39,15 +45,17 @@ def veil_caption(screen) -> str:
     return f"{VEIL_CAPTION} — {name}" if name else VEIL_CAPTION
 
 
-def tone_samples(partials, seconds, amplitude, rate=TONE_RATE) -> array.array:
-    """Return a decaying sine chord as signed 16-bit samples."""
-    count = int(rate * seconds)
-    decay = 5.0 / seconds
+def cue_samples(notes, amplitude=CUE_AMPLITUDE, rate=TONE_RATE) -> array.array:
+    """Return (partials, seconds) notes in turn, each a decaying sine chord, as 16-bit samples."""
     attack = TONE_ATTACK_S * rate
-    return array.array("h", (
-        int(32767 * amplitude * min(1.0, i / attack) * math.exp(-decay * i / rate)
-            * sum(math.sin(2 * math.pi * f * i / rate) for f in partials) / len(partials))
-        for i in range(count)))
+    samples = array.array("h")
+    for partials, seconds in notes:
+        decay = 5.0 / seconds
+        samples.extend(
+            int(32767 * amplitude * min(1.0, i / attack) * math.exp(-decay * i / rate)
+                * sum(math.sin(2 * math.pi * f * i / rate) for f in partials) / len(partials))
+            for i in range(int(rate * seconds)))
+    return samples
 
 
 def write_tone(path, samples, rate=TONE_RATE):
@@ -61,7 +69,7 @@ def write_tone(path, samples, rate=TONE_RATE):
 
 
 class Tones:
-    """The tick that paces a blink step and the chime that ends a routine."""
+    """A cue for each motion of the eyes, and a chord that ends a routine."""
 
     def __init__(self):
         self.effects = {}
@@ -70,10 +78,10 @@ class Tones:
         except ImportError as error:
             log.warning("The eye rest is silent: %s", error)
             return
-        for name, (partials, seconds, amplitude) in TONES.items():
+        for name, notes in CUES.items():
             path = cache_path(f"eye-{name}.wav")
             try:
-                write_tone(path, tone_samples(partials, seconds, amplitude))
+                write_tone(path, cue_samples(notes))
             except OSError as error:
                 log.warning("The eye rest has no %s: %s", name, error)
                 continue
@@ -242,7 +250,7 @@ class EyeRest(QObject):
         self.pace()
 
     def pace(self):
-        """Show the step reached on every screen, ticking at each change, and end on time."""
+        """Show the step reached on every screen, cue each step's motion, and end on time."""
         if not self.running:
             return
         at = step_at(self.routine, self.now() - self._began_ms)
@@ -250,8 +258,8 @@ class EyeRest(QObject):
             self._finish()
             return
         index, left_ms = at
-        if self._step is not None and index != self._step:
-            self._play(TICK)
+        if index != self._step:
+            self._play(self.routine[index].motion)
         self._step = index
         lines = self._lines(index, left_ms)
         for veil in self._veils():
@@ -285,7 +293,7 @@ class EyeRest(QObject):
         finished_a_set = bool(self.repetitions)
         self._stop()
         self.screen_time.rested()
-        self._play(CHIME)
+        self._play(DONE)
         if finished_a_set:
             self.set_done.emit()
 

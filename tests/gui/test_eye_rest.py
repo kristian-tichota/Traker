@@ -5,8 +5,8 @@ from PyQt6.QtWidgets import QApplication, QWidget
 import src.profile as profile_module
 from src.desktop.activities import VIDEO, BreakActivity
 from src.desktop.kwin_rules import EYE_GROUP
-from src.domain.eye_rest import GAZE, length_ms, look_away
-from src.gui.components.eye_veil import CHIME, GAZE_NOTE, REST_TITLE, TICK, VEIL_CAPTION
+from src.domain.eye_rest import CLOSE, GAZE, LOOK, OPEN, SQUEEZE, length_ms, look_away
+from src.gui.components.eye_veil import DONE, GAZE_NOTE, REST_TITLE, VEIL_CAPTION
 from src.gui.views.pomodoro_view import BLINK_SET_EVENT, PomodoroView, read_spent_today
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact]
@@ -115,13 +115,13 @@ class TestALookAway:
             assert veil.windowTitle().startswith(VEIL_CAPTION)
             assert veil.lines == ("CLOSE GENTLY", "", REST_TITLE)
 
-    def test_the_blink_cycle_is_ticked_and_the_gaze_counted_down(self, timer, clock):
+    def test_each_step_cues_its_motion_and_the_gaze_is_counted_down(self, timer, clock):
         gather_screen_time(timer)
 
         for ms in (2000, 3000, 5000, 7000, 8000):
             at(timer, clock, ms)
         veil = timer.eye_rest.windows[0]
-        assert timer.eye_rest.tones.played == [TICK] * 5
+        assert timer.eye_rest.tones.played == [CLOSE, OPEN, CLOSE, SQUEEZE, OPEN, LOOK]
         assert veil.lines == (GAZE, "20", GAZE_NOTE)
         at(timer, clock, 27_500)
         assert veil.lines == (GAZE, "1", GAZE_NOTE)
@@ -133,7 +133,7 @@ class TestALookAway:
         at(timer, clock, length_ms(look_away(timer.eye_rest.gaze_ms)))
 
         assert timer.eye_rest.running is False
-        assert timer.eye_rest.tones.played[-1] == CHIME
+        assert timer.eye_rest.tones.played[-1] == DONE
         assert all(veil.raised is False for veil in veils)
         assert timer.eye_rest.screen_time.screen_ms == 0
 

@@ -6,22 +6,31 @@ GAZE = "LOOK FAR AWAY"
 SET_REPETITIONS = 15
 
 
+CLOSE = "close"
+OPEN = "open"
+SQUEEZE = "squeeze"
+LOOK = "look"
+
+
 class Step(NamedTuple):
-    """One instruction of a routine, and how long it is held."""
+    """One instruction of a routine, how long it is held, and the eyes' motion."""
 
     said: str
     ms: int
+    motion: str
 
 
-BLINK_CYCLE = (Step("CLOSE GENTLY", 2000), Step("OPEN", 1000), Step("CLOSE GENTLY", 2000),
-               Step("SQUEEZE", 2000), Step("OPEN", 1000))
+BLINK_CYCLE = (Step("CLOSE GENTLY", 2000, CLOSE), Step("OPEN", 1000, OPEN),
+               Step("CLOSE GENTLY", 2000, CLOSE), Step("SQUEEZE", 2000, SQUEEZE),
+               Step("OPEN", 1000, OPEN))
 
-SET_REPETITION = (Step("CLOSE", 2000), Step("SQUEEZE", 2000), Step("OPEN", 1000))
+SET_REPETITION = (Step("CLOSE", 2000, CLOSE), Step("SQUEEZE", 2000, SQUEEZE),
+                  Step("OPEN", 1000, OPEN))
 
 
 def look_away(gaze_ms) -> tuple:
     """Return a rest: one blink cycle, then a gaze into the distance."""
-    return BLINK_CYCLE + (Step(GAZE, max(0, int(gaze_ms))),)
+    return BLINK_CYCLE + (Step(GAZE, max(0, int(gaze_ms)), LOOK),)
 
 
 def blink_set(repetitions=SET_REPETITIONS) -> tuple:

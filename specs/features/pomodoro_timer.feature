@@ -875,8 +875,12 @@ Feature: Focus timer
       Given my profile switches the eye rest on
       When 20 minutes of screen time have gathered
       Then a veil dims every screen and takes neither keys nor the pointer
-      And it paces one blink cycle, a soft tick at each step: close gently, open, close gently, squeeze, open
+      And it paces one blink cycle: close gently, open, close gently, squeeze, open
       And it counts down a 20-second gaze at something 6 m away, then chimes and lifts
+
+    Scenario: Each step is heard with the eyes closed
+      Then every step sounds the cue of its motion: close, open, squeeze or look away
+      And the cues differ, so no step needs to be read from the screen
 
     Scenario: What counts as screen time
       Then input outside a break counts, and so does an activity showing on a break's walls

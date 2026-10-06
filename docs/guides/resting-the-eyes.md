@@ -11,9 +11,17 @@ drawn on. Contract: `specs/features/pomodoro_timer.feature`.
 | Rest | close gently 2 s, open 1 s, close gently 2 s, squeeze 2 s, open 1 s, gaze `gaze_secs` | after `every_mins` of screen time |
 | Blink set | 15 × (close 2 s, squeeze 2 s, open 1 s), 75 s | at the start of the first `blink_sets_per_day` breaks |
 
-A soft tick marks each blink step and a chime ends the routine, because the eyes are closed or off the
-screen while it runs. The tones are WAV files generated into `~/.cache/traker/` and played through
-QtMultimedia. A finished blink set is stored as a `blink_set` timer event, which seeds the count on
+Each step sounds the cue of its motion, so that the routine can be followed with the eyes closed.
+
+| Motion | Cue |
+| --- | --- |
+| Close | Two falling notes |
+| Open | Two rising notes |
+| Squeeze | Three low pulses |
+| Look away | One bell |
+| End | A three-note chord |
+
+The cues are WAV files generated into `~/.cache/traker/` and played through QtMultimedia. A finished blink set is stored as a `blink_set` timer event, which seeds the count on
 the next start.
 
 ## Surfaces

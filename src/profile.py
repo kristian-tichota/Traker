@@ -187,7 +187,8 @@ gaze_secs = {DEFAULT_GAZE_SECS}
 # How many of a day's first breaks open with a paced set of 15
 # close-squeeze-open blinks, about 75 s. 0 is none.
 blink_sets_per_day = {DEFAULT_BLINK_SETS_PER_DAY}
-# A soft tick paces each blink step, and a chime ends the rest.
+# A tone cues each step: falling to close, rising to open, three pulses to
+# squeeze, a bell to look away. A chord ends the routine.
 sound = true
 
 # Recurring household chores, defined on the Chores tab. This says whether a
