@@ -21,7 +21,8 @@ Each step sounds the cue of its motion, so that the routine can be followed with
 | Look away | One bell |
 | End | A three-note chord |
 
-The cues are WAV files generated into `~/.cache/traker/` and played through QtMultimedia. A finished blink set is stored as a `blink_set` timer event, which seeds the count on
+The cues are WAV files generated into `~/.cache/traker/` and played by the first of `pw-play`,
+`paplay` and `aplay` on the `PATH`. Without any of them, the routine is silent and a warning is logged. A finished blink set is stored as a `blink_set` timer event, which seeds the count on
 the next start.
 
 ## Surfaces

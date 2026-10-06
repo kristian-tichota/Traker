@@ -2,9 +2,10 @@ import array
 import logging
 import math
 import os
+import shutil
 import wave
 
-from PyQt6.QtCore import (QDateTime, QObject, QRect, Qt, QTimer, QUrl, QVariantAnimation,
+from PyQt6.QtCore import (QDateTime, QObject, QProcess, QRect, Qt, QTimer, QVariantAnimation,
                           pyqtSignal)
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter
 from PyQt6.QtWidgets import QApplication, QWidget
@@ -37,6 +38,7 @@ CUES = {
 CUE_AMPLITUDE = 0.45
 TONE_RATE = 22050
 TONE_ATTACK_S = 0.005
+PLAYERS = ("pw-play", "paplay", "aplay")
 
 
 def veil_caption(screen) -> str:
@@ -72,11 +74,10 @@ class Tones:
     """A cue for each motion of the eyes, and a chord that ends a routine."""
 
     def __init__(self):
-        self.effects = {}
-        try:
-            from PyQt6.QtMultimedia import QSoundEffect
-        except ImportError as error:
-            log.warning("The eye rest is silent: %s", error)
+        self.paths = {}
+        self.player = next(filter(None, map(shutil.which, PLAYERS)), None)
+        if self.player is None:
+            log.warning("The eye rest is silent: none of %s is installed.", ", ".join(PLAYERS))
             return
         for name, notes in CUES.items():
             path = cache_path(f"eye-{name}.wav")
@@ -85,14 +86,16 @@ class Tones:
             except OSError as error:
                 log.warning("The eye rest has no %s: %s", name, error)
                 continue
-            effect = QSoundEffect()
-            effect.setSource(QUrl.fromLocalFile(path))
-            self.effects[name] = effect
+            self.paths[name] = path
 
     def play(self, name):
-        effect = self.effects.get(name)
-        if effect is not None:
-            effect.play()
+        """Start the player on the cue's file, without waiting for it."""
+        path = self.paths.get(name)
+        if path is None:
+            return
+        started, _pid = QProcess.startDetached(self.player, [path])
+        if not started:
+            log.warning("%s did not start; the %s cue is silent.", self.player, name)
 
 
 class EyeVeil(QWidget):
