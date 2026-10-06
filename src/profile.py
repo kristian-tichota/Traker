@@ -185,7 +185,7 @@ enabled = false
 every_mins = {DEFAULT_EYE_REST_MINS}
 gaze_secs = {DEFAULT_GAZE_SECS}
 # How many of a day's first breaks open with a paced set of 15
-# close-squeeze-open blinks, about 75 s. 0 is none.
+# close-squeeze-open blinks, about 90 s. 0 is none.
 blink_sets_per_day = {DEFAULT_BLINK_SETS_PER_DAY}
 # A tone cues each step: falling to close, rising to open, three pulses to
 # squeeze, a bell to look away. A chord ends the routine.

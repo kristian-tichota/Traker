@@ -13,8 +13,9 @@ from PyQt6.QtWidgets import QApplication, QWidget
 from src.config import PALETTE
 from src.desktop.files import cache_path
 from src.desktop.kwin_rules import EyeRule
-from src.domain.eye_rest import (CLOSE, GAZE, LOOK, OPEN, SET_REPETITION, SET_REPETITIONS,
-                                 SQUEEZE, ScreenTime, blink_set, length_ms, look_away, step_at)
+from src.domain.eye_rest import (CLOSE, GAZE, LOOK, OPEN, READY, READY_MS, SET_REPETITION,
+                                 SET_REPETITIONS, SQUEEZE, ScreenTime, blink_set, length_ms,
+                                 look_away, step_at)
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ CUES = {
 CUE_AMPLITUDE = 0.45
 TONE_RATE = 22050
 TONE_ATTACK_S = 0.005
-PLAYERS = ("pw-play", "paplay", "aplay")
+PLAYERS = {"pw-play": ["--latency=20ms"], "paplay": ["--latency-msec=20"], "aplay": ["-q"]}
 
 
 def veil_caption(screen) -> str:
@@ -60,6 +61,22 @@ def cue_samples(notes, amplitude=CUE_AMPLITUDE, rate=TONE_RATE) -> array.array:
     return samples
 
 
+def routine_track(routine, lead_ms, cues, rate=TONE_RATE) -> array.array:
+    """Return lead_ms of silence, then each step's cue at its start and the end chord after it."""
+    onsets, at_ms = [], lead_ms
+    for step in routine:
+        onsets.append((step.motion, at_ms))
+        at_ms += step.ms
+    onsets.append((DONE, at_ms))
+    track = array.array("h", bytes(2 * (at_ms * rate // 1000 + len(cues.get(DONE, "")))))
+    for name, ms in onsets:
+        cue = cues.get(name)
+        if cue is not None:
+            at = ms * rate // 1000
+            track[at:at + len(cue)] = cue[:len(track) - at]
+    return track
+
+
 def write_tone(path, samples, rate=TONE_RATE):
     """Write samples as a mono 16-bit WAV file."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -71,31 +88,39 @@ def write_tone(path, samples, rate=TONE_RATE):
 
 
 class Tones:
-    """A cue for each motion of the eyes, and a chord that ends a routine."""
+    """Plays a routine's cues as one track, so that every cue keeps to the routine's clock."""
 
     def __init__(self):
-        self.paths = {}
-        self.player = next(filter(None, map(shutil.which, PLAYERS)), None)
+        self.cues = {}
+        self.process = None
+        self.player = next(filter(shutil.which, PLAYERS), None)
         if self.player is None:
             log.warning("The eye rest is silent: none of %s is installed.", ", ".join(PLAYERS))
             return
-        for name, notes in CUES.items():
-            path = cache_path(f"eye-{name}.wav")
-            try:
-                write_tone(path, cue_samples(notes))
-            except OSError as error:
-                log.warning("The eye rest has no %s: %s", name, error)
-                continue
-            self.paths[name] = path
+        self.cues = {name: cue_samples(notes) for name, notes in CUES.items()}
 
-    def play(self, name):
-        """Start the player on the cue's file, without waiting for it."""
-        path = self.paths.get(name)
-        if path is None:
+    def play(self, routine, lead_ms):
+        """Start the routine's track in place of any playing, without waiting for it."""
+        self.stop()
+        if self.player is None:
             return
-        started, _pid = QProcess.startDetached(self.player, [path])
-        if not started:
-            log.warning("%s did not start; the %s cue is silent.", self.player, name)
+        path = cache_path("eye-routine.wav")
+        try:
+            write_tone(path, routine_track(routine, lead_ms, self.cues))
+        except OSError as error:
+            log.warning("The eye rest is silent: %s", error)
+            return
+        self.process = QProcess()
+        self.process.setStandardOutputFile(QProcess.nullDevice())
+        self.process.setStandardErrorFile(QProcess.nullDevice())
+        self.process.start(self.player, PLAYERS[self.player] + [path])
+
+    def stop(self):
+        """Cut the track off."""
+        if self.process is not None:
+            self.process.kill()
+            self.process.waitForFinished(1000)
+            self.process = None
 
 
 class EyeVeil(QWidget):
@@ -223,7 +248,6 @@ class EyeRest(QObject):
         self.repetitions = 0
         self.now = QDateTime.currentMSecsSinceEpoch
         self._began_ms = 0
-        self._step = None
         self._pace = QTimer(self)
         self._pace.setInterval(PACE_MS)
         self._pace.timeout.connect(self.pace)
@@ -244,27 +268,26 @@ class EyeRest(QObject):
     def begin(self, routine, title, repetitions=0):
         """Run a routine now, in place of any running."""
         self.routine, self.title, self.repetitions = tuple(routine), title, repetitions
-        self._began_ms = self.now()
-        self._step = None
         if self._sound and self.tones is None:
             self.tones = Tones()
+        if self.tones is not None:
+            self.tones.play(self.routine, READY_MS)
+        self._began_ms = self.now() + READY_MS
         self._still(True)
         self._pace.start()
         self.pace()
 
     def pace(self):
-        """Show the step reached on every screen, cue each step's motion, and end on time."""
+        """Count down to the routine, show the step reached on every screen, and end on time."""
         if not self.running:
             return
-        at = step_at(self.routine, self.now() - self._began_ms)
+        elapsed = self.now() - self._began_ms
+        at = step_at(self.routine, elapsed)
         if at is None:
             self._finish()
             return
-        index, left_ms = at
-        if index != self._step:
-            self._play(self.routine[index].motion)
-        self._step = index
-        lines = self._lines(index, left_ms)
+        lines = (READY, str(math.ceil(-elapsed / 1000)), self.title) if elapsed < 0 \
+            else self._lines(*at)
         for veil in self._veils():
             veil.say(*lines)
 
@@ -296,7 +319,6 @@ class EyeRest(QObject):
         finished_a_set = bool(self.repetitions)
         self._stop()
         self.screen_time.rested()
-        self._play(DONE)
         if finished_a_set:
             self.set_done.emit()
 
@@ -310,13 +332,11 @@ class EyeRest(QObject):
         self._lift_windows()
         self._still(False)
 
-    def _play(self, name):
-        if self.tones is not None:
-            self.tones.play(name)
-
     def shutdown(self):
         """Stop any routine, close the veils' windows at once and give the window rule back."""
         windows, self.windows = self.windows, []
+        if self.tones is not None:
+            self.tones.stop()
         if self.running:
             self._stop()
         for veil in windows:

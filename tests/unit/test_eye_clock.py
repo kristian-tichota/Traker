@@ -11,7 +11,7 @@ def test_a_rest_is_one_blink_cycle_then_the_gaze():
 
     assert [step.said for step in rest] == ["CLOSE GENTLY", "OPEN", "CLOSE GENTLY",
                                             "SQUEEZE", "OPEN", GAZE]
-    assert length_ms(rest) == 28_000
+    assert length_ms(rest) == 30_000
 
 
 def test_a_blink_set_is_fifteen_close_squeeze_opens():
@@ -19,7 +19,7 @@ def test_a_blink_set_is_fifteen_close_squeeze_opens():
 
     assert [step.said for step in routine[:3]] == ["CLOSE", "SQUEEZE", "OPEN"]
     assert len(routine) == 3 * SET_REPETITIONS
-    assert length_ms(routine) == 75_000
+    assert length_ms(routine) == 90_000
 
 
 def test_a_step_runs_to_its_last_millisecond():
@@ -27,9 +27,9 @@ def test_a_step_runs_to_its_last_millisecond():
 
     assert step_at(rest, 0) == (0, 2000)
     assert step_at(rest, 1999) == (0, 1)
-    assert step_at(rest, 2000) == (1, 1000)
-    assert step_at(rest, 27_999) == (5, 1)
-    assert step_at(rest, 28_000) is None
+    assert step_at(rest, 2000) == (1, 2000)
+    assert step_at(rest, 29_999) == (5, 1)
+    assert step_at(rest, 30_000) is None
 
 
 def test_screen_time_falls_due_at_the_interval():

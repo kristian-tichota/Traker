@@ -878,9 +878,13 @@ Feature: Focus timer
       And it paces one blink cycle: close gently, open, close gently, squeeze, open
       And it counts down a 20-second gaze at something 6 m away, then chimes and lifts
 
+    Scenario: Every routine opens with a countdown
+      Then a rest or a blink set counts down 3 seconds before its first step
+
     Scenario: Each step is heard with the eyes closed
       Then every step sounds the cue of its motion: close, open, squeeze or look away
       And the cues differ, so no step needs to be read from the screen
+      And each cue sounds as its step appears, on a break's walls as elsewhere
 
     Scenario: What counts as screen time
       Then input outside a break counts, and so does an activity showing on a break's walls

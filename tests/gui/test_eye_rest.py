@@ -1,3 +1,5 @@
+import array
+
 import pytest
 from PyQt6.QtCore import QDateTime, Qt, QThreadPool
 from PyQt6.QtWidgets import QApplication, QWidget
@@ -5,8 +7,10 @@ from PyQt6.QtWidgets import QApplication, QWidget
 import src.profile as profile_module
 from src.desktop.activities import VIDEO, BreakActivity
 from src.desktop.kwin_rules import EYE_GROUP
-from src.domain.eye_rest import CLOSE, GAZE, LOOK, OPEN, SQUEEZE, length_ms, look_away
-from src.gui.components.eye_veil import DONE, GAZE_NOTE, REST_TITLE, VEIL_CAPTION
+from src.domain.eye_rest import (CLOSE, GAZE, LOOK, OPEN, READY, READY_MS, SQUEEZE, blink_set,
+                                 length_ms, look_away)
+from src.gui.components.eye_veil import (DONE, GAZE_NOTE, REST_TITLE, VEIL_CAPTION,
+                                        routine_track)
 from src.gui.views.pomodoro_view import BLINK_SET_EVENT, PomodoroView, read_spent_today
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact]
@@ -33,14 +37,6 @@ class Clock:
 
     def __call__(self):
         return self.ms
-
-
-class Tones:
-    def __init__(self):
-        self.played = []
-
-    def play(self, name):
-        self.played.append(name)
 
 
 class FilmPane(QWidget):
@@ -76,7 +72,6 @@ def timer(qapp, eyes_rested, recording_db, clock):
     view.stress_calendar.anim_timer.stop()
     view._idle_watch.stop()
     view.eye_rest.now = clock
-    view.eye_rest.tones = Tones()
     yield view
     view.shutdown()
     QThreadPool.globalInstance().waitForDone(2000)
@@ -113,27 +108,37 @@ class TestALookAway:
             assert veil.isVisible()
             assert veil.windowFlags() & NO_INPUT == NO_INPUT
             assert veil.windowTitle().startswith(VEIL_CAPTION)
-            assert veil.lines == ("CLOSE GENTLY", "", REST_TITLE)
+            assert veil.lines == (READY, "3", REST_TITLE)
 
-    def test_each_step_cues_its_motion_and_the_gaze_is_counted_down(self, timer, clock):
+    def test_the_countdown_and_the_gaze_are_counted_down(self, timer, clock):
         gather_screen_time(timer)
-
-        for ms in (2000, 3000, 5000, 7000, 8000):
-            at(timer, clock, ms)
         veil = timer.eye_rest.windows[0]
-        assert timer.eye_rest.tones.played == [CLOSE, OPEN, CLOSE, SQUEEZE, OPEN, LOOK]
+
+        at(timer, clock, -1)
+        assert veil.lines == (READY, "1", REST_TITLE)
+        at(timer, clock, 0)
+        assert veil.lines == ("CLOSE GENTLY", "", REST_TITLE)
+        at(timer, clock, 10_000)
         assert veil.lines == (GAZE, "20", GAZE_NOTE)
-        at(timer, clock, 27_500)
+        at(timer, clock, 29_500)
         assert veil.lines == (GAZE, "1", GAZE_NOTE)
 
-    def test_the_end_chimes_lifts_the_veil_and_counts_from_zero(self, timer, clock):
+    def test_one_track_cues_each_step_at_its_start_and_ends_on_the_chord(self):
+        motions = (CLOSE, OPEN, SQUEEZE, LOOK, DONE)
+        cues = {name: array.array("h", [value]) for value, name in enumerate(motions, 1)}
+
+        track = routine_track(look_away(20_000), READY_MS, cues, rate=1000)
+
+        assert [(ms, cue) for ms, cue in enumerate(track) if cue] == [
+            (3000, 1), (5000, 2), (7000, 1), (9000, 3), (11_000, 2), (13_000, 4), (33_000, 5)]
+
+    def test_the_end_lifts_the_veil_and_counts_from_zero(self, timer, clock):
         gather_screen_time(timer)
         veils = list(timer.eye_rest.windows)
 
         at(timer, clock, length_ms(look_away(timer.eye_rest.gaze_ms)))
 
         assert timer.eye_rest.running is False
-        assert timer.eye_rest.tones.played[-1] == DONE
         assert all(veil.raised is False for veil in veils)
         assert timer.eye_rest.screen_time.screen_ms == 0
 
@@ -163,19 +168,21 @@ class TestALookAway:
 
 
 class TestOnABreak:
-    def test_the_days_first_break_opens_with_a_blink_set_on_every_wall(self, timer):
+    def test_the_days_first_break_opens_with_a_blink_set_on_every_wall(self, timer, clock):
         enter_break(timer)
 
         assert timer.eye_rest.repetitions == 15
         assert timer.eye_rest.windows == []
         for wall in timer.overlays:
             assert wall.veil.raised is True
-            assert wall.veil.lines == ("CLOSE", "1 / 15", "BLINK SET 1 OF 3")
+            assert wall.veil.lines == (READY, "3", "BLINK SET 1 OF 3")
+        at(timer, clock, 6000)
+        assert timer.overlays[0].veil.lines == ("CLOSE", "2 / 15", "BLINK SET 1 OF 3")
 
     def test_a_finished_set_is_recorded(self, timer, clock, recording_db):
         enter_break(timer)
 
-        at(timer, clock, 75_000)
+        at(timer, clock, length_ms(blink_set()))
 
         QThreadPool.globalInstance().waitForDone(2000)
         assert recording_db.last("log_pomodoro_event")["event_type"] == BLINK_SET_EVENT

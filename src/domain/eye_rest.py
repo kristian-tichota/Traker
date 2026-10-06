@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import NamedTuple
 
 GAZE = "LOOK FAR AWAY"
+READY = "GET READY"
+READY_MS = 3000
 
 SET_REPETITIONS = 15
 
@@ -20,12 +22,12 @@ class Step(NamedTuple):
     motion: str
 
 
-BLINK_CYCLE = (Step("CLOSE GENTLY", 2000, CLOSE), Step("OPEN", 1000, OPEN),
+BLINK_CYCLE = (Step("CLOSE GENTLY", 2000, CLOSE), Step("OPEN", 2000, OPEN),
                Step("CLOSE GENTLY", 2000, CLOSE), Step("SQUEEZE", 2000, SQUEEZE),
-               Step("OPEN", 1000, OPEN))
+               Step("OPEN", 2000, OPEN))
 
 SET_REPETITION = (Step("CLOSE", 2000, CLOSE), Step("SQUEEZE", 2000, SQUEEZE),
-                  Step("OPEN", 1000, OPEN))
+                  Step("OPEN", 2000, OPEN))
 
 
 def look_away(gaze_ms) -> tuple:
