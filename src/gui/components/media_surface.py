@@ -192,6 +192,7 @@ class VideoPane(BreakPane):
     def __init__(self, path=None, start_at=0, parent=None):
         super().__init__(parent)
         self._start_ms = 0
+        self._stilled = False
         self.screen_widget = MpvScreen(self)
         self.screen_widget.playback_failed.connect(self._show_failure)
         self.layout().addWidget(self.screen_widget)
@@ -221,6 +222,17 @@ class VideoPane(BreakPane):
         """Pause, or carry on."""
         if self.player is not None:
             self.player.pause = not self.player.pause
+
+    def still(self, held):
+        """Pause for an eye rest, and resume only what the rest paused."""
+        if self.player is None:
+            return
+        if held and not self.player.pause:
+            self._stilled = True
+            self.player.pause = True
+        elif not held and self._stilled:
+            self._stilled = False
+            self.player.pause = False
 
     def step(self, direction):
         if self.player is None:
@@ -1008,6 +1020,11 @@ class MediaSurface(QWidget):
             self.progress.setVisible(activity.kind not in (SHELF, PAGE))
             self.show_progress()
         return pane
+
+    def still(self, held):
+        """Hold what is showing still while the eyes rest, and let every pane go after."""
+        for pane in self.panes.values():
+            pane.still(held and pane is self.pane)
 
     def set_hint_letters(self, letters):
         """Build every list's hints from letters."""

@@ -1,8 +1,8 @@
 import pytest
 
-from src.desktop.kwin_rules import (EXACT_MATCH, FORCE_TEMPORARILY, REST_GROUP,
-                                   SUBSTRING_MATCH, WINDOW_GROUP, RestRule,
-                                   WindowHome, activity_id, desktop_id, prune,
+from src.desktop.kwin_rules import (EXACT_MATCH, EYE_GROUP, FORCE, FORCE_TEMPORARILY,
+                                   REST_GROUP, SUBSTRING_MATCH, WINDOW_GROUP, RestRule,
+                                   WindowHome, activity_id, desktop_id, eye_keys, prune,
                                    removed, rest_keys, window_keys, written)
 
 pytestmark = pytest.mark.exact
@@ -39,6 +39,24 @@ class Compositor:
 @pytest.fixture
 def rules_file(tmp_path):
     return tmp_path / "kwinrulesrc"
+
+
+class TestTheEyeVeilRule:
+    def test_it_matches_a_veil_and_neither_the_window_nor_a_wall(self):
+        rule = entries(written("", EYE_GROUP, eye_keys("Traker eyes")), EYE_GROUP)
+
+        assert "Traker eyes — DP-1".startswith(rule["title"])
+        assert rule["title"] not in "Traker"
+        assert rule["title"] not in "Traker rest — DP-1"
+
+    def test_a_veil_is_in_front_everywhere_unfocused_and_unlisted_for_good(self):
+        rule = entries(written("", EYE_GROUP, eye_keys("Traker eyes")), EYE_GROUP)
+
+        for key, value in (("above", "true"), ("acceptfocus", "false"),
+                           ("skiptaskbar", "true"), ("skippager", "true"),
+                           ("skipswitcher", "true"), ("desktops", ""), ("activity", "")):
+            assert rule[key] == value
+            assert rule[f"{key}rule"] == str(FORCE)
 
 
 class TestWhatItWrites:

@@ -9,8 +9,10 @@ log = logging.getLogger(__name__)
 
 REST_GROUP = "traker-rest"
 WINDOW_GROUP = "traker-window"
+EYE_GROUP = "traker-eyes"
 GENERAL = "General"
 
+FORCE = 2
 FORCE_TEMPORARILY = 6
 EXACT_MATCH = 1
 SUBSTRING_MATCH = 2
@@ -78,6 +80,21 @@ def rest_keys(title_prefix, everywhere=True):
         ("minimize", "false"),
         ("minimizerule", FORCE_TEMPORARILY),
     ]
+
+
+def eye_keys(title_prefix):
+    """Build the keys that keep every veil in front of every window, unfocused and unlisted."""
+    keys = [
+        ("Description", "Traker: a veil resting the eyes, over every screen"),
+        ("title", title_prefix),
+        ("titlematch", SUBSTRING_MATCH),
+    ]
+    for key, value in (("desktops", EVERYWHERE), ("activity", EVERYWHERE),
+                       ("above", "true"), ("acceptfocus", "false"),
+                       ("skiptaskbar", "true"), ("skippager", "true"),
+                       ("skipswitcher", "true")):
+        keys += [(key, value), (f"{key}rule", FORCE)]
+    return keys
 
 
 def window_keys(caption, desktop_id=None, activity_id=None):
@@ -153,11 +170,11 @@ def _restore(path, was, existed) -> bool:
 def carried(group=None, path=None) -> bool:
     """Report whether the file currently holds one of this application's rules."""
     carries = kde_config.text(path or DEFAULT_PATH) or ""
-    wanted = [group] if group else [REST_GROUP, WINDOW_GROUP]
+    wanted = [group] if group else [REST_GROUP, WINDOW_GROUP, EYE_GROUP]
     return any(f"[{one}]" in carries for one in wanted)
 
 
-def prune(groups=(REST_GROUP, WINDOW_GROUP), path=None, reconfigure=None) -> bool:
+def prune(groups=(REST_GROUP, WINDOW_GROUP, EYE_GROUP), path=None, reconfigure=None) -> bool:
     """Remove this application's rules, whatever left them there."""
     path = path or DEFAULT_PATH
     before = kde_config.text(path)
@@ -172,7 +189,7 @@ def prune(groups=(REST_GROUP, WINDOW_GROUP), path=None, reconfigure=None) -> boo
 
 
 class TemporaryRule:
-    """One ForceTemporarily group in kwinrulesrc, while it is held."""
+    """One group of this application's in kwinrulesrc, while it is held."""
 
     group = ""
 
@@ -252,6 +269,23 @@ class RestRule(TemporaryRule):
                  "window rule in %s.",
                  " and onto every desktop and activity" if self.everywhere else "",
                  self._path)
+
+
+class EyeRule(TemporaryRule):
+    """Every eye-rest veil in front of every window, on every desktop, never focused."""
+
+    group = EYE_GROUP
+
+    def __init__(self, title_prefix, path=None, reconfigure=None):
+        super().__init__(path, reconfigure)
+        self._prefix = str(title_prefix or "")
+
+    def keys(self):
+        return eye_keys(self._prefix) if self._prefix else ()
+
+    def say(self):
+        log.info("Eye-rest veils are forced in front of every window, unfocused, by a "
+                 "window rule in %s.", self._path)
 
 
 class WindowHome(TemporaryRule):

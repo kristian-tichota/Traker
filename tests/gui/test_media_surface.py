@@ -448,6 +448,23 @@ class TestPlayingAVideo:
         pane.nudge(-1)
         pane.stop()
 
+    def test_a_rest_of_the_eyes_pauses_it_and_hands_it_back_playing(self, video):
+        pane = video()
+
+        pane.still(True)
+        assert pane.player.pause is True
+        pane.still(False)
+        assert pane.player.pause is False
+
+    def test_one_paused_by_hand_stays_paused_after_the_rest(self, video):
+        pane = video()
+        pane.toggle()
+
+        pane.still(True)
+        pane.still(False)
+
+        assert pane.player.pause is True
+
     def test_the_picture_is_libmpv_drawing_into_our_own_surface(self, video):
         pane = video()
 

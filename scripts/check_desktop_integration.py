@@ -36,7 +36,8 @@ def report_session():
         print(f"  {variable:<20} {os.environ.get(variable, '(unset)')}")
 
     for label, group in (("break walls rule", kwin_rules.REST_GROUP),
-                         ("window home rule", kwin_rules.WINDOW_GROUP)):
+                         ("window home rule", kwin_rules.WINDOW_GROUP),
+                         ("eye veils rule", kwin_rules.EYE_GROUP)):
         carried = kwin_rules.carried(group)
         print(f"  {label:<20} "
               f"{'[' + group + '] in ' + kwin_rules.DEFAULT_PATH if carried else '(none)'}")

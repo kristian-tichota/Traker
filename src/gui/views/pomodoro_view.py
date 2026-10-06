@@ -18,15 +18,17 @@ from src.desktop import rest_queue
 from src.desktop.hooks import StateHook
 from src.desktop.idle import idle_ms as session_idle_ms
 from src.desktop.kwin import KWinPin, default_app_id
-from src.desktop.kwin_rules import REST_GROUP, RestRule, prune
+from src.desktop.kwin_rules import EYE_GROUP, REST_GROUP, RestRule, prune
 from src.desktop.screen_power import ScreenPower
 from src.desktop.switch_guard import SwitchGuard
 from src.domain import chores, formulas, media, plans
 from src.domain.clock import as_displayed_date, minutes_covered
 from src.domain.hints import LETTERS, letters_of
-from src.profile import (DEFAULT_IDLE_PAUSE_SECS, DEFAULT_STOP_HOLD_SECS,
-                         UserProfile, get_qt_key)
+from src.profile import (DEFAULT_BLINK_SETS_PER_DAY, DEFAULT_EYE_REST_MINS,
+                         DEFAULT_GAZE_SECS, DEFAULT_IDLE_PAUSE_SECS,
+                         DEFAULT_STOP_HOLD_SECS, UserProfile, get_qt_key)
 from src.gui.components.chore_panel import KEYS as CHORE_KEYS, ChorePanel
+from src.gui.components.eye_veil import EyeRest, EyeVeil
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
 from src.gui.components.media_surface import MediaSurface
@@ -53,6 +55,7 @@ PAGE_BACK_KEY_NAME = "CTRL 0"
 HINT_KEYS_NAME = "LETTERS"
 
 LONG_BREAK_EVENT = "long_break_started"
+BLINK_SET_EVENT = "blink_set"
 
 HOLD_TICK_MS = 50
 
@@ -64,6 +67,7 @@ HOLD_RELEASE = "release"
 HOLD_STOP = "stop"
 
 IDLE_POLL_MS = 1000
+SCREEN_TICK_CAP_MS = 5 * IDLE_POLL_MS
 
 SCREENS_SETTLE_MS = 400
 
@@ -148,12 +152,11 @@ def walk_shelves(offered, folder) -> tuple:
     return offered, break_activities.shelves(folder)
 
 
-def read_long_breaks_spent(db) -> tuple:
-    """Read (date, count) for the long breaks today has already spent."""
+def read_spent_today(db) -> tuple:
+    """Read (date, long breaks, blink sets) for what today has already spent."""
     today = datetime.date.today().isoformat()
-    events = db.get_pomodoro_events_for_day(today)
-    return today, sum(1 for event in events
-                      if len(event) > 1 and event[1] == LONG_BREAK_EVENT)
+    kinds = [event[1] for event in db.get_pomodoro_events_for_day(today) if len(event) > 1]
+    return today, kinds.count(LONG_BREAK_EVENT), kinds.count(BLINK_SET_EVENT)
 
 
 def rewrite_as_rest(db, minutes) -> tuple:
@@ -337,6 +340,7 @@ class StrictOverlay(QWidget):
 
         self.keys = KeyCard(parent=self)
         self.keys.setVisible(False)
+        self.veil = EyeVeil(self)
 
         # Workaround: Qt rebuilds a mapped window when a GL child first reaches it, so one comes first.
         self.texture_page = QOpenGLWidget(self)
@@ -399,15 +403,20 @@ class StrictOverlay(QWidget):
         """Name the keys that drive what is showing, or none of them."""
         self.keys.set_hints(hints)
         self.keys.setVisible(bool(hints))
-        self.keys.place_top_right(self.rect())
-        self.keys.raise_()
+        self._stack_the_overlays()
 
     def resizeEvent(self, event):
-        """Keep the card in its corner and the sign at the screen's scale."""
+        """Keep the overlays in place and the sign at the screen's scale."""
         super().resizeEvent(event)
+        self._stack_the_overlays()
+        self._dress_for_the_state()
+
+    def _stack_the_overlays(self):
+        """Place the card in its corner and the veil over everything, the card included."""
         self.keys.place_top_right(self.rect())
         self.keys.raise_()
-        self._dress_for_the_state()
+        self.veil.setGeometry(self.rect())
+        self.veil.raise_()
 
     def covers_its_own_screen(self) -> bool:
         """Report whether the compositor put this wall on its intended output."""
@@ -867,7 +876,26 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._hint_keys = letters_of(self.profile.get_metric(
             "strict_break", "hint_keys", LETTERS))
 
-        prune((REST_GROUP,))
+        self.blink_sets_per_day = int(self.profile.number(
+            "eye_rest", "blink_sets_per_day", DEFAULT_BLINK_SETS_PER_DAY, low=0, high=10))
+        self._blink_sets_done = 0
+        self._screen_seen_ms = 0
+        self._dark_since_ms = 0
+        self.eye_rest = None
+        if self.profile.get_metric("eye_rest", "enabled", False) is True:
+            self.eye_rest = EyeRest(
+                self.profile.number("eye_rest", "every_mins", DEFAULT_EYE_REST_MINS,
+                                    low=1.0) * MS_PER_MINUTE,
+                self.profile.number("eye_rest", "gaze_secs", DEFAULT_GAZE_SECS,
+                                    low=1.0, high=600.0) * 1000,
+                walls=lambda: self.overlays, still=self._still_the_media,
+                sound=self.profile.get_metric("eye_rest", "sound", True) is not False,
+                parent=self)
+            self.eye_rest.set_done.connect(self._blink_set_done)
+
+        prune((REST_GROUP, EYE_GROUP))
+        if self.eye_rest is not None:
+            self.eye_rest.rule.hold()
         self.rest_rule = None
         if self.profile.get_metric("strict_break", "pin_with_rule", True):
             self.rest_rule = RestRule(WALL_CAPTION)
@@ -890,7 +918,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self.setup_ui()
         self._update_tray()
-        self._read_long_breaks_spent()
+        self._read_spent_today()
         self._reload_day()
 
         self.refresh_timer.start(self.visible_interval_ms())
@@ -1091,11 +1119,12 @@ class PomodoroView(ShutdownMixin, QWidget):
         return max(0, self.long_breaks_per_day - self._long_breaks_used)
 
     def _roll_the_day(self):
-        """Give the long breaks back at midnight."""
+        """Give the long breaks and the blink sets back at midnight."""
         today = datetime.date.today().isoformat()
         if today != self._long_break_day:
             self._long_break_day = today
             self._long_breaks_used = 0
+            self._blink_sets_done = 0
 
     def toggle_long_break(self) -> str:
         """Toggle the queued long break and return the new state."""
@@ -1150,19 +1179,40 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._long_breaks_used += 1
         self._record(LONG_BREAK_EVENT)
 
-    def _read_long_breaks_spent(self):
+    def _read_spent_today(self):
         """Seed today's spend from the store."""
-        run_in_background(self.threadpool, read_long_breaks_spent,
-                          self._apply_long_breaks_spent, None, self.db)
+        run_in_background(self.threadpool, read_spent_today,
+                          self._apply_spent_today, None, self.db)
 
-    def _apply_long_breaks_spent(self, payload):
-        """Apply the long breaks already spent today."""
+    def _apply_spent_today(self, payload):
+        """Apply the long breaks and blink sets already spent today."""
         if not read_was_answered(self.db):
-            log.warning("Not seeding today's long breaks: the read did not "
-                        "reach the service.")
+            log.warning("Not seeding today's long breaks and blink sets: the read "
+                        "did not reach the service.")
             return
-        self._long_break_day, self._long_breaks_used = payload
+        self._long_break_day, self._long_breaks_used, self._blink_sets_done = payload
         self._apply_long_break_controls()
+
+    def blink_sets_left(self) -> int:
+        """Return how many of today's breaks still open with a blink set."""
+        self._roll_the_day()
+        return max(0, self.blink_sets_per_day - self._blink_sets_done)
+
+    def _lead_with_a_blink_set(self):
+        """Open one of the day's first breaks with a paced blink set."""
+        if self.eye_rest is None or self.blink_sets_left() <= 0:
+            return
+        self.eye_rest.begin_set(
+            f"BLINK SET {self._blink_sets_done + 1} OF {self.blink_sets_per_day}")
+
+    def _blink_set_done(self):
+        self._blink_sets_done += 1
+        self._record(BLINK_SET_EVENT)
+
+    def _still_the_media(self, held):
+        """Hold what the break shows still while the eyes rest."""
+        if self.media_surface is not None:
+            self.media_surface.still(held)
 
     def refresh(self):
         """Read the day's telemetry and, during a break, what is still due."""
@@ -1388,12 +1438,13 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._halt("paused_focus", "FOCUS STOPPED - PRESS PLAY", "magenta")
 
     def _watch_for_the_member(self):
-        """Stop the clock for an absence, and start it again on any input."""
-        if not self.idle_pause_ms or not (self._idled or self._focus_is_running()):
-            return
-
-        away = self.idle_source()
-        if away is None:
+        """Pause focus for an absence, resume it on input, and count screen time."""
+        watching = bool(self.idle_pause_ms) and (self._idled or self._focus_is_running())
+        counting = self.eye_rest is not None and not self.overlays
+        away = self.idle_source() if watching or counting else None
+        if self.eye_rest is not None:
+            self._count_screen_time(away)
+        if not watching or away is None:
             return
 
         if self._idled:
@@ -1401,6 +1452,26 @@ class PomodoroView(ShutdownMixin, QWidget):
                 self._resume_or_pause()
         elif away >= self.idle_pause_ms:
             self._walked_away()
+
+    def _count_screen_time(self, idle):
+        """Count the time since the last look as screen time, unless the eyes were away."""
+        now = QDateTime.currentMSecsSinceEpoch()
+        delta = min(now - self._screen_seen_ms, SCREEN_TICK_CAP_MS) if self._screen_seen_ms else 0
+        self._screen_seen_ms = now
+        self.eye_rest.advance(delta, self._eyes_away_ms(idle, now))
+
+    def _eyes_away_ms(self, idle, now) -> int:
+        """Return how long the eyes have been away: blank walls, or no input."""
+        if self.overlays:
+            if self._showing is not None:
+                self._dark_since_ms = 0
+                return 0
+            self._dark_since_ms = self._dark_since_ms or now
+            return now - self._dark_since_ms
+        self._dark_since_ms = 0
+        if idle is None or not self.idle_pause_ms or idle < self.idle_pause_ms:
+            return 0
+        return idle
 
     def _walked_away(self):
         """Stop the interval for a proven absence."""
@@ -1470,6 +1541,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
             if self.strict_mode:
                 self._enforce_strict_mode()
+            self._lead_with_a_blink_set()
         else:
             self.current_phase = "work"
             self.time_left_ms = self.work_ms
@@ -2345,7 +2417,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._follow_the_state()
 
     def shutdown(self):
-        """Stop the timers, drop the strict-mode overlays, and tell the hook focus is back."""
+        """Stop the timers, eye rest and walls, and tell the hook focus is back."""
+        if self.eye_rest is not None:
+            self.eye_rest.shutdown()
         super().shutdown()
         self._clear_overlays()
         self.hook.tell(FOCUS_STATE)

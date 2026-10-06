@@ -4,6 +4,12 @@ import shutil
 import tempfile
 
 
+def cache_path(name):
+    """Return where this application keeps a file it can always build again."""
+    cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(cache, "traker", name)
+
+
 def write(path, text):
     """Replace a file's text in one rename, so no reader or crash sees half of it."""
     target = os.path.realpath(path)

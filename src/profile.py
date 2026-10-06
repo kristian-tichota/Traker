@@ -28,6 +28,9 @@ DEFAULT_LONG_BREAK_MINS = 60
 DEFAULT_LONG_BREAKS_PER_DAY = 2
 DEFAULT_IDLE_PAUSE_SECS = 300
 DEFAULT_STOP_HOLD_SECS = 10
+DEFAULT_EYE_REST_MINS = 20
+DEFAULT_GAZE_SECS = 20
+DEFAULT_BLINK_SETS_PER_DAY = 3
 
 DEFAULT_SUPPLEMENT_TARGETS = [
     {"key": "b12", "name": "B12 (mcg)", "target": 0.0},
@@ -169,6 +172,23 @@ idle_pause_secs = {DEFAULT_IDLE_PAUSE_SECS}
 # Seconds the play button or ESC MUST be held to stop a running interval. The
 # time it buys is focus overtime, the same as any other pause.
 stop_hold_secs = {DEFAULT_STOP_HOLD_SECS}
+
+# A veil over every screen once enough screen time has gathered: one guided
+# blink cycle, then a gaze at something at least 6 m away. The veil takes
+# neither keys nor the pointer, so the work underneath carries on, and a video
+# on a break's walls pauses until it lifts. Screen time is time with input
+# outside a break and time an activity shows on a break's walls. Either
+# [timer] idle_pause_secs without input, or walls showing nothing for as long as
+# a rest, starts it again from zero. Needs the Focus Timer tab.
+[eye_rest]
+enabled = false
+every_mins = {DEFAULT_EYE_REST_MINS}
+gaze_secs = {DEFAULT_GAZE_SECS}
+# How many of a day's first breaks open with a paced set of 15
+# close-squeeze-open blinks, about 75 s. 0 is none.
+blink_sets_per_day = {DEFAULT_BLINK_SETS_PER_DAY}
+# A soft tick paces each blink step, and a chime ends the rest.
+sound = true
 
 # Recurring household chores, defined on the Chores tab. This says whether a
 # break shows what is due today and takes the tick on the letter beside it. Off, the break surface does not mention them.

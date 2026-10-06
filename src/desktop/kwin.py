@@ -11,12 +11,6 @@ PLUGIN_NAME = "traker-strict-break"
 HOME_PLUGIN_NAME = "traker-window-home"
 
 
-def _cache_path(name):
-    """Return a path in the cache, because KWin reads a script off disk."""
-    cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    return os.path.join(cache, "traker", name)
-
-
 def _release_path(script_path):
     """Return the undo script's path, beside the script it undoes."""
     root, extension = os.path.splitext(script_path)
@@ -510,7 +504,7 @@ class WindowScreen:
         self.caption = str(caption or "")
         self.output = str(output or "").strip()
         self._call = caller or _session_caller
-        self.script_path = script_path or _cache_path("window-home.js")
+        self.script_path = script_path or files.cache_path("window-home.js")
         self.engaged = False
 
     def engage(self) -> bool:
@@ -542,7 +536,7 @@ class KWinPin:
         self.wall_outputs = dict(wall_outputs or {})
         self.refuse_switch = bool(refuse_switch)
         self._call = caller or _session_caller
-        self.script_path = script_path or _cache_path("strict-break.js")
+        self.script_path = script_path or files.cache_path("strict-break.js")
         self.release_path = _release_path(self.script_path)
         self.engaged = False
 

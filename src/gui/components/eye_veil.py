@@ -1,0 +1,314 @@
+import array
+import logging
+import math
+import os
+import wave
+
+from PyQt6.QtCore import (QDateTime, QObject, QRect, Qt, QTimer, QUrl, QVariantAnimation,
+                          pyqtSignal)
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter
+from PyQt6.QtWidgets import QApplication, QWidget
+
+from src.config import PALETTE
+from src.desktop.files import cache_path
+from src.desktop.kwin_rules import EyeRule
+from src.domain.eye_rest import (GAZE, SET_REPETITION, SET_REPETITIONS, ScreenTime,
+                                 blink_set, length_ms, look_away, step_at)
+
+log = logging.getLogger(__name__)
+
+VEIL_CAPTION = "Traker eyes"
+VEIL_ALPHA = 0.82
+FADE_IN_MS = 1200
+FADE_OUT_MS = 900
+PACE_MS = 50
+
+REST_TITLE = "BLINK CYCLE"
+GAZE_NOTE = "6 M OR FURTHER · BLINK FULLY"
+
+TICK = "tick"
+CHIME = "chime"
+TONES = {TICK: ((1320.0,), 0.08, 0.10), CHIME: ((660.0, 990.0), 0.9, 0.16)}
+TONE_RATE = 44100
+TONE_ATTACK_S = 0.005
+
+
+def veil_caption(screen) -> str:
+    """Return what to call the veil on screen."""
+    name = screen.name() if screen is not None else ""
+    return f"{VEIL_CAPTION} — {name}" if name else VEIL_CAPTION
+
+
+def tone_samples(partials, seconds, amplitude, rate=TONE_RATE) -> array.array:
+    """Return a decaying sine chord as signed 16-bit samples."""
+    count = int(rate * seconds)
+    decay = 5.0 / seconds
+    attack = TONE_ATTACK_S * rate
+    return array.array("h", (
+        int(32767 * amplitude * min(1.0, i / attack) * math.exp(-decay * i / rate)
+            * sum(math.sin(2 * math.pi * f * i / rate) for f in partials) / len(partials))
+        for i in range(count)))
+
+
+def write_tone(path, samples, rate=TONE_RATE):
+    """Write samples as a mono 16-bit WAV file."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with wave.open(path, "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(rate)
+        out.writeframes(samples.tobytes())
+
+
+class Tones:
+    """The tick that paces a blink step and the chime that ends a routine."""
+
+    def __init__(self):
+        self.effects = {}
+        try:
+            from PyQt6.QtMultimedia import QSoundEffect
+        except ImportError as error:
+            log.warning("The eye rest is silent: %s", error)
+            return
+        for name, (partials, seconds, amplitude) in TONES.items():
+            path = cache_path(f"eye-{name}.wav")
+            try:
+                write_tone(path, tone_samples(partials, seconds, amplitude))
+            except OSError as error:
+                log.warning("The eye rest has no %s: %s", name, error)
+                continue
+            effect = QSoundEffect()
+            effect.setSource(QUrl.fromLocalFile(path))
+            self.effects[name] = effect
+
+    def play(self, name):
+        effect = self.effects.get(name)
+        if effect is not None:
+            effect.play()
+
+
+class EyeVeil(QWidget):
+    """A dimming veil saying what the eyes do now, taking neither keys nor the pointer."""
+
+    WINDOW_FLAGS = (Qt.WindowType.Window |
+                    Qt.WindowType.FramelessWindowHint |
+                    Qt.WindowType.WindowStaysOnTopHint |
+                    Qt.WindowType.WindowDoesNotAcceptFocus |
+                    Qt.WindowType.WindowTransparentForInput)
+
+    def __init__(self, parent=None, screen=None):
+        super().__init__(parent)
+        self.screen_covered = screen
+        self.strength = 0.0
+        self.raised = False
+        self.lines = ("", "", "")
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        if parent is None:
+            self.setWindowFlags(self.WINDOW_FLAGS)
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            self.setWindowTitle(veil_caption(screen))
+        self.fade = QVariantAnimation(self)
+        self.fade.valueChanged.connect(self._set_strength)
+        self.fade.finished.connect(self._faded)
+        self.hide()
+
+    def say(self, step, count="", note=""):
+        """Show three lines over everything beneath, fading in where the veil was down."""
+        if (step, count, note) != self.lines:
+            self.lines = (step, count, note)
+            self.update()
+        if not self.raised:
+            self.raised = True
+            self._cover()
+            self._fade_to(1.0, FADE_IN_MS)
+
+    def lift(self):
+        """Fade out, and close a veil that is a window of its own."""
+        if not self.raised:
+            return
+        self.raised = False
+        self._fade_to(0.0, FADE_OUT_MS)
+
+    def _cover(self):
+        """Fill the parent, or the screen this veil was built for."""
+        if self.isWindow():
+            if self.screen_covered is not None:
+                self.setScreen(self.screen_covered)
+                self.setGeometry(self.screen_covered.geometry())
+            self.showFullScreen()
+            return
+        self.setGeometry(self.parentWidget().rect())
+        self.raise_()
+        self.show()
+
+    def _fade_to(self, target, duration_ms):
+        self.fade.stop()
+        self.fade.setStartValue(self.strength)
+        self.fade.setEndValue(float(target))
+        self.fade.setDuration(max(1, int(duration_ms * abs(target - self.strength))))
+        self.fade.start()
+
+    def _set_strength(self, value):
+        self.strength = float(value)
+        self.update()
+
+    def _faded(self):
+        if self.raised:
+            return
+        self.hide()
+        if self.isWindow():
+            self.deleteLater()
+
+    def paintEvent(self, event):
+        if self.strength <= 0.0:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        shade = QColor(PALETTE['base03'])
+        shade.setAlphaF(VEIL_ALPHA * self.strength)
+        painter.fillRect(self.rect(), shade)
+
+        height = self.height()
+        styled = [(said, max(px, height // scale), colour)
+                  for said, (px, scale, colour) in zip(
+                      self.lines, ((28, 12, 'cyan'), (22, 18, 'base1'), (11, 60, 'base0')))
+                  if said]
+        fonts = []
+        for said, px, colour in styled:
+            font = QFont("Fira Code")
+            font.setPixelSize(px)
+            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, max(2, px // 8))
+            fonts.append((said, font, colour, QFontMetrics(font).height() * 3 // 2))
+
+        y = (height - sum(line for *_, line in fonts)) // 2
+        for said, font, colour, line in fonts:
+            ink = QColor(PALETTE[colour])
+            ink.setAlphaF(self.strength)
+            painter.setPen(ink)
+            painter.setFont(font)
+            painter.drawText(QRect(0, y, self.width(), line), Qt.AlignmentFlag.AlignCenter, said)
+            y += line
+
+
+class EyeRest(QObject):
+    """Rests the eyes after a stretch of screen time, with a veil over every screen."""
+
+    set_done = pyqtSignal()
+
+    def __init__(self, every_ms, gaze_ms, walls, still, sound=True, parent=None):
+        super().__init__(parent)
+        self.gaze_ms = int(gaze_ms)
+        self.screen_time = ScreenTime(int(every_ms), length_ms(look_away(gaze_ms)))
+        self._walls = walls
+        self._still = still
+        self._sound = sound
+        self.tones = None
+        self.rule = EyeRule(VEIL_CAPTION)
+        self.windows = []
+        self.routine = ()
+        self.title = ""
+        self.repetitions = 0
+        self.now = QDateTime.currentMSecsSinceEpoch
+        self._began_ms = 0
+        self._step = None
+        self._pace = QTimer(self)
+        self._pace.setInterval(PACE_MS)
+        self._pace.timeout.connect(self.pace)
+
+    @property
+    def running(self) -> bool:
+        return bool(self.routine)
+
+    def advance(self, delta_ms, away_ms):
+        """Count screen time, and rest the eyes once enough has gathered."""
+        if not self.running and self.screen_time.advance(delta_ms, away_ms):
+            self.begin(look_away(self.gaze_ms), REST_TITLE)
+
+    def begin_set(self, title):
+        """Run a paced blink set now, in place of any rest running."""
+        self.begin(blink_set(), title, SET_REPETITIONS)
+
+    def begin(self, routine, title, repetitions=0):
+        """Run a routine now, in place of any running."""
+        self.routine, self.title, self.repetitions = tuple(routine), title, repetitions
+        self._began_ms = self.now()
+        self._step = None
+        if self._sound and self.tones is None:
+            self.tones = Tones()
+        self._still(True)
+        self._pace.start()
+        self.pace()
+
+    def pace(self):
+        """Show the step reached on every screen, ticking at each change, and end on time."""
+        if not self.running:
+            return
+        at = step_at(self.routine, self.now() - self._began_ms)
+        if at is None:
+            self._finish()
+            return
+        index, left_ms = at
+        if self._step is not None and index != self._step:
+            self._play(TICK)
+        self._step = index
+        lines = self._lines(index, left_ms)
+        for veil in self._veils():
+            veil.say(*lines)
+
+    def _lines(self, index, left_ms) -> tuple:
+        step = self.routine[index]
+        if step.said == GAZE:
+            return step.said, str(math.ceil(left_ms / 1000)), GAZE_NOTE
+        if self.repetitions:
+            return (step.said, f"{index // len(SET_REPETITION) + 1} / {self.repetitions}",
+                    self.title)
+        return step.said, "", self.title
+
+    def _veils(self) -> list:
+        """Return the walls' veils while walls stand, else one window per screen."""
+        walls = self._walls()
+        if walls:
+            self._lift_windows()
+            return [wall.veil for wall in walls]
+        if not self.windows:
+            self.windows = [EyeVeil(screen=screen) for screen in QApplication.screens()]
+        return self.windows
+
+    def _lift_windows(self):
+        for veil in self.windows:
+            veil.lift()
+        self.windows = []
+
+    def _finish(self):
+        finished_a_set = bool(self.repetitions)
+        self._stop()
+        self.screen_time.rested()
+        self._play(CHIME)
+        if finished_a_set:
+            self.set_done.emit()
+
+    def _stop(self):
+        """Stop the routine and lift every veil, letting go of what was held still."""
+        self._pace.stop()
+        self.routine = ()
+        self.repetitions = 0
+        for wall in self._walls():
+            wall.veil.lift()
+        self._lift_windows()
+        self._still(False)
+
+    def _play(self, name):
+        if self.tones is not None:
+            self.tones.play(name)
+
+    def shutdown(self):
+        """Stop any routine, close the veils' windows at once and give the window rule back."""
+        windows, self.windows = self.windows, []
+        if self.running:
+            self._stop()
+        for veil in windows:
+            veil.hide()
+            veil.deleteLater()
+        self.rule.release()

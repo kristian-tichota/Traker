@@ -869,6 +869,29 @@ Feature: Focus timer
       Then the tray icon shows how far the current phase has progressed
       And its centre carries the colour of my current schedule regime
 
+  Rule: Screen time is broken by a veil that rests the eyes
+
+    Scenario: Resting the eyes
+      Given my profile switches the eye rest on
+      When 20 minutes of screen time have gathered
+      Then a veil dims every screen and takes neither keys nor the pointer
+      And it paces one blink cycle, a soft tick at each step: close gently, open, close gently, squeeze, open
+      And it counts down a 20-second gaze at something 6 m away, then chimes and lifts
+
+    Scenario: What counts as screen time
+      Then input outside a break counts, and so does an activity showing on a break's walls
+      And the inactivity that pauses focus, or walls showing nothing for as long as a rest, starts it from zero
+
+    Scenario: A rest during a break
+      Given a break's walls stand
+      Then the veil is drawn on the walls, over what they show
+      And a playing video pauses until the veil lifts
+
+    Scenario: The day's first breaks open with a blink set
+      When one of the day's first three breaks begins
+      Then the veil paces 15 close-squeeze-open blinks and counts them
+      And a finished set is recorded, so a restart does not hand the day's sets out again
+
   Rule: Another program may follow what a break shows
 
     Scenario: Each change runs the hook

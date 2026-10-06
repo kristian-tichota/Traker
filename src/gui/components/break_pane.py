@@ -32,6 +32,9 @@ class BreakPane(QWidget):
     def stop(self):
         """Leave what is shown as it is, there being no place in it to keep."""
 
+    def still(self, held):
+        """Hold what plays still while the eyes rest, there being nothing playing here."""
+
     def shutdown(self):
         """Let go of what is shown, once, at the end of the break."""
         self.stop()

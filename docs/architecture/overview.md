@@ -21,7 +21,7 @@ every error body is JSON because the client parses it.
 
 `domain/` holds the arithmetic, without Qt or `requests`, and is the only place a number appearing in
 two readouts is computed. `database/rows.py` is the only place a server shape is named. `desktop/`
-holds everything that reaches KDE: two KWin scripts, two window rules, the night filter, the switch
+holds everything that reaches KDE: two KWin scripts, three window rules, the night filter, the switch
 guard, and the break queue and positions.
 
 ## Named sets
