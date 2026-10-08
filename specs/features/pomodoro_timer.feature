@@ -563,10 +563,17 @@ Feature: Focus timer
     Scenario: The five keys
       Given a break is showing me something
       Then SPACE pauses a video, or turns the page of a document
-      And left and right — and PgUp and PgDn — seek 30 seconds, or turn pages
+      And left and right seek 30 seconds, or turn pages
       And up and down are the volume, or scroll inside the page
+      And PgUp and PgDn switch a video's subtitle track, or turn pages
       And 0 puts the wall back
       And another offer's key shows that one instead
+
+    Scenario: Switching a video's subtitle track, such as its lyrics
+      Given a break is showing me a video with subtitle tracks
+      When I press PgDn or PgUp
+      Then the next or the previous track shows, no track being one of them
+      And the card names the track shown, and names no such key for a video without one
 
     Scenario: Closing it is not a way out
       Given a break is showing me something

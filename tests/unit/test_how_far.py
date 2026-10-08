@@ -1,8 +1,9 @@
 import pytest
 
 from src.desktop.activities import BOOK, DECK, DOCUMENT, VIDEO, readout_of
-from src.domain.media import (CARDS, PAGES, SHARE, Place, TIME, UNKNOWN, as_elapsed,
-                              away_ms, finished, fraction, how_far, opens_in)
+from src.domain.media import (CARDS, OFF, PAGES, SHARE, Place, TIME, UNKNOWN, as_elapsed,
+                              away_ms, finished, fraction, how_far, next_subtitle,
+                              opens_in, subtitle_shown)
 
 pytestmark = pytest.mark.exact
 
@@ -141,3 +142,28 @@ class TestWhatIsLeftOfTheWait:
 
     def test_it_is_said_the_way_every_other_position_is(self):
         assert as_elapsed(opens_in(300_000, BREAK_MS, BREAK_MS - 29_000)) == "4:31"
+
+
+def tracks(shown, title="Full"):
+    return [{"id": 1, "type": "video", "selected": True},
+            {"id": 1, "type": "sub", "title": title, "lang": "eng", "selected": shown == 1},
+            {"id": 2, "type": "sub", "lang": "jpn", "selected": shown == 2}]
+
+
+class TestASubtitleTrack:
+    def test_it_is_named_by_its_title_and_language(self):
+        assert subtitle_shown(tracks(1)) == "Full (eng)"
+        assert subtitle_shown(tracks(2)) == "jpn"
+
+    def test_none_shown_is_off_and_none_in_the_file_is_nothing(self):
+        assert subtitle_shown(tracks(False)) == OFF
+        assert subtitle_shown(tracks(1)[:1]) == ""
+
+    def test_the_next_and_the_one_before_wrap_through_none(self):
+        assert [next_subtitle(tracks(shown), 1) for shown in (False, 1, 2)] == [1, 2, False]
+        assert [next_subtitle(tracks(shown), -1) for shown in (False, 1, 2)] == [2, False, 1]
+
+    def test_a_long_title_is_cut_to_fit_the_card(self):
+        said = subtitle_shown(tracks(1, title="English (auto-generated) from the original"))
+
+        assert len(said) == 32 and said.endswith("…")

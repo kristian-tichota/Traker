@@ -299,8 +299,9 @@ anki_url = "http://127.0.0.1:8765"
 #
 # While an activity shows, that screen shows it alone; the other screens go on
 # showing the countdown, the chores and what is coming. SPACE pauses a video or
-# turns a page, the arrows (and PgUp/PgDn) seek 30 s or turn pages, UP/DOWN are
-# volume or scroll, and 0 puts the wall back. In an EPUB, SPACE and the arrow
+# turns a page, the arrows seek 30 s or turn pages, UP/DOWN are volume or
+# scroll, PgUp/PgDn switch a video's subtitle (lyric) track, off included, or
+# turn pages, and 0 puts the wall back. In an EPUB, SPACE and the arrow
 # pointing along the book (LEFT in a right-to-left book) turn to the next page,
 # BACKSPACE and the other arrow turn back, and UP/DOWN go to the chapter before
 # or after. On a deck, SPACE, LEFT and RIGHT first show the answer; then SPACE

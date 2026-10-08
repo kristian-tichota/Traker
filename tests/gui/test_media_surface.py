@@ -516,6 +516,29 @@ class TestPlayingAVideo:
             pane.nudge(-1)
         assert pane.player.volume == pytest.approx(0.0)
 
+    def test_the_page_keys_switch_the_subtitle_track_and_say_which(self, video):
+        pane = video()
+        said = []
+        pane.changed.connect(lambda: said.append(pane.subtitles))
+
+        pane.screen_widget.tracks_listed.emit([
+            {"id": 1, "type": "sub", "title": "Full", "lang": "eng", "selected": True},
+            {"id": 2, "type": "sub", "lang": "jpn", "selected": False}])
+        pane.turn(1)
+
+        assert said == ["Full (eng)"]
+        assert pane.player.sid == 2
+
+    def test_a_file_without_subtitles_leaves_the_track_alone(self, video):
+        pane = video()
+        before = pane.player.sid
+
+        pane.screen_widget.tracks_listed.emit([{"id": 1, "type": "audio", "selected": True}])
+        pane.turn(1)
+
+        assert pane.subtitles == ""
+        assert pane.player.sid == before
+
     def test_letting_go_stops_the_player_it_started(self, video):
         pane = video()
         assert pane.player is not None

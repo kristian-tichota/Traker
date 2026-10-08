@@ -14,7 +14,8 @@ from src.desktop import anki, rest_positions, rest_queue
 from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, contents,
                                     kind_of, library_for, readout_of)
 from src.domain.hints import LETTERS, labels
-from src.domain.media import UNKNOWN, Place, as_elapsed, finished, how_far
+from src.domain.media import (UNKNOWN, Place, as_elapsed, finished, how_far, next_subtitle,
+                              subtitle_shown, subtitles)
 from src.gui.components.book_pane import BookPane
 from src.gui.components.break_pane import BreakPane, WebPane
 from src.gui.components.key_card import KeyCard
@@ -83,6 +84,7 @@ class MpvScreen(QOpenGLWidget):
 
     frame_ready = pyqtSignal()
     playback_failed = pyqtSignal(str)
+    tracks_listed = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -94,6 +96,7 @@ class MpvScreen(QOpenGLWidget):
         self.frame_ready.connect(self.update)
         if self.player is not None:
             self.player.event_callback("end-file")(self._file_ended)
+            self.player.observe_property("track-list", self._tracks_changed)
 
     def _start_mpv(self):
         """Return one player confined to this widget, or None with player_error set."""
@@ -148,6 +151,10 @@ class MpvScreen(QOpenGLWidget):
             self.playback_failed.emit(str(getattr(event.data, "error", "")
                                           or "this file could not be played"))
 
+    def _tracks_changed(self, _name, tracks):
+        """Handle mpv's event thread reporting the file's tracks or which are shown."""
+        self.tracks_listed.emit(list(tracks or ()))
+
     def paintGL(self):
         """Draw whatever mpv has into the framebuffer Qt provided."""
         if self._context is None:
@@ -189,12 +196,17 @@ def _say_what_mpv_said(level, prefix, text):
 class VideoPane(BreakPane):
     """One file, playing."""
 
+    changed = pyqtSignal()
+
     def __init__(self, path=None, start_at=0, parent=None):
         super().__init__(parent)
         self._start_ms = 0
         self._stilled = False
+        self.tracks = []
+        self.subtitles = ""
         self.screen_widget = MpvScreen(self)
         self.screen_widget.playback_failed.connect(self._show_failure)
+        self.screen_widget.tracks_listed.connect(self._list_tracks)
         self.layout().addWidget(self.screen_widget)
         self.player = self.screen_widget.player
         if self.player is None:
@@ -248,6 +260,19 @@ class VideoPane(BreakPane):
             return
         wanted = (self.player.volume or 0) + int(direction) * VOLUME_STEP * 100
         self.player.volume = max(0.0, min(100.0, wanted))
+
+    def turn(self, direction):
+        """Show the next subtitle track or the one before, no track being one of them."""
+        if self.player is not None and subtitles(self.tracks):
+            self.player.sid = next_subtitle(self.tracks, direction)
+
+    def _list_tracks(self, tracks):
+        """Keep the file's tracks, and report a change in the subtitle track shown."""
+        self.tracks = tracks
+        shown = subtitle_shown(tracks)
+        if shown != self.subtitles:
+            self.subtitles = shown
+            self.changed.emit()
 
     def position(self) -> int:
         """Return milliseconds in, or where it was opened at until mpv has read it."""

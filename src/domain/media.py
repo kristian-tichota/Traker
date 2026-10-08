@@ -6,6 +6,9 @@ UNKNOWN = "—"
 
 END_SLACK_MS = 2000
 
+OFF = "off"
+TRACK_NAME_CHARS = 32
+
 
 class Place(NamedTuple):
     """Where something got to, and what that is out of."""
@@ -63,6 +66,32 @@ def fraction(place, unit=TIME) -> float:
     """Return how much is behind the member, between nothing and all of it."""
     at, of = _bounded(place, unit)
     return at / of if of > 0 else 0.0
+
+
+def subtitles(tracks) -> list:
+    """Return the subtitle tracks in mpv's track list, in its order."""
+    return [track for track in tracks or () if track.get("type") == "sub"]
+
+
+def next_subtitle(tracks, direction=1):
+    """Return the subtitle track id direction steps on from the shown one, False being none."""
+    found = subtitles(tracks)
+    ids = [False] + [track.get("id") for track in found]
+    shown = next((track.get("id") for track in found if track.get("selected")), False)
+    return ids[(ids.index(shown) + int(direction)) % len(ids)]
+
+
+def subtitle_shown(tracks) -> str:
+    """Name the subtitle track shown, OFF for none, or "" where the file has none."""
+    found = subtitles(tracks)
+    if not found:
+        return ""
+    track = next((track for track in found if track.get("selected")), None)
+    if track is None:
+        return OFF
+    title, lang = track.get("title") or "", track.get("lang") or ""
+    named = f"{title} ({lang})" if title and lang else title or lang or f"#{track.get('id')}"
+    return named if len(named) <= TRACK_NAME_CHARS else named[:TRACK_NAME_CHARS - 1] + "…"
 
 
 def _bounded(place, unit):

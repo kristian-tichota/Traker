@@ -1637,8 +1637,11 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("SPACE", "turn the page" if paging else "pause"),
                 ("\u2190 \u2192", "page" if paging else "seek 30 s"),
                 ("\u2191 \u2193", "scroll" if paging else "volume"),
-                zero,
             ]
+            shown = "" if paging else getattr(pane, "subtitles", "")
+            if shown:
+                hints.append(("PGUP PGDN", f"subtitles: {shown}"))
+            hints.append(zero)
         if len(self._offers) > 1 and kind != break_activities.PAGE:
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
         if self.prompts_for_focus():

@@ -127,6 +127,14 @@ class FakeBookPane(FakePane):
         self.calls.append("undo")
 
 
+class FakeVideoPane(FakePane):
+    changed = pyqtSignal()
+    subtitles = ""
+
+    def turn(self, direction):
+        self.calls.append(("turn", direction))
+
+
 class Panes:
     def __init__(self):
         self.built = []
@@ -135,7 +143,8 @@ class Panes:
         if activity.kind == SHELF:
             pane = LibraryPane(activity.path, start_at, parent)
         else:
-            kind = {DECK: FakeDeckPane, BOOK: FakeBookPane}.get(activity.kind, FakePane)
+            kind = {DECK: FakeDeckPane, BOOK: FakeBookPane,
+                    VIDEO: FakeVideoPane}.get(activity.kind, FakePane)
             pane = kind(activity, start_at, parent)
         self.built.append(pane)
         return pane
@@ -1418,6 +1427,27 @@ class TestTheCardOfKeys:
         assert watching["↑ ↓"] == "volume"
         assert reading["← →"] == "page"
         assert reading["↑ ↓"] == "scroll"
+
+    def test_the_page_keys_name_the_subtitle_track_a_video_shows(self, timer):
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_2)
+        pane = showing_pane(timer)
+        before = dict(timer.media_surface.keys.hints)
+
+        pane.subtitles = "Full (eng)"
+        pane.changed.emit()
+
+        assert "PGUP PGDN" not in before
+        assert dict(timer.media_surface.keys.hints)["PGUP PGDN"] == "subtitles: Full (eng)"
+
+    def test_the_page_keys_switch_it(self, timer):
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_2)
+
+        send_key(timer, Qt.Key.Key_PageDown)
+        send_key(timer, Qt.Key.Key_PageUp)
+
+        assert showing_pane(timer).calls == [("turn", 1), ("turn", -1)]
 
     def test_the_digits_are_named_only_where_there_is_a_choice(self, timer):
         enter_strict_break(timer)
