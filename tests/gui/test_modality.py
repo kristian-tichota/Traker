@@ -85,6 +85,28 @@ class TestTheModeIsNamedForAsLongAsItIsActive:
         assert PALETTE["blue"] in window.mode_label.styleSheet()
 
 
+class TestAWindowKeyReachesOnlyTheGraphsOfferingThatWindow:
+    @pytest.fixture
+    def graphs(self, window, settled):
+        settled()
+        return window.views["food_graphs"], window.views["supplement_graphs"]
+
+    def test_the_monthly_key_moves_only_the_supplement_graphs(self, window, graphs):
+        food, supplements = graphs
+        supplements.set_rolling_period(7)
+
+        press(window, Qt.Key.Key_M)
+
+        assert supplements.rolling_period == 30
+        assert food.rolling_period == 1
+        assert "30-Day" in window.status_bar.text()
+
+    def test_the_weekly_key_moves_both(self, window, graphs):
+        press(window, Qt.Key.Key_W)
+
+        assert [view.rolling_period for view in graphs] == [7, 7]
+
+
 class TestTheReadoutListsTheMembersOwnKeys:
     @pytest.mark.parametrize(
         "mode, expected",

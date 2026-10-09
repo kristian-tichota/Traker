@@ -4,7 +4,7 @@ import numpy as np
 from PyQt6.QtWidgets import QComboBox, QLabel
 
 from src.config import PALETTE
-from src.gui.graphs.base import PERIODS, WindowedGraphView, style_trend_axes
+from src.gui.graphs.base import WindowedGraphView, style_trend_axes
 from src.gui.workers import discard
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class FoodGraphView(WindowedGraphView):
     def _read_preferences(self):
         return self.db.get_settings(
             [self.PERIOD_SETTING, "food_graph_calorie_series"],
-            {self.PERIOD_SETTING: PERIODS[1],
+            {self.PERIOD_SETTING: self.PERIODS[self.DEFAULT_PERIOD],
              "food_graph_calorie_series": EATEN})
 
     def _apply_preferences(self, saved):

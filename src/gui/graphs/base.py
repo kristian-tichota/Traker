@@ -20,8 +20,6 @@ log = logging.getLogger(__name__)
 
 _NOTHING = object()
 
-PERIODS = {1: "1 Day (Raw)", 7: "7 Days (Weekly Average)"}
-
 
 def style_trend_axes(ax):
     """Apply the Solarized styling of a trend panel to ax."""
@@ -282,6 +280,8 @@ class WindowedGraphView(BaseGraphView):
 
     PERIOD_SETTING = ""
 
+    PERIODS = {1: "1 Day (Raw)", 7: "7 Days (Weekly Average)"}
+
     DEFAULT_PERIOD = 1
 
     def __init__(self, db):
@@ -291,39 +291,44 @@ class WindowedGraphView(BaseGraphView):
         self.controls_layout = QHBoxLayout()
         self.controls_layout.addWidget(QLabel("<b>Rolling Average Window:</b>"))
         self.period_select = QComboBox()
-        self.period_select.addItems(list(PERIODS.values()))
-        self.period_select.setCurrentText(PERIODS[self.DEFAULT_PERIOD])
+        self.period_select.addItems(list(self.PERIODS.values()))
+        self.period_select.setCurrentText(self.PERIODS[self.DEFAULT_PERIOD])
         self.period_select.currentTextChanged.connect(self.on_period_changed)
         self.controls_layout.addWidget(self.period_select)
         self.main_layout.addLayout(self.controls_layout)
 
     def _read_preferences(self):
         return self.db.get_settings([self.PERIOD_SETTING],
-                                    {self.PERIOD_SETTING: PERIODS[self.DEFAULT_PERIOD]})
+                                    {self.PERIOD_SETTING: self.PERIODS[self.DEFAULT_PERIOD]})
 
     def _apply_preferences(self, saved):
         self._adopt_period(saved[self.PERIOD_SETTING])
         self.refresh()
 
+    def _days_of(self, label) -> int:
+        """Return the window a control label names, or the default for one it does not offer."""
+        return next((days for days, offered in self.PERIODS.items() if offered == str(label)),
+                    self.DEFAULT_PERIOD)
+
     def _adopt_period(self, saved_period):
         """Show a stored window on the control without writing it back."""
+        self.rolling_period = self._days_of(saved_period)
         self.period_select.blockSignals(True)
-        self.period_select.setCurrentText(str(saved_period))
+        self.period_select.setCurrentText(self.PERIODS[self.rolling_period])
         self.period_select.blockSignals(False)
-        self.rolling_period = 7 if "7" in str(saved_period) else 1
 
     def _remember_period(self, text):
         self.fetch(lambda: self.db.set_setting(self.PERIOD_SETTING, text), discard)
 
     def on_period_changed(self, text):
-        self.rolling_period = 7 if "7" in text else 1
+        self.rolling_period = self._days_of(text)
         self._remember_period(text)
         self.refresh()
 
     def set_rolling_period(self, days: int):
         """Adopt a window chosen from the keyboard, store it, and redraw at it."""
-        self._adopt_period(PERIODS[days])
-        self._remember_period(PERIODS[days])
+        self._adopt_period(self.PERIODS[days])
+        self._remember_period(self.PERIODS[days])
         self.refresh()
 
     def _compute_rolling_avg(self, data: np.ndarray, window: int) -> np.ndarray:

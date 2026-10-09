@@ -12,7 +12,7 @@ and never replaces the mode.
 
 | Mode | Entered with | Keys | Left with |
 | --- | --- | --- | --- |
-| NORMAL | Escape, from anywhere | `0`–`9`, `A`–`Z` select a tab; `D`/`W` switch the nutrient window | — |
+| NORMAL | Escape, from anywhere | `0`–`9`, `A`–`Z` select a tab; `D`/`W`/`M` switch the graph window | — |
 | COMMAND | `i` or `:` | Tab completes, Ctrl-N/Ctrl-P pick | Escape, or running the line |
 | SHEET | `s`, or clicking a cell | `hjkl` move, `e` edits, `o` sorts | Escape |
 | FILTER | `/`, from NORMAL or a sheet | type to narrow, Enter drops into the rows | Escape, which also clears |

@@ -51,7 +51,7 @@ def _graph(module: str, view: str):
 
 TAB_SHORTCUT_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-NUTRIENT_WINDOW_KEYS = "DW"
+NUTRIENT_WINDOW_KEYS = "DWM"
 
 MODES = {
     "NORMAL": "base01",
@@ -686,6 +686,8 @@ class MainWindow(QMainWindow):
                 self._set_nutrient_window(1, " Graphs: 1-Day Baseline Views.")
             elif k == Qt.Key.Key_W:
                 self._set_nutrient_window(7, " Graphs: 7-Day Windowed Averages.")
+            elif k == Qt.Key.Key_M:
+                self._set_nutrient_window(30, " Graphs: 30-Day Windowed Averages.")
             else:
                 super().keyPressEvent(event)
         else:
@@ -693,7 +695,7 @@ class MainWindow(QMainWindow):
 
     def _set_nutrient_window(self, days, message):
         graphs = [view for view in map(self.views.get, ('food_graphs', 'supplement_graphs'))
-                  if view]
+                  if view and days in view.PERIODS]
         if not graphs:
             return
         for view in graphs:

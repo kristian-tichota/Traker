@@ -50,8 +50,9 @@ Feature: Supplement logging
       And a day with nothing logged reads as zero rather than being skipped
       And a nutrient whose target is zero is not plotted
 
-    Scenario: Supplement trends are smoothed weekly by default
-      Then the supplement graphs use the 7-day window until I choose another
+    Scenario: Supplement trends are averaged over 30 or 7 days
+      Then the supplement graphs offer a 30-day and a 7-day window, and no single-day values
+      And they use the 30-day window until I choose another
       And the choice is stored apart from that of the nutrient graphs
 
     Scenario: Targets are per member

@@ -203,10 +203,11 @@ Feature: Modal keyboard navigation
 
     Scenario Outline: Switching the nutrient graph window
       When I press "<key>" in NORMAL mode
-      Then the nutrient graphs switch to <window>
+      Then each graph offering <window> switches to it
       And the status bar confirms the change
 
       Examples:
-        | key | window                |
-        | D   | single-day values     |
-        | W   | 7-day rolling average |
+        | key | window                 |
+        | D   | single-day values      |
+        | W   | 7-day rolling average  |
+        | M   | 30-day rolling average |

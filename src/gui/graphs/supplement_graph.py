@@ -82,7 +82,9 @@ def daily_amounts(raw_logs, columns, today: datetime.date):
 class SupplementGraphView(WindowedGraphView):
     PERIOD_SETTING = "supplement_graph_period"
 
-    DEFAULT_PERIOD = 7
+    PERIODS = {7: "7 Days (Weekly Average)", 30: "30 Days (Monthly Average)"}
+
+    DEFAULT_PERIOD = 30
 
     COLUMNS = 3
 
@@ -155,17 +157,19 @@ class SupplementGraphView(WindowedGraphView):
         plot_dates = dates[w - 1:]
         x = np.arange(len(plot_dates))
         self._grid(len(nutrients))
+        self.fig.suptitle(f"Average daily intake over the last {w} days, as a share of the target",
+                          color=PALETTE['base02'], fontsize=10, weight='bold', **LABEL)
 
         for index, (ax, nutrient, daily) in enumerate(zip(self.axes, nutrients, amounts)):
             colour = PALETTE[COLOURS[index % len(COLOURS)]]
             smoothed = self._compute_rolling_avg(daily, w)
             share = smoothed / nutrient.target * 100.0
 
-            ax.plot(x, share, color=colour, marker='o', markersize=3, linewidth=1.5, zorder=3)
+            ax.plot(x, share, color=colour, linewidth=1.8, zorder=3)
             ax.fill_between(x, 0, share, color=colour, alpha=0.04, zorder=1)
             ax.axhline(100, color=colour, linestyle=':', linewidth=1.2, alpha=0.6, zorder=2)
-            ax.set_title(f"{nutrient.name} ({w}D Avg)", color=PALETTE['base02'], fontsize=10,
-                         weight='bold', **LABEL)
+            ax.set_title(nutrient.name, color=PALETTE['base02'], fontsize=10, weight='bold',
+                         **LABEL)
             ax.set_xticks([])
             ax.set_ylim(bottom=0)
             ax.yaxis.set_major_formatter(PercentFormatter(decimals=0))
@@ -195,10 +199,8 @@ class SupplementGraphView(WindowedGraphView):
     def hover_text(data, day: int) -> str:
         """Return what one nutrient's panel says for one day under the cursor."""
         amount, unit = data["amounts"][day], data["unit"]
-        heading = (data["name"] if data["window"] <= 1
-                   else f"{data['name']}, {data['window']}-day average")
         return "\n".join([
-            heading,
+            f"{data['name']}, {data['window']}-day average",
             f"Target: {data['target']:g} {unit}/day",
             "\u2500" * 24,
             f"[{as_displayed_date(data['dates'][day])}]: {amount:.1f} {unit} "

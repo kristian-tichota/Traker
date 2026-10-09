@@ -85,8 +85,9 @@ Feature: Progress graphs
       And the other member's choice is unaffected
 
     Scenario: The window can be changed from the keyboard
-      When I press the single-day or weekly key in NORMAL mode
-      Then the graphs switch window and the status bar confirms it
+      When I press the single-day, weekly or monthly key in NORMAL mode
+      Then each graph offering that window switches to it
+      And the status bar confirms it
 
   Rule: The calorie chart states whether training has been netted off
 

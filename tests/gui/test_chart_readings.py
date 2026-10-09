@@ -4,7 +4,7 @@ import pytest
 
 from src.database.rows import SupplementLogRow
 from src.gui.graphs.caffeine_graph import CaffeineGraphView
-from src.gui.graphs.supplement_graph import SupplementGraphView, log_column_for
+from src.gui.graphs.supplement_graph import SupplementGraphView, daily_amounts, log_column_for
 
 pytestmark = pytest.mark.gui
 
@@ -85,7 +85,7 @@ class TestSupplementHistoryIsChartedAgainstTheTarget:
 
     @pytest.fixture
     def rendered(self, b12_target, make_view, recording_db):
-        def _render(rows, window=1):
+        def _render(rows, window):
             view = make_view(SupplementGraphView)
             view.rolling_period = window
             view.draw_chart(rows)
@@ -97,14 +97,15 @@ class TestSupplementHistoryIsChartedAgainstTheTarget:
     def days_ago(count):
         return (datetime.date.today() - datetime.timedelta(days=count)).isoformat()
 
-    def test_the_history_runs_from_the_first_log_to_today_with_gaps_as_zero(self, rendered):
-        view = rendered([supplement_row(self.days_ago(10), b12_mcg=self.B12_TARGET),
-                         supplement_row(self.days_ago(0), b12_mcg=self.B12_TARGET)])
+    def test_the_history_runs_from_the_first_log_to_today_with_gaps_as_zero(self):
+        dates, amounts = daily_amounts(
+            [supplement_row(self.days_ago(10), b12_mcg=self.B12_TARGET),
+             supplement_row(self.days_ago(0), b12_mcg=self.B12_TARGET)],
+            ["b12_mcg"], datetime.date.today())
 
-        (b12,) = view.hover_data.values()
-        assert b12["dates"][0] == self.days_ago(10)
-        assert b12["dates"][-1] == self.days_ago(0)
-        assert list(b12["amounts"]) == [self.B12_TARGET] + [0.0] * 9 + [self.B12_TARGET]
+        assert dates[0] == self.days_ago(10)
+        assert dates[-1] == self.days_ago(0)
+        assert list(amounts[0]) == [self.B12_TARGET] + [0.0] * 9 + [self.B12_TARGET]
 
     def test_a_daily_dose_holds_the_weekly_average_at_the_target(self, rendered):
         view = rendered([supplement_row(self.days_ago(day), b12_mcg=self.B12_TARGET)
@@ -126,29 +127,38 @@ class TestSupplementHistoryIsChartedAgainstTheTarget:
     def test_the_chart_draws_the_whole_ledger(self, b12_target, make_view, recording_db,
                                               settled):
         recording_db.supplement_logs = [supplement_row(self.days_ago(90), b12_mcg=1.0)]
-        recording_db.settings["supplement_graph_period"] = "1 Day (Raw)"
+        recording_db.settings["supplement_graph_period"] = "7 Days (Weekly Average)"
         view = make_view(SupplementGraphView)
 
         view.refresh()
         settled()
 
         (b12,) = view.hover_data.values()
-        assert b12["dates"][0] == self.days_ago(90)
+        assert b12["dates"][0] == self.days_ago(90 - 6)
 
-    def test_the_default_window_is_weekly(self, make_view, settled):
+    def test_the_default_window_is_thirty_days(self, make_view, settled):
+        view = make_view(SupplementGraphView)
+        settled()
+
+        assert view.rolling_period == 30
+
+    def test_the_window_follows_its_own_stored_preference(self, make_view, recording_db,
+                                                           settled):
+        recording_db.settings["supplement_graph_period"] = "7 Days (Weekly Average)"
+
         view = make_view(SupplementGraphView)
         settled()
 
         assert view.rolling_period == 7
 
-    def test_the_window_follows_its_own_stored_preference(self, make_view, recording_db,
-                                                           settled):
+    def test_a_window_it_does_not_offer_falls_back_to_thirty_days(self, make_view,
+                                                                   recording_db, settled):
         recording_db.settings["supplement_graph_period"] = "1 Day (Raw)"
 
         view = make_view(SupplementGraphView)
         settled()
 
-        assert view.rolling_period == 1
+        assert view.rolling_period == 30
 
 
 class TestTheCaffeineTooltipStatesTheDistanceBothWays:
