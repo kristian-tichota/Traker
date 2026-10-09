@@ -1,7 +1,8 @@
 import logging
 import math
 
-from PyQt6.QtWidgets import QToolTip, QWidget, QVBoxLayout
+import numpy as np
+from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QToolTip, QWidget, QVBoxLayout
 from PyQt6.QtCore import QPoint, QThreadPool, QTimer
 from PyQt6.QtGui import QCursor, QFont
 import matplotlib
@@ -12,12 +13,25 @@ from matplotlib.figure import Figure
 from src.config import PALETTE
 from src.gui.graphs.canvas import ChartCanvas
 from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin
-from src.gui.workers import run_in_background
+from src.gui.workers import discard, run_in_background
 from src.profile import UserProfile
 
 log = logging.getLogger(__name__)
 
 _NOTHING = object()
+
+PERIODS = {1: "1 Day (Raw)", 7: "7 Days (Weekly Average)"}
+
+
+def style_trend_axes(ax):
+    """Apply the Solarized styling of a trend panel to ax."""
+    ax.set_facecolor(PALETTE['base3'])
+    ax.spines['bottom'].set_color(PALETTE['base01'])
+    ax.spines['left'].set_color(PALETTE['base01'])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.tick_params(colors=PALETTE['base00'], labelsize=8)
+    ax.grid(True, color=PALETTE['base2'], linestyle='--')
 
 
 class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
@@ -261,3 +275,61 @@ class BaseGraphView(ShutdownMixin, PausesWhenHidden, QWidget):
             self.canvas.show_current_buffer()
         finally:
             self.canvas.render_lock.release()
+
+
+class WindowedGraphView(BaseGraphView):
+    """A chart whose series are averaged over a rolling window the member stores."""
+
+    PERIOD_SETTING = ""
+
+    DEFAULT_PERIOD = 1
+
+    def __init__(self, db):
+        super().__init__(db)
+        self.rolling_period = self.DEFAULT_PERIOD
+
+        self.controls_layout = QHBoxLayout()
+        self.controls_layout.addWidget(QLabel("<b>Rolling Average Window:</b>"))
+        self.period_select = QComboBox()
+        self.period_select.addItems(list(PERIODS.values()))
+        self.period_select.setCurrentText(PERIODS[self.DEFAULT_PERIOD])
+        self.period_select.currentTextChanged.connect(self.on_period_changed)
+        self.controls_layout.addWidget(self.period_select)
+        self.main_layout.addLayout(self.controls_layout)
+
+    def _read_preferences(self):
+        return self.db.get_settings([self.PERIOD_SETTING],
+                                    {self.PERIOD_SETTING: PERIODS[self.DEFAULT_PERIOD]})
+
+    def _apply_preferences(self, saved):
+        self._adopt_period(saved[self.PERIOD_SETTING])
+        self.refresh()
+
+    def _adopt_period(self, saved_period):
+        """Show a stored window on the control without writing it back."""
+        self.period_select.blockSignals(True)
+        self.period_select.setCurrentText(str(saved_period))
+        self.period_select.blockSignals(False)
+        self.rolling_period = 7 if "7" in str(saved_period) else 1
+
+    def _remember_period(self, text):
+        self.fetch(lambda: self.db.set_setting(self.PERIOD_SETTING, text), discard)
+
+    def on_period_changed(self, text):
+        self.rolling_period = 7 if "7" in text else 1
+        self._remember_period(text)
+        self.refresh()
+
+    def set_rolling_period(self, days: int):
+        """Adopt a window chosen from the keyboard, store it, and redraw at it."""
+        self._adopt_period(PERIODS[days])
+        self._remember_period(PERIODS[days])
+        self.refresh()
+
+    def _compute_rolling_avg(self, data: np.ndarray, window: int) -> np.ndarray:
+        """Average each day with the window - 1 days before it."""
+        if window <= 1:
+            return data
+        if len(data) < window:
+            return data[:0]
+        return np.convolve(data, np.ones(window)/window, mode='valid')

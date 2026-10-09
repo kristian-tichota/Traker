@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 
-import logging
-import re
 import datetime
+import logging
+import math
+import re
+from typing import NamedTuple
+
 import numpy as np
+from matplotlib.ticker import PercentFormatter
 
 from src.config import PALETTE
 from src.database.rows import SupplementLogRow
 from src.domain.clock import as_displayed_date
-from src.gui.graphs.base import BaseGraphView
+from src.gui.graphs.base import WindowedGraphView, style_trend_axes
 
 log = logging.getLogger(__name__)
 
@@ -39,155 +43,164 @@ def log_column_for(target: dict, columns) -> str:
     return from_label if from_label in columns else None
 
 
-def _saturation_colour(pct: float) -> str:
-    """Return the bar colour for pct of target: red, yellow, green, then magenta."""
-    if pct < 50:
-        return PALETTE['red']
-    if pct < 90:
-        return PALETTE['yellow']
-    return PALETTE['green'] if pct <= 120 else PALETTE['magenta']
+COLOURS = ('blue', 'cyan', 'green', 'yellow', 'orange', 'red', 'magenta', 'violet')
+
+LABEL = {"fontname": "Fira Code"}
 
 
-class SupplementGraphView(BaseGraphView):
+class Nutrient(NamedTuple):
+    name: str
+    column: str
+    target: float
+    unit: str
+
+
+def _parsed(text):
+    try:
+        return datetime.date.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def daily_amounts(raw_logs, columns, today: datetime.date):
+    """Return each day from the first log to today, and every column's total per day."""
+    logged = [(day, row) for day, row in ((_parsed(row.date), row) for row in raw_logs)
+              if day is not None and day <= today]
+    if not logged:
+        return [], np.zeros((len(columns), 0))
+
+    first = min(day for day, _ in logged)
+    span = (today - first).days + 1
+    matrix = np.zeros((len(columns), span))
+    for day, row in logged:
+        for i, column in enumerate(columns):
+            matrix[i, (day - first).days] += float(getattr(row, column) or 0.0)
+    dates = [(first + datetime.timedelta(days=offset)).isoformat() for offset in range(span)]
+    return dates, matrix
+
+
+class SupplementGraphView(WindowedGraphView):
+    PERIOD_SETTING = "supplement_graph_period"
+
+    DEFAULT_PERIOD = 7
+
+    COLUMNS = 3
+
     def __init__(self, db):
         super().__init__(db)
-        self.nutrients = []
+        self.controls_layout.addStretch()
+        self.axes = []
         self.hover_data = {}
 
+        self.fetch(self._read_preferences, self._apply_preferences)
+
         self.install_canvas()
-        self.ax = self.fig.add_subplot(111)
         self.canvas.mpl_connect("motion_notify_event", self.on_hover)
 
-    def animate_node(self, node, wave):
-        """Grow a node, a tick marker growing twice as far as a dot."""
-        artist = node['artist']
-        growth = 4 if artist.get_marker() == '|' else 2
-        artist.set_markersize(node['base_size'] + (wave * growth))
-        artist.set_alpha(0.4 + (wave * 0.4))
-
-    WINDOW_DAYS = 7
-
-    def _window_start(self):
-        return (datetime.date.today()
-                - datetime.timedelta(days=self.WINDOW_DAYS - 1)).isoformat()
-
-    def reset_axes(self):
-        self.ax.clear()
-        self.ax.set_facecolor(PALETTE['base3'])
-
-        self.ax.spines['bottom'].set_color(PALETTE['base01'])
-        self.ax.spines['left'].set_visible(False)
-        self.ax.spines['top'].set_visible(False)
-        self.ax.spines['right'].set_visible(False)
-        self.ax.grid(True, axis='x', color=PALETTE['base2'], linestyle='--')
-
     def read_chart_data(self):
-        return self.db.get_supplement_logs(self._window_start())
+        return self.db.get_supplement_logs()
 
-    def draw_chart(self, raw_logs):
-        col_to_log_idx = {
-            name: idx for idx, name in enumerate(SupplementLogRow._fields)
-            if name.endswith(("_mcg", "_mg", "_g", "_iu"))
-        }
-        targets = self.profile.get_supplement_targets()
-        self.nutrients = []
-        self.hover_data.clear()
-
-        for t in targets:
-            column = log_column_for(t, col_to_log_idx)
+    def _tracked_nutrients(self) -> list:
+        """Return the profile's targets that name a log column and a positive amount."""
+        columns = [name for name in SupplementLogRow._fields
+                   if name.endswith(("_mcg", "_mg", "_g", "_iu"))]
+        nutrients = []
+        for target in self.profile.get_supplement_targets():
+            column = log_column_for(target, columns)
             if column is None:
                 log.warning("No supplement log column for target %r (key %r)",
-                            t.get("name"), t.get("key"))
-                continue
-            self.nutrients.append(
-                (t["name"], col_to_log_idx[column], t["target"], _unit_of(t["name"])))
+                            target.get("name"), target.get("key"))
+            elif target["target"] > 0:
+                nutrients.append(Nutrient(target["name"], column, target["target"],
+                                          _unit_of(target["name"])))
+        return nutrients
 
-        if not self.nutrients:
-            self.ax.text(0.5, 0.5, "No Supplement Targets Configured or Matched against Database Schema",
-                         ha='center', va='center', color=PALETTE['base01'], fontname='Fira Code')
+    def _say(self, message):
+        """Replace every panel with one centred message."""
+        self.fig.clear()
+        self.axes = []
+        self.fig.text(0.5, 0.5, message, ha='center', va='center',
+                      color=PALETTE['base01'], **LABEL)
+
+    def _grid(self, count):
+        """Lay out count cleared panels, reusing the axes of a layout of the same size."""
+        if len(self.axes) != count:
+            self.fig.clear()
+            columns = min(count, self.COLUMNS)
+            grid = self.fig.subplots(math.ceil(count / columns), columns, squeeze=False).ravel()
+            for spare in grid[count:]:
+                self.fig.delaxes(spare)
+            self.axes = list(grid[:count])
+        for ax in self.axes:
+            ax.clear()
+            style_trend_axes(ax)
+
+    def draw_chart(self, raw_logs):
+        self.hover_data.clear()
+        nutrients = self._tracked_nutrients()
+        if not nutrients:
+            self._say("No supplement targets above zero in the profile")
             return
 
-        today = datetime.date.today()
-        dates = [(today - datetime.timedelta(days=i)).isoformat()
-                 for i in range(self.WINDOW_DAYS - 1, -1, -1)]
-        day_of = {date: index for index, date in enumerate(dates)}
-        matrix = np.zeros((len(self.nutrients), self.WINDOW_DAYS))
+        dates, amounts = daily_amounts(raw_logs or [], [n.column for n in nutrients],
+                                       datetime.date.today())
+        w = self.rolling_period
+        if not dates:
+            self._say("No supplements logged yet")
+            return
+        if len(dates) < w:
+            self._say(f"{w}-day averages need {w} days;\nonly {len(dates)} recorded so far")
+            return
 
-        for row in raw_logs:
-            day_idx = day_of.get(row.date)
-            if day_idx is None:
-                continue
-            for i, (_, db_idx, _, _) in enumerate(self.nutrients):
-                if row[db_idx] is not None:
-                    matrix[i, day_idx] += float(row[db_idx])
+        plot_dates = dates[w - 1:]
+        x = np.arange(len(plot_dates))
+        self._grid(len(nutrients))
 
-        y_pos = np.arange(len(self.nutrients))
-        self.ax.invert_yaxis()
-        self.ax.set_xlim(-35, 160)
-        self.ax.set_xticks([0, 50, 100, 150])
-        self.ax.set_xticklabels(['0%', '50%', '100%\nTarget', '150%'], color=PALETTE['base01'], fontname='Fira Code', fontsize=8)
-        self.ax.set_yticks(y_pos)
-        self.ax.set_yticklabels([n[0] for n in self.nutrients], fontname='Fira Code', fontsize=9, color=PALETTE['base02'], weight='bold')
+        for index, (ax, nutrient, daily) in enumerate(zip(self.axes, nutrients, amounts)):
+            colour = PALETTE[COLOURS[index % len(COLOURS)]]
+            smoothed = self._compute_rolling_avg(daily, w)
+            share = smoothed / nutrient.target * 100.0
 
-        self.ax.axvline(0, color=PALETTE['base01'], linewidth=1.5, zorder=2)
-        self.ax.axvline(100, color=PALETTE['base00'], linestyle=':', linewidth=1.5, zorder=2)
-        self.ax.text(-17.5, -0.8, "7D Streak", ha='center', color=PALETTE['base01'], fontsize=8, fontname='Fira Code', weight='bold')
+            ax.plot(x, share, color=colour, marker='o', markersize=3, linewidth=1.5, zorder=3)
+            ax.fill_between(x, 0, share, color=colour, alpha=0.04, zorder=1)
+            ax.axhline(100, color=colour, linestyle=':', linewidth=1.2, alpha=0.6, zorder=2)
+            ax.set_title(f"{nutrient.name} ({w}D Avg)", color=PALETTE['base02'], fontsize=10,
+                         weight='bold', **LABEL)
+            ax.set_xticks([])
+            ax.set_ylim(bottom=0)
+            ax.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax.text(0.02, 0.92, f"Target: {nutrient.target:g} {nutrient.unit}",
+                    transform=ax.transAxes, color=colour, fontsize=7.5, alpha=0.7,
+                    bbox=dict(facecolor=PALETTE['base3'], edgecolor='none', pad=1.0, alpha=0.8),
+                    **LABEL)
 
-        dot_x = np.linspace(-30, -5, self.WINDOW_DAYS)
-        bar_widths, bar_colours = [], []
-
-        for i, (name, _db_idx, target, unit) in enumerate(self.nutrients):
-            daily_amounts = matrix[i]
-            today_intake = daily_amounts[-1]
-            pct = (today_intake / target) * 100.0 if target > 0 else 0.0
-            self.hover_data[i] = {
-                "name": name, "target": target, "unit": unit,
-                "daily": daily_amounts, "avg": daily_amounts.sum() / self.WINDOW_DAYS,
-                "today": today_intake, "pct": pct, "dates": dates
+            glow, = ax.plot([x[-1]], [share[-1]], marker='o', color=colour, alpha=0.6,
+                            markersize=7, zorder=4, animated=True)
+            self.anim_nodes.append({'artist': glow, 'ax': ax, 'base_size': 5})
+            self.hover_data[index] = {
+                "name": nutrient.name, "target": nutrient.target, "unit": nutrient.unit,
+                "window": w, "dates": plot_dates, "amounts": smoothed,
             }
 
-            if today_intake > 0:
-                glow, = self.ax.plot([dot_x[-1]], [i], marker='o', color=PALETTE['green'], alpha=0.6, markersize=6, zorder=4, animated=True)
-                self.anim_nodes.append({'artist': glow, 'ax': self.ax, 'base_size': 5})
-
-            bar_width = min(pct, 155.0)
-            bar_colour = _saturation_colour(pct)
-            bar_widths.append(bar_width)
-            bar_colours.append(bar_colour)
-            self.ax.text(bar_width + 3, i, f"{today_intake:.0f} {unit} ({pct:.0f}%)", va='center', color=PALETTE['base01'], fontsize=8, fontname='Fira Code')
-
-            if pct > 0:
-                glow_edge, = self.ax.plot([bar_width], [i], marker='|', color=bar_colour, alpha=0.6, markersize=12, markeredgewidth=2, zorder=4, animated=True)
-                self.anim_nodes.append({'artist': glow_edge, 'ax': self.ax, 'base_size': 10})
-
-        rows, days = np.nonzero(matrix > 0)
-        self.ax.scatter(dot_x[days], rows, color=PALETTE['green'], s=25, zorder=5)
-        rows, days = np.nonzero(matrix <= 0)
-        self.ax.scatter(dot_x[days], rows, color=PALETTE['base2'], s=25, zorder=5)
-        self.ax.barh(y_pos, 150, color=PALETTE['base2'], height=0.4, alpha=0.3, zorder=1)
-        self.ax.barh(y_pos, bar_widths, color=bar_colours, height=0.4, alpha=0.85, zorder=3)
-
-        self.ax.set_title("Biological Saturation & Consistency Matrix (Today vs Target, 7-Day Streak)", color=PALETTE['base02'], fontsize=10, fontname='Fira Code', weight='bold', pad=15)
-
     def on_hover(self, event):
-        if event.inaxes != self.ax or event.ydata is None:
+        index = next((i for i, ax in enumerate(self.axes) if ax is event.inaxes), None)
+        data = self.hover_data.get(index)
+        if data is None or event.xdata is None:
             self.clear_hover()
             return
-        idx = int(round(event.ydata))
-        data = self.hover_data.get(idx)
-        if data is not None:
-            self.show_hover(idx, self.hover_text(data))
+        day = min(max(int(round(event.xdata)), 0), len(data["dates"]) - 1)
+        self.show_hover((index, day), self.hover_text(data, day))
 
     @staticmethod
-    def hover_text(data) -> str:
-        """Return what one nutrient's row says under the cursor."""
-        lines = [
-            f"Nutrient: {data['name']}",
-            f"Optimum Target: {data['target']:.0f} {data['unit']}/day",
-            f"Today: {data['today']:.1f} {data['unit']} ({data['pct']:.0f}%)",
-            f"7-Day Saturation: {data['avg']:.1f} {data['unit']}/day",
-            "─" * 24
-        ]
-        lines.extend(f"[{as_displayed_date(d_str)}]: {amt:.1f} {data['unit']}"
-                     for d_str, amt in zip(data['dates'], data['daily']))
-        return "\n".join(lines)
+    def hover_text(data, day: int) -> str:
+        """Return what one nutrient's panel says for one day under the cursor."""
+        amount, unit = data["amounts"][day], data["unit"]
+        heading = (data["name"] if data["window"] <= 1
+                   else f"{data['name']}, {data['window']}-day average")
+        return "\n".join([
+            heading,
+            f"Target: {data['target']:g} {unit}/day",
+            "\u2500" * 24,
+            f"[{as_displayed_date(data['dates'][day])}]: {amount:.1f} {unit} "
+            f"({amount / data['target'] * 100.0:.0f}%)",
+        ])

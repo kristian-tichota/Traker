@@ -191,7 +191,6 @@ def test_the_pulse_animation_stays_off_the_budget(qapp, live_client, settled):
 def test_what_a_chart_pays_for_its_data_when_nothing_is_cached(qapp, live_client):
     from src.gui.graphs.caffeine_graph import CaffeineGraphView
     from src.gui.graphs.heatmap import calendar_start
-    from src.gui.graphs.supplement_graph import SupplementGraphView
 
     def cold(label, read, rows_of=len):
         live_client.invalidate()
@@ -203,15 +202,13 @@ def test_what_a_chart_pays_for_its_data_when_nothing_is_cached(qapp, live_client
 
     beverage_since = (datetime.date.today() - datetime.timedelta(
         days=CaffeineGraphView.WINDOW_DAYS - 1)).isoformat()
-    supplement_since = (datetime.date.today() - datetime.timedelta(
-        days=SupplementGraphView.WINDOW_DAYS - 1)).isoformat()
 
     cold("cold read: nutrient chart (whole food ledger)",
          live_client.get_daily_aggregates)
     cold("cold read: caffeine chart (30 days)",
          lambda: live_client.get_beverage_logs(beverage_since))
-    cold("cold read: supplement chart (7 days)",
-         lambda: live_client.get_supplement_logs(supplement_since))
+    cold("cold read: supplement chart (whole supplement ledger)",
+         live_client.get_supplement_logs)
     cold("cold read: activity calendar (3 months)",
          lambda: live_client.get_activity_heatmap_data(
              calendar_start(datetime.date.today()).isoformat()))

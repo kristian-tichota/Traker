@@ -692,10 +692,12 @@ class MainWindow(QMainWindow):
             super().keyPressEvent(event)
 
     def _set_nutrient_window(self, days, message):
-        graphs = self.views.get('food_graphs')
+        graphs = [view for view in map(self.views.get, ('food_graphs', 'supplement_graphs'))
+                  if view]
         if not graphs:
             return
-        graphs.set_rolling_period(days)
+        for view in graphs:
+            view.set_rolling_period(days)
         self.status_bar.setText(message)
         self.status_pulser.pulse(PALETTE['base1'])
 

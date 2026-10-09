@@ -1,10 +1,10 @@
 import logging
 
 import numpy as np
-from PyQt6.QtWidgets import QHBoxLayout, QComboBox, QLabel
+from PyQt6.QtWidgets import QComboBox, QLabel
 
 from src.config import PALETTE
-from src.gui.graphs.base import BaseGraphView
+from src.gui.graphs.base import PERIODS, WindowedGraphView, style_trend_axes
 from src.gui.workers import discard
 
 log = logging.getLogger(__name__)
@@ -24,21 +24,12 @@ CALORIE_TITLES = {
 
 SERIES_BY_LABEL = {label: key for key, label in CALORIE_SERIES.items()}
 
-PERIODS = {1: "1 Day (Raw)", 7: "7 Days (Weekly Average)"}
 
+class FoodGraphView(WindowedGraphView):
+    PERIOD_SETTING = "food_graph_period"
 
-class FoodGraphView(BaseGraphView):
     def __init__(self, db):
         super().__init__(db)
-
-        self.controls_layout = QHBoxLayout()
-        self.controls_layout.addWidget(QLabel("<b>Rolling Average Window:</b>"))
-        self.period_select = QComboBox()
-        self.period_select.addItems(list(PERIODS.values()))
-
-        self.rolling_period = 1
-        self.period_select.currentTextChanged.connect(self.on_period_changed)
-        self.controls_layout.addWidget(self.period_select)
 
         self.controls_layout.addWidget(QLabel("<b>Calorie Series:</b>"))
         self.series_select = QComboBox()
@@ -46,9 +37,7 @@ class FoodGraphView(BaseGraphView):
         self.calorie_series = EATEN
         self.series_select.currentTextChanged.connect(self.on_series_changed)
         self.controls_layout.addWidget(self.series_select)
-
         self.controls_layout.addStretch()
-        self.main_layout.addLayout(self.controls_layout)
 
         self.fetch(self._read_preferences, self._apply_preferences)
 
@@ -57,21 +46,13 @@ class FoodGraphView(BaseGraphView):
 
     def _read_preferences(self):
         return self.db.get_settings(
-            ["food_graph_period", "food_graph_calorie_series"],
-            {"food_graph_period": PERIODS[1],
+            [self.PERIOD_SETTING, "food_graph_calorie_series"],
+            {self.PERIOD_SETTING: PERIODS[1],
              "food_graph_calorie_series": EATEN})
 
     def _apply_preferences(self, saved):
-        self._adopt_period(saved["food_graph_period"])
         self._adopt_series(saved["food_graph_calorie_series"])
-        self.refresh()
-
-    def _adopt_period(self, saved_period):
-        """Show a stored window on the control without writing it back."""
-        self.period_select.blockSignals(True)
-        self.period_select.setCurrentText(str(saved_period))
-        self.period_select.blockSignals(False)
-        self.rolling_period = 7 if "7" in str(saved_period) else 1
+        super()._apply_preferences(saved)
 
     def _adopt_series(self, saved_series):
         """Show a stored calorie series on the control without writing it back."""
@@ -80,14 +61,6 @@ class FoodGraphView(BaseGraphView):
         self.series_select.blockSignals(True)
         self.series_select.setCurrentText(CALORIE_SERIES[self.calorie_series])
         self.series_select.blockSignals(False)
-
-    def _remember_period(self, text):
-        self.fetch(lambda: self.db.set_setting("food_graph_period", text), discard)
-
-    def on_period_changed(self, text):
-        self.rolling_period = 7 if "7" in text else 1
-        self._remember_period(text)
-        self.refresh()
 
     def on_series_changed(self, text):
         """Store the series picked from the combo, then draw it."""
@@ -110,20 +83,6 @@ class FoodGraphView(BaseGraphView):
         """Report whether the calorie chart takes the training burn off."""
         return self.calorie_series == NET_OF_TRAINING
 
-    def set_rolling_period(self, days: int):
-        """Adopt a window chosen from the keyboard, store it, and redraw at it."""
-        self._adopt_period(PERIODS[days])
-        self._remember_period(PERIODS[days])
-        self.refresh()
-
-    def _compute_rolling_avg(self, data: np.ndarray, window: int) -> np.ndarray:
-        """Average each day with the window - 1 days before it."""
-        if window <= 1:
-            return data
-        if len(data) < window:
-            return data[:0]
-        return np.convolve(data, np.ones(window)/window, mode='valid')
-
     def _hatch_estimated(self, ax, plot_dates, smoothed_estimate):
         """Hatch the part of the calorie series that was estimated."""
         if not len(smoothed_estimate) or not smoothed_estimate.any():
@@ -141,13 +100,7 @@ class FoodGraphView(BaseGraphView):
         for row in self.axes:
             for ax in row:
                 ax.clear()
-                ax.set_facecolor(PALETTE['base3'])
-                ax.spines['bottom'].set_color(PALETTE['base01'])
-                ax.spines['left'].set_color(PALETTE['base01'])
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
-                ax.tick_params(colors=PALETTE['base00'], labelsize=8)
-                ax.grid(True, color=PALETTE['base2'], linestyle='--')
+                style_trend_axes(ax)
 
     def read_chart_data(self):
         return self.db.get_daily_aggregates()

@@ -284,20 +284,6 @@ class TestWhatEachChartSaysForItself:
 
         assert view.has_animation() is True
 
-    def test_the_supplement_chart_grows_tick_markers_more_than_dots(self, make_view):
-        view = make_view(SupplementGraphView)
-        axes = _StubAxes()
-        tick, dot = _StubArtist(marker='|'), _StubArtist(marker='o')
-        view.anim_nodes.extend([
-            {"artist": tick, "ax": axes, "base_size": 4},
-            {"artist": dot, "ax": axes, "base_size": 4},
-        ])
-        view.master_clock = 0.5
-
-        view.draw_animated_artists()
-
-        assert tick.markersize > dot.markersize
-
 
 class _StubArtist:
     def __init__(self, visible=False, marker='o'):

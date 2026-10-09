@@ -66,7 +66,7 @@ class TestANutrientIsMatchedByItsKey:
                               LOG_COLUMNS) is None
 
 
-class TestSaturationIsMeasuredAgainstToday:
+class TestSupplementHistoryIsChartedAgainstTheTarget:
     B12_TARGET = 500.0
 
     @pytest.fixture
@@ -85,56 +85,70 @@ class TestSaturationIsMeasuredAgainstToday:
 
     @pytest.fixture
     def rendered(self, b12_target, make_view, recording_db):
-        def _render(rows):
+        def _render(rows, window=1):
             view = make_view(SupplementGraphView)
+            view.rolling_period = window
             view.draw_chart(rows)
             return view
 
         return _render
 
-    def test_a_full_dose_today_reads_as_reached(self, rendered):
-        today = datetime.date.today().isoformat()
+    @staticmethod
+    def days_ago(count):
+        return (datetime.date.today() - datetime.timedelta(days=count)).isoformat()
 
-        view = rendered([supplement_row(today, b12_mcg=self.B12_TARGET)])
+    def test_the_history_runs_from_the_first_log_to_today_with_gaps_as_zero(self, rendered):
+        view = rendered([supplement_row(self.days_ago(10), b12_mcg=self.B12_TARGET),
+                         supplement_row(self.days_ago(0), b12_mcg=self.B12_TARGET)])
 
-        b12 = next(entry for entry in view.hover_data.values()
-                   if entry["name"].startswith("B12"))
-        assert b12["pct"] == pytest.approx(100.0)
+        (b12,) = view.hover_data.values()
+        assert b12["dates"][0] == self.days_ago(10)
+        assert b12["dates"][-1] == self.days_ago(0)
+        assert list(b12["amounts"]) == [self.B12_TARGET] + [0.0] * 9 + [self.B12_TARGET]
 
-    def test_it_is_not_diluted_by_the_days_before_it(self, rendered):
-        today = datetime.date.today().isoformat()
+    def test_a_daily_dose_holds_the_weekly_average_at_the_target(self, rendered):
+        view = rendered([supplement_row(self.days_ago(day), b12_mcg=self.B12_TARGET)
+                         for day in range(10)], window=7)
 
-        view = rendered([supplement_row(today, b12_mcg=self.B12_TARGET)])
+        (b12,) = view.hover_data.values()
+        assert len(b12["amounts"]) == 10 - 7 + 1
+        assert b12["amounts"] == pytest.approx([self.B12_TARGET] * 4)
+        assert "100%" in SupplementGraphView.hover_text(b12, 0)
 
-        b12 = next(entry for entry in view.hover_data.values()
-                   if entry["name"].startswith("B12"))
-        assert b12["avg"] == pytest.approx(self.B12_TARGET / SupplementGraphView.WINDOW_DAYS)
-        assert b12["pct"] > b12["avg"] / b12["target"] * 100.0
+    def test_a_target_of_zero_is_not_charted(self, make_view):
+        view = make_view(SupplementGraphView)
 
-    def test_nothing_today_reads_as_not_reached_however_good_the_week_was(self, rendered):
-        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        view.draw_chart([supplement_row(self.days_ago(0), b12_mcg=1000.0)])
 
-        view = rendered([supplement_row(yesterday, b12_mcg=self.B12_TARGET)])
+        assert view.hover_data == {}
+        assert view.axes == []
 
-        b12 = next(entry for entry in view.hover_data.values()
-                   if entry["name"].startswith("B12"))
-        assert b12["pct"] == pytest.approx(0.0)
-
-    def test_the_week_is_still_carried_for_the_streak(self, rendered):
-        view = rendered([])
-
-        assert all(len(entry["daily"]) == SupplementGraphView.WINDOW_DAYS
-                   for entry in view.hover_data.values())
-
-    def test_the_chart_asks_only_for_the_window_it_draws(self, make_view, recording_db, settled):
+    def test_the_chart_draws_the_whole_ledger(self, b12_target, make_view, recording_db,
+                                              settled):
+        recording_db.supplement_logs = [supplement_row(self.days_ago(90), b12_mcg=1.0)]
+        recording_db.settings["supplement_graph_period"] = "1 Day (Raw)"
         view = make_view(SupplementGraphView)
 
         view.refresh()
         settled()
 
-        expected = (datetime.date.today()
-                    - datetime.timedelta(days=SupplementGraphView.WINDOW_DAYS - 1)).isoformat()
-        assert ("supplement_logs", expected) in recording_db.since_asked
+        (b12,) = view.hover_data.values()
+        assert b12["dates"][0] == self.days_ago(90)
+
+    def test_the_default_window_is_weekly(self, make_view, settled):
+        view = make_view(SupplementGraphView)
+        settled()
+
+        assert view.rolling_period == 7
+
+    def test_the_window_follows_its_own_stored_preference(self, make_view, recording_db,
+                                                           settled):
+        recording_db.settings["supplement_graph_period"] = "1 Day (Raw)"
+
+        view = make_view(SupplementGraphView)
+        settled()
+
+        assert view.rolling_period == 1
 
 
 class TestTheCaffeineTooltipStatesTheDistanceBothWays:

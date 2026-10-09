@@ -45,8 +45,14 @@ Feature: Supplement logging
   Rule: Intake is presented against the member's own targets
 
     Scenario: Comparing intake with targets
-      Then each tracked nutrient is shown against my configured target
-      And nutrients I have not reached today are distinguishable from those I have
+      Then each tracked nutrient is plotted per day over the recorded history
+      And each point is a share of my configured target, which is drawn at 100%
+      And a day with nothing logged reads as zero rather than being skipped
+      And a nutrient whose target is zero is not plotted
+
+    Scenario: Supplement trends are smoothed weekly by default
+      Then the supplement graphs use the 7-day window until I choose another
+      And the choice is stored apart from that of the nutrient graphs
 
     Scenario: Targets are per member
       Given the other member has different targets
