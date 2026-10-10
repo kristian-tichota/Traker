@@ -26,6 +26,19 @@ def grey_of(colour, dim=1.0) -> QColor:
     level = max(0, min(255, round(luma * dim)))
     return QColor(level, level, level)
 
+
+def retarget(animation: QVariantAnimation, start: float, end: float, full_ms: int):
+    """Run animation from start to end, over full_ms scaled by the distance."""
+    animation.stop()
+    # Workaround: a stopped QVariantAnimation emits valueChanged for each new start and end value.
+    blocked = animation.blockSignals(True)
+    animation.setStartValue(float(start))
+    animation.setEndValue(float(end))
+    animation.setDuration(max(1, round(full_ms * abs(end - start))))
+    animation.blockSignals(blocked)
+    animation.start()
+
+
 SPINNER_GRACE_MS = 120
 
 SPINNER_PERIOD_MS = 900

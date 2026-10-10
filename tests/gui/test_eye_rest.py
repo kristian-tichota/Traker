@@ -9,8 +9,8 @@ from src.desktop.activities import VIDEO, BreakActivity
 from src.desktop.kwin_rules import EYE_GROUP
 from src.domain.eye_rest import (CLOSE, GAZE, LOOK, OPEN, READY, READY_MS, SQUEEZE, blink_set,
                                  length_ms, look_away)
-from src.gui.components.eye_veil import (DONE, GAZE_NOTE, REST_TITLE, VEIL_CAPTION,
-                                        routine_track)
+from src.gui.components.eye_veil import (DONE, FADE_OUT_MS, GAZE_NOTE, REST_TITLE,
+                                        VEIL_CAPTION, routine_track)
 from src.gui.views.pomodoro_view import BLINK_SET_EVENT, PomodoroView, read_spent_today
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact]
@@ -141,6 +141,15 @@ class TestALookAway:
         assert timer.eye_rest.running is False
         assert all(veil.raised is False for veil in veils)
         assert timer.eye_rest.screen_time.screen_ms == 0
+
+    def test_a_veil_fully_raised_fades_out_over_the_whole_fade(self, timer):
+        gather_screen_time(timer)
+        veil = timer.eye_rest.windows[0]
+        veil.fade.setCurrentTime(veil.fade.duration())
+
+        veil.lift()
+
+        assert veil.fade.duration() == FADE_OUT_MS
 
     def test_an_absence_as_long_as_the_timer_pause_is_a_rest(self, timer):
         timer.eye_rest.screen_time.screen_ms = timer.eye_rest.screen_time.every_ms - 1

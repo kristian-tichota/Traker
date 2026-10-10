@@ -123,7 +123,7 @@ class KeyCard(QWidget):
         for key, effect, names in self._rows:
             if inputs:
                 painter.setPen(bright)
-                painter.drawText(QRectF(left, top, inputs, row_height), LEFT,
+                painter.drawText(QRectF(left, top, inputs, row_height), RIGHT,
                                  INPUTS_JOIN.join(names))
                 painter.setPen(said)
                 painter.drawText(QRectF(left + inputs + gap, top, says, row_height), LEFT, effect)

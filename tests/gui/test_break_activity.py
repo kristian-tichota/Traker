@@ -5,7 +5,7 @@ import threading
 import pytest
 from PyQt6 import sip
 from PyQt6.QtCore import QAbstractAnimation, QEvent, QThread, Qt, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QGuiApplication, QKeyEvent
+from PyQt6.QtGui import QGuiApplication, QImage, QKeyEvent
 from PyQt6.QtNetwork import QLocalServer
 from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
@@ -2215,9 +2215,11 @@ class TestTheWallBesideAnActivity:
 
         send_key(watching, Qt.Key.Key_0)
         fading = wall._calming.state() == QAbstractAnimation.State.Running
+        lasts_ms = wall._calming.duration()
         finish(wall._calming)
 
         assert fading is True
+        assert lasts_ms == pomodoro_view.CALM_FADE_MS
         assert wall.stack.isVisibleTo(wall) is True
         assert wall.calm_face.isVisibleTo(wall) is False
 
@@ -2232,6 +2234,19 @@ class TestTheWallBesideAnActivity:
         assert wall.calm == 1.0
         assert wall.calm_face.label.text().startswith("BREAK OVER · +")
         assert font_px(wall.calm_face.label) > before
+
+    def test_the_sign_and_the_hold_on_it_are_grey_too(self, watching):
+        wall = beside_it(watching)
+        advance(watching, watching.break_ms + 1000)
+        watching._over_since_ms -= int(watching.over_ramp_secs * 1000)
+        watching._redraw_break_surfaces()
+        wall.show_hold(0.4, True)
+        QApplication.processEvents()
+
+        pixels = wall.grab().toImage().convertToFormat(QImage.Format.Format_RGB32)
+        blue, green, red = (bytes(pixels.constBits().asarray(pixels.sizeInBytes()))[channel::4]
+                            for channel in range(3))
+        assert blue == green == red
 
     def test_a_monitor_arriving_mid_activity_is_calm_at_once(self, timer):
         enter_strict_break(timer)

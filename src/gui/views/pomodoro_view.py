@@ -38,7 +38,7 @@ from src.gui.components.timeline_popup import TimelinePopupWidget
 from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin
 from src.domain.tables import CHORE
-from src.gui.animations import blend, grey_of
+from src.gui.animations import blend, grey_of, retarget
 from src.gui.workers import discard, run_in_background
 
 log = logging.getLogger(__name__)
@@ -86,6 +86,8 @@ PROGRESS_PX = 420
 CALM_FADE_MS = 1600
 CALM_GROUND = grey_of(PALETTE['base03'], 0.5)
 CALM_TIMER = grey_of(PALETTE['base01'], 0.85)
+CALM_SIGN = grey_of(OVER_SIGN)
+CALM_RING = (grey_of(PALETTE['base02']), grey_of(PALETTE['base0']), grey_of(PALETTE['base01']))
 CALM_TIMER_PX = 22
 
 WALL_NAME = "strictWall"
@@ -284,10 +286,12 @@ class HoldRing(QWidget):
 
     SIDE = 38
 
-    def __init__(self, hold_secs, parent=None):
+    def __init__(self, hold_secs, parent=None, calm=False):
         super().__init__(parent)
         self.hold_secs = float(hold_secs)
         self.fraction = 0.0
+        self.tones = CALM_RING if calm else (QColor(PALETTE['base1']), QColor(PALETTE['magenta']),
+                                             QColor(PALETTE['base01']))
         self.setFixedHeight(self.SIDE + 8)
 
     def set_hold_secs(self, secs):
@@ -304,14 +308,15 @@ class HoldRing(QWidget):
         side = self.SIDE
         box = QRect((self.width() - side) // 2, 4, side, side)
 
-        painter.setPen(QPen(QColor(PALETTE['base1']), 3))
+        track, paid, said = self.tones
+        painter.setPen(QPen(track, 3))
         painter.drawArc(box, 0, 360 * 16)
 
-        painter.setPen(QPen(QColor(PALETTE['magenta']), 3))
+        painter.setPen(QPen(paid, 3))
         painter.drawArc(box, 90 * 16, -int(360 * 16 * self.fraction))
 
         left = max(0, math.ceil(self.hold_secs * (1.0 - self.fraction)))
-        painter.setPen(QColor(PALETTE['base01']))
+        painter.setPen(said)
         painter.drawText(box, Qt.AlignmentFlag.AlignCenter, str(left))
 
 WALL_CAPTION = "Traker rest"
@@ -362,7 +367,7 @@ class StrictOverlay(QWidget):
 
         self._build_body(QVBoxLayout(self.readouts))
 
-        self.calm_ring = HoldRing(self.timer_ref.release_hold_secs)
+        self.calm_ring = HoldRing(self.timer_ref.release_hold_secs, calm=True)
         self.calm_ring.setVisible(False)
         self.calm_face = CalmFace(self.calm_ring, self)
         self.keys = self.calm_face.legend
@@ -430,14 +435,11 @@ class StrictOverlay(QWidget):
             return
         first = self._calm_target is None
         self._calm_target = target
-        self._calming.stop()
         if at_once or first:
+            self._calming.stop()
             self._apply_calm(target)
             return
-        self._calming.setStartValue(self.calm)
-        self._calming.setEndValue(target)
-        self._calming.setDuration(max(1, round(CALM_FADE_MS * abs(target - self.calm))))
-        self._calming.start()
+        retarget(self._calming, self.calm, target, CALM_FADE_MS)
 
     def _apply_calm(self, value):
         """Fade the readouts out, then the calm face in, as value rises."""
@@ -569,18 +571,20 @@ class StrictOverlay(QWidget):
                                     f" letter-spacing: {max(2, instruction // 6)}px;")
         calm_px = round(CALM_TIMER_PX + (max(28, self.height() // 22) - CALM_TIMER_PX) * strength)
         self.calm_face.label.setStyleSheet(
-            f"color: {blend(CALM_TIMER, OVER_SIGN, strength).name()}; font-size: {calm_px}px;"
+            f"color: {blend(CALM_TIMER, CALM_SIGN, strength).name()}; font-size: {calm_px}px;"
             f" font-family: 'Fira Code'; letter-spacing: 2px;")
         self.update()
 
     def paintEvent(self, event):
-        """Paint the ground, darker as it calms, and the frame once the break runs out."""
+        """Paint the ground and the frame once the break runs out, both grey as it calms."""
+        ground = blend(QColor(PALETTE['base03']), CALM_GROUND, self.calm)
         painter = QPainter(self)
-        painter.fillRect(self.rect(), blend(QColor(PALETTE['base03']), CALM_GROUND, self.calm))
+        painter.fillRect(self.rect(), ground)
         prompting, strength, _ = self._dressed
         if not prompting:
             return
-        pen = QPen(blend(QColor(PALETTE['base03']), OVER_SIGN, strength), PROMPT_BORDER_PX)
+        sign = blend(OVER_SIGN, CALM_SIGN, self.calm)
+        pen = QPen(blend(ground, sign, strength), PROMPT_BORDER_PX)
         pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
         painter.setPen(pen)
         inset = PROMPT_BORDER_PX // 2

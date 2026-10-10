@@ -16,6 +16,7 @@ from src.desktop.kwin_rules import EyeRule
 from src.domain.eye_rest import (CLOSE, GAZE, LOOK, OPEN, READY, READY_MS, SET_REPETITION,
                                  SET_REPETITIONS, SQUEEZE, ScreenTime, blink_set, length_ms,
                                  look_away, step_at)
+from src.gui.animations import retarget
 
 log = logging.getLogger(__name__)
 
@@ -180,11 +181,7 @@ class EyeVeil(QWidget):
         self.show()
 
     def _fade_to(self, target, duration_ms):
-        self.fade.stop()
-        self.fade.setStartValue(self.strength)
-        self.fade.setEndValue(float(target))
-        self.fade.setDuration(max(1, int(duration_ms * abs(target - self.strength))))
-        self.fade.start()
+        retarget(self.fade, self.strength, target, duration_ms)
 
     def _set_strength(self, value):
         self.strength = float(value)
