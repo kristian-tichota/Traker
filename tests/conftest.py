@@ -25,6 +25,7 @@ username = "member-b"
 token = "test-token-member-b"
 """, encoding="utf-8")
 os.environ["TRAKER_SERVER_CONFIG"] = str(_SANDBOX / "server.toml")
+os.environ["LIBRE_DICTUM_HUD_SOCKET"] = str(_SANDBOX / "hud.sock")
 
 import src.profile  # noqa: E402  (must follow the sys.path edit)
 

@@ -18,6 +18,14 @@ def blend(ground: QColor, accent: QColor, amount: float) -> QColor:
         round(ground.blue() * keep + accent.blue() * amount),
     )
 
+
+def grey_of(colour, dim=1.0) -> QColor:
+    """Return the neutral grey as light as colour, scaled by dim."""
+    colour = QColor(colour)
+    luma = 0.2126 * colour.red() + 0.7152 * colour.green() + 0.0722 * colour.blue()
+    level = max(0, min(255, round(luma * dim)))
+    return QColor(level, level, level)
+
 SPINNER_GRACE_MS = 120
 
 SPINNER_PERIOD_MS = 900

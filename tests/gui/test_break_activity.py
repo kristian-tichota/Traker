@@ -1,9 +1,12 @@
+import json
+import re
 import threading
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtCore import QAbstractAnimation, QEvent, Qt, QThreadPool, pyqtSignal
+from PyQt6.QtCore import QAbstractAnimation, QEvent, QThread, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
+from PyQt6.QtNetwork import QLocalServer
 from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 import src.profile as profile_module
@@ -21,6 +24,7 @@ from src.gui.views.pomodoro_view import RELEASE_KEY, PomodoroView, StrictOverlay
 from tests.anki_double import FakeAnki
 from tests.gui.conftest import advance
 from tests.gui.test_break_chores import chore
+from tests.unit.test_dictum import CATALOGUE, STATE
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact, pytest.mark.accessibility]
 
@@ -1054,7 +1058,7 @@ class TestWhatTheScreenShows:
         send_key(timer, Qt.Key.Key_Return)
 
         assert timer.media_surface.strip is not None
-        assert "REST 02:05" in timer.media_surface.strip.text()
+        assert "REST 3 MIN" in timer.media_surface.strip.text()
         assert timer.release_hint() in timer.media_surface.strip.text()
 
     def test_that_line_is_driven_by_the_engine(self, timer):
@@ -1064,7 +1068,7 @@ class TestWhatTheScreenShows:
 
         advance(timer, 1000)
 
-        assert "REST 01:00" in timer.media_surface.strip.text()
+        assert "REST 1 MIN" in timer.media_surface.strip.text()
 
     def test_and_shows_the_hold_being_paid(self, timer):
         enter_strict_break(timer)
@@ -1091,7 +1095,7 @@ class TestWhatTheScreenShows:
         advance(timer, timer.break_ms + 1000)
 
         assert timer._showing is not None
-        assert "BREAK OVER +0:00" in surface.strip.text()
+        assert "BREAK OVER ·" in surface.strip.text()
 
     def test_the_frame_is_only_on_the_walls_showing_no_file(self, timer):
         two_screens(timer)
@@ -2135,3 +2139,175 @@ class TestTheHookFollowsTheBreak:
             view.shutdown()
 
         assert with_a_hook.read_text().splitlines()[-1] == "focus"
+
+
+def beside_it(view):
+    wall, = [wall for wall in view.overlays if wall is not view._media_host]
+    return wall
+
+
+def finish(animation):
+    animation.setCurrentTime(animation.duration())
+
+
+def font_px(label) -> int:
+    return int(re.search(r"font-size: (\d+)px", label.styleSheet()).group(1))
+
+
+class TestTheWallBesideAnActivity:
+    @pytest.fixture
+    def beside(self, timer):
+        two_screens(timer)
+        enter_strict_break(timer)
+        return timer
+
+    @pytest.fixture
+    def watching(self, beside):
+        send_key(beside, Qt.Key.Key_2)
+        pane = beside.media_pane_factory.last
+        pane.at, pane.of = 1_593_000, 5_195_000
+        beside._redraw_break_surfaces()
+        finish(beside_it(beside)._calming)
+        return beside
+
+    def test_opening_one_fades_it_rather_than_cutting_to_it(self, beside):
+        send_key(beside, Qt.Key.Key_2)
+
+        wall = beside_it(beside)
+        assert wall._calming.state() == QAbstractAnimation.State.Running
+        assert wall.calm < 1
+
+    def test_once_faded_the_readouts_are_gone(self, watching):
+        wall = beside_it(watching)
+
+        assert wall.stack.isVisibleTo(wall) is False
+        assert wall.calm_face.isVisibleTo(wall) is True
+
+    def test_what_stays_is_the_time_what_shows_and_its_keys(self, watching):
+        face = beside_it(watching).calm_face
+        watching.time_left_ms = 125_000
+        watching._redraw_break_surfaces()
+
+        assert face.label.text() == "REST · 3 MIN"
+        assert face.playing.text() == "Something to watch"
+        assert face.progress.says == "26 / 87 MIN"
+        assert face.legend.hints == watching.media_surface.keys.hints
+
+    def test_the_time_changes_once_a_minute(self, watching):
+        face = beside_it(watching).calm_face
+        said = []
+        for left_ms in (125_000, 121_000, 119_000):
+            watching.time_left_ms = left_ms
+            watching._redraw_break_surfaces()
+            said.append(face.label.text())
+
+        assert said == ["REST · 3 MIN", "REST · 3 MIN", "REST · 2 MIN"]
+
+    def test_the_ground_goes_dark_and_grey(self, watching):
+        assert corner_colour(beside_it(watching)) == pomodoro_view.CALM_GROUND.name()
+
+    def test_the_wall_showing_it_is_left_alone(self, watching):
+        assert watching._media_host.calm == 0.0
+        assert watching._media_host.calm_face.isVisibleTo(watching._media_host) is False
+
+    def test_asking_for_the_wall_back_fades_the_readouts_back(self, watching):
+        wall = beside_it(watching)
+
+        send_key(watching, Qt.Key.Key_0)
+        fading = wall._calming.state() == QAbstractAnimation.State.Running
+        finish(wall._calming)
+
+        assert fading is True
+        assert wall.stack.isVisibleTo(wall) is True
+        assert wall.calm_face.isVisibleTo(wall) is False
+
+    def test_a_break_running_out_keeps_it_calm_and_grows_the_sign(self, watching):
+        wall = beside_it(watching)
+        advance(watching, watching.break_ms + 1000)
+        before = font_px(wall.calm_face.label)
+
+        watching._over_since_ms -= int(watching.over_ramp_secs * 1000)
+        watching._redraw_break_surfaces()
+
+        assert wall.calm == 1.0
+        assert wall.calm_face.label.text().startswith("BREAK OVER · +")
+        assert font_px(wall.calm_face.label) > before
+
+    def test_a_monitor_arriving_mid_activity_is_calm_at_once(self, timer):
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_2)
+        two_screens(timer)
+
+        timer._rewall_for_the_outputs()
+
+        assert beside_it(timer).calm == 1.0
+
+
+def until(condition, ms=2000):
+    for _ in range(ms // 10):
+        QApplication.processEvents()
+        if condition():
+            return True
+        QThread.msleep(10)
+    return condition()
+
+
+class TestTheInputsThatSendEachKey:
+    @pytest.fixture
+    def hud(self, qapp, tmp_path):
+        server = QLocalServer()
+        assert server.listen(str(tmp_path / "hud.sock"))
+        frames = [CATALOGUE, STATE]
+        held = []
+
+        def welcome():
+            client = server.nextPendingConnection()
+            held.append(client)
+            for frame in frames:
+                client.write((json.dumps({"protocol": 10, **frame}) + "\n").encode())
+
+        server.newConnection.connect(welcome)
+        server.frames, server.held = frames, held
+        yield server
+        server.close()
+
+    @pytest.fixture
+    def reviewing(self, deck_timer, hud):
+        deck_timer.dictum.path = hud.fullServerName()
+        two_screens(deck_timer)
+        enter_strict_break(deck_timer)
+        send_key(deck_timer, Qt.Key.Key_3)
+        return deck_timer
+
+    def test_every_card_names_who_sends_each_key(self, reviewing):
+        def named():
+            return dict(zip(beside_it(reviewing).keys.hints, beside_it(reviewing).keys.inputs))
+
+        assert until(lambda: named().get(("SPACE", "show, then good")))
+        assert named()[("SPACE", "show, then good")] == (
+            "right pedal", "right open", "brow raise", "“send space”")
+        assert reviewing.media_surface.keys.inputs == beside_it(reviewing).keys.inputs
+
+    def test_a_libre_dictum_that_goes_names_nobody(self, reviewing, hud):
+        assert until(lambda: any(beside_it(reviewing).keys.inputs))
+
+        hud.held[0].disconnectFromServer()
+
+        assert until(lambda: not any(beside_it(reviewing).keys.inputs))
+
+    def test_another_protocol_names_nobody(self, deck_timer, hud):
+        hud.frames[:] = [{**frame, "protocol": 9} for frame in hud.frames]
+        deck_timer.dictum.path = hud.fullServerName()
+        enter_strict_break(deck_timer)
+        send_key(deck_timer, Qt.Key.Key_3)
+
+        assert until(lambda: deck_timer.dictum._refused)
+
+        assert not any(deck_timer.media_surface.keys.inputs)
+
+    def test_the_break_ending_lets_go_of_the_socket(self, reviewing, hud):
+        assert until(lambda: hud.held)
+
+        reviewing._clear_overlays()
+
+        assert reviewing.dictum.inputs == {}

@@ -15,7 +15,7 @@ Laid out by boundary, not by source tree. `tests/unit/` is pure logic and talks 
 
 ## Nothing here touches your data
 
-Five redirects happen at conftest *import* time, because each target is created as an import side effect or read the moment a widget is built: `TRAKER_SERVER_CONFIG` — set first, so the two members are the suite's own and never the machine's — then `src.profile.PROFILE_PATH`, `server.config.DB_PATH`, `src.desktop.rest_queue.DEFAULT_PATH`, and `src.desktop.kwin_rules.DEFAULT_PATH` with `kde_config.KWINRC_PATH` beside it — the last two are the member's real window rules, which a break *writes*. Per-test isolation is layered on top by `profile_path` and `server_db`.
+Six redirects happen at conftest *import* time, because each target is created as an import side effect or read the moment a widget is built: `TRAKER_SERVER_CONFIG` — set first, so the two members are the suite's own and never the machine's — and `LIBRE_DICTUM_HUD_SOCKET`, so a break never reads a running libre-dictum, then `src.profile.PROFILE_PATH`, `server.config.DB_PATH`, `src.desktop.rest_queue.DEFAULT_PATH`, and `src.desktop.kwin_rules.DEFAULT_PATH` with `kde_config.KWINRC_PATH` beside it — the last two are the member's real window rules, which a break *writes*. Per-test isolation is layered on top by `profile_path` and `server_db`.
 
 ## The fixtures worth knowing
 

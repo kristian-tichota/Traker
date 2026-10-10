@@ -31,6 +31,30 @@ class TestWhatItSays:
         card.grab()
 
 
+class TestTheInputsThatSendAKey:
+    def test_a_row_may_name_them(self, qapp):
+        card = KeyCard([("SPACE", "pause", ("right pedal", "brow raise")), ("0", "back")])
+
+        assert card.hints == (("SPACE", "pause"), ("0", "back"))
+        assert card.inputs == (("right pedal", "brow raise"), ())
+
+    def test_naming_them_widens_the_card(self, card):
+        named = KeyCard([(key, says, ("right pedal",)) for key, says in ROWS])
+
+        assert named.sizeHint().width() > card.sizeHint().width()
+
+    def test_a_larger_card_is_larger_throughout(self, card):
+        large = KeyCard(ROWS, scale=2.0)
+
+        assert large.sizeHint().height() == pytest.approx(2 * card.sizeHint().height(), abs=2)
+
+    def test_it_draws_them(self, qapp):
+        card = KeyCard([("SPACE", "pause", ("right pedal",))], calm=True)
+        card.resize(card.sizeHint())
+
+        assert card.grab().size() == card.sizeHint()
+
+
 class TestWhereItSits:
     def test_it_sizes_itself_to_its_rows(self, card):
         wide = KeyCard(ROWS + [("1-9", "a much longer thing to do")])

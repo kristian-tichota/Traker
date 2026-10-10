@@ -14,8 +14,8 @@ from src.desktop import anki, rest_positions, rest_queue
 from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, contents,
                                     kind_of, library_for, readout_of)
 from src.domain.hints import LETTERS, labels
-from src.domain.media import (UNKNOWN, Place, as_elapsed, finished, how_far, next_subtitle,
-                              subtitle_shown, subtitles)
+from src.domain.media import (UNKNOWN, Place, as_left, as_past, finished, how_far,
+                              next_subtitle, subtitle_shown, subtitles)
 from src.gui.components.book_pane import BookPane
 from src.gui.components.break_pane import BreakPane, WebPane
 from src.gui.components.key_card import KeyCard
@@ -1154,15 +1154,12 @@ class MediaSurface(QWidget):
         way_on = (" · ".join(f"{key} {says.upper()}" for key, says in self.keys.hints)
                   if self._under_a_page() else self.timer_ref.wall_hint())
         if self.timer_ref.is_absent():
-            self.strip.setText(
-                f"AWAY +{as_elapsed(self.timer_ref.absent_for_ms())} · {way_on}")
-            return
-        if self.timer_ref.waiting_for_work_start:
-            self.strip.setText(
-                f"BREAK OVER +{as_elapsed(self.timer_ref.over_by_ms())} · {way_on}")
-            return
-        mins, secs = divmod(int(self.timer_ref.time_left_ms // 1000), 60)
-        self.strip.setText(f"REST {mins:02d}:{secs:02d} · {way_on}")
+            said = ("AWAY", as_past(self.timer_ref.absent_for_ms()))
+        elif self.timer_ref.waiting_for_work_start:
+            said = ("BREAK OVER", as_past(self.timer_ref.over_by_ms()))
+        else:
+            said = ("REST", as_left(self.timer_ref.time_left_ms))
+        self.strip.setText(" ".join(part for part in said if part) + f" · {way_on}")
 
     def show_hold(self, fraction, visible):
         """Show how much of the exit hold has been paid."""

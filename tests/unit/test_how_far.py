@@ -2,8 +2,8 @@ import pytest
 
 from src.desktop.activities import BOOK, DECK, DOCUMENT, VIDEO, readout_of
 from src.domain.media import (CARDS, OFF, PAGES, SHARE, Place, TIME, UNKNOWN, as_elapsed,
-                              away_ms, finished, fraction, how_far, next_subtitle,
-                              opens_in, subtitle_shown)
+                              as_left, as_past, away_ms, finished, fraction, how_far,
+                              next_subtitle, opens_in, subtitle_shown)
 
 pytestmark = pytest.mark.exact
 
@@ -21,6 +21,30 @@ class TestAPositionAsTheMemberReadsIt:
 
     def test_and_a_second_is_not_rounded_up_to_the_next_one(self):
         assert as_elapsed(59_999) == "0:59"
+
+
+class TestTheTimeLeftBesideAnActivity:
+    def test_whole_minutes_are_rounded_up(self):
+        assert as_left(125_000) == "3 MIN"
+        assert as_left(60_000) == "1 MIN"
+
+    def test_the_last_minute_counts_in_seconds(self):
+        assert as_left(59_000) == "0:59"
+        assert as_left(45_000) == "0:45"
+        assert as_left(0) == "0:00"
+
+    def test_a_count_up_says_nothing_before_its_first_minute(self):
+        assert as_past(59_999) == ""
+        assert as_past(185_000) == "+3 MIN"
+
+    def test_a_video_s_place_is_in_whole_minutes(self):
+        place = Place(1_593_000, 5_195_000)
+
+        assert how_far(place, coarse=True) == "26 / 87 MIN"
+        assert fraction(place, coarse=True) == pytest.approx(1_560_000 / 5_195_000)
+
+    def test_a_page_reads_the_same_either_way(self):
+        assert how_far(Place(41, 310), PAGES, coarse=True) == "42 / 310"
 
 
 class TestHowFarIntoAVideo:

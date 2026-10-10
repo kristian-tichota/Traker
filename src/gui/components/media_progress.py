@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QWidget
 
 from src.config import PALETTE
 from src.domain import media
+from src.gui.animations import grey_of
 
 BAR_PX = 3
 TRACK, LIGHT_TRACK = 'base01', 'base2'
@@ -18,12 +19,16 @@ HEIGHT = ROW_HEIGHT + GAP + BAR_PX
 
 MARGIN = 12
 
+CALM_TRACK, CALM_FILLED, CALM_TEXT = (grey_of(PALETTE['base02']), grey_of(PALETTE['base01']),
+                                      grey_of(PALETTE['base01']))
+
 
 class MediaProgress(QWidget):
-    """One line and one readout, or nothing at all."""
+    """One line and one readout, or nothing, grey and in whole minutes where calm."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, calm=False):
         super().__init__(parent)
+        self.calm = bool(calm)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFixedHeight(HEIGHT)
@@ -42,8 +47,8 @@ class MediaProgress(QWidget):
 
     def show_place(self, place, unit=media.TIME):
         """Show where place is."""
-        says = media.how_far(place, unit)
-        fraction = media.fraction(place, unit)
+        says = media.how_far(place, unit, coarse=self.calm)
+        fraction = media.fraction(place, unit, coarse=self.calm)
         if says == self.says and self._filled(fraction) == self._filled(self.fraction):
             self.fraction = fraction
             return
@@ -59,16 +64,19 @@ class MediaProgress(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
 
         bar = QRectF(0, self.height() - BAR_PX, self.width(), BAR_PX)
-        painter.setBrush(QColor(PALETTE[LIGHT_TRACK if self.light else TRACK]))
+        painter.setBrush(self._tone(LIGHT_TRACK if self.light else TRACK, CALM_TRACK))
         painter.drawRect(bar)
         filled = self._filled(self.fraction)
         if filled:
-            painter.setBrush(QColor(PALETTE[FILLED]))
+            painter.setBrush(self._tone(FILLED, CALM_FILLED))
             painter.drawRect(QRectF(bar.left(), bar.top(), filled, BAR_PX))
 
         row = QRectF(0, self.height() - BAR_PX - GAP - ROW_HEIGHT,
                      self.width() - MARGIN, ROW_HEIGHT)
         corner = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         painter.setFont(self._font)
-        painter.setPen(QColor(PALETTE[LIGHT_TEXT if self.light else TEXT]))
+        painter.setPen(self._tone(LIGHT_TEXT if self.light else TEXT, CALM_TEXT))
         painter.drawText(row, corner, self.says)
+
+    def _tone(self, name, calm) -> QColor:
+        return QColor(calm) if self.calm else QColor(PALETTE[name])

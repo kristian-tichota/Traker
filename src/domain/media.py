@@ -1,3 +1,4 @@
+import math
 from typing import NamedTuple
 
 TIME, PAGES, CARDS, SHARE = "time", "pages", "cards", "share"
@@ -42,8 +43,22 @@ def as_elapsed(ms) -> str:
     return f"{mins}:{secs:02d}"
 
 
-def how_far(place, unit=TIME) -> str:
-    """Format "26:33 / 1:26:35", "42 / 310", "12 / 49" or "37%", or UNKNOWN."""
+def as_left(ms) -> str:
+    """Format a countdown in whole minutes rounded up, its last minute in seconds."""
+    secs = math.ceil(max(0, int(ms or 0)) / 1000)
+    if secs >= 60:
+        return f"{math.ceil(secs / 60)} MIN"
+    return f"0:{secs:02d}"
+
+
+def as_past(ms) -> str:
+    """Format a count up in whole minutes, "" before the first one."""
+    mins = max(0, int(ms or 0)) // 60_000
+    return f"+{mins} MIN" if mins else ""
+
+
+def how_far(place, unit=TIME, coarse=False) -> str:
+    """Format "26:33 / 1:26:35", "26 / 87 MIN", "42 / 310", "12 / 49" or "37%", or UNKNOWN."""
     at, of = _bounded(place, unit)
     if of <= 0:
         return UNKNOWN
@@ -51,6 +66,8 @@ def how_far(place, unit=TIME) -> str:
         return f"{at * 100 // of}%"
     if unit in (PAGES, CARDS):
         return f"{at} / {of}"
+    if coarse:
+        return f"{at // 60_000} / {math.ceil(of / 60_000)} MIN"
     return f"{as_elapsed(at)} / {as_elapsed(of)}"
 
 
@@ -62,9 +79,11 @@ def finished(place, unit=TIME) -> bool:
     return of - at <= (END_SLACK_MS if unit == TIME else 0)
 
 
-def fraction(place, unit=TIME) -> float:
+def fraction(place, unit=TIME, coarse=False) -> float:
     """Return how much is behind the member, between nothing and all of it."""
     at, of = _bounded(place, unit)
+    if coarse and unit == TIME:
+        at -= at % 60_000
     return at / of if of > 0 else 0.0
 
 

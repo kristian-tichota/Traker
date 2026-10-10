@@ -52,12 +52,13 @@ every deck first. Anki MUST be running, its window MAY stay minimized, and its t
 A `url` opens as a web page that takes every key except `Esc` and `Ctrl+0`, which puts the wall back.
 It stays loaded until the walls go, and Traker writes none of its storage to disk.
 
-## State hook
+## Assistive Input Integration
 
 `[hooks] state` is a shell command run each time what the break shows changes, with `{state}` replaced
-by `focus`, `break`, `list` (of decks or of a folder), `video`, `document`, `book`, `deck` or `page`.
-Runs go one at a time off the interface thread; a burst of changes is one run of its last state, and
-quitting tells `focus`.
+by `focus`, `break`, `list`, `video`, `document`, `book`, `deck` or `page`. While an activity is open,
+every other wall fades to a grey face with the time left by the minute, what is showing and its keys.
+Each key names the libre-dictum inputs that send it, read from that program's display socket at
+`LIBRE_DICTUM_HUD_SOCKET` or `$XDG_RUNTIME_DIR/libre-dictum/hud.sock`; another protocol names none.
 
 ## Session verification
 

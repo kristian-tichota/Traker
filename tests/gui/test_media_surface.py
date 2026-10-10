@@ -1119,7 +1119,7 @@ class TestTheSurfaceAroundThem:
         surface = MediaSurface(timer_double, pane_factory=Recorder,
                                only_screen=True)
 
-        assert "REST 02:05" in surface.strip.text()
+        assert "REST 3 MIN" in surface.strip.text()
         assert "HOLD ESC" in surface.strip.text()
 
     def test_that_line_says_when_the_break_has_run_out(self, qapp, activity,
@@ -1129,7 +1129,7 @@ class TestTheSurfaceAroundThem:
         surface = MediaSurface(timer_double, pane_factory=Recorder,
                                only_screen=True)
 
-        assert "BREAK OVER +1:23" in surface.strip.text()
+        assert "BREAK OVER +1 MIN" in surface.strip.text()
         assert "PRESS ESC TO START FOCUS" in surface.strip.text()
 
     def test_and_how_much_of_the_exit_has_been_paid(self, qapp, activity,

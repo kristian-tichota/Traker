@@ -842,8 +842,37 @@ Feature: Focus timer
 
     Scenario: With something showing on the screen it took
       Given a break is showing me a video or a document
-      Then the screens it still covers go on showing what is coming
-      And the wall behind what is showing has it too, for when I ask for it back
+      Then the wall behind what is showing keeps it, for when I ask for it back
+
+  Rule: The walls beside an activity keep only what it needs
+
+    @accessibility
+    Scenario: An activity opens
+      Given a strict break covers more than one screen
+      When I open an activity, a list included
+      Then every other wall fades the readouts out and then the calm face in, over 1.6 s
+      And the calm face keeps the time left, what is showing with how far into it I am, and its keys
+      And chores, the plan and the offers go, the ground darkens and every colour turns grey
+      And putting the wall back fades the readouts in the same way
+
+    @exact
+    Scenario: The time left changes once a minute
+      Then 2:05 left reads "REST · 3 MIN" and 0:45 left reads "REST · 0:45"
+      And a file's time reads in whole minutes
+      And with one screen, the line under what is showing counts the same way
+
+    Scenario: The break runs out
+      When the break reaches zero with an activity open
+      Then the walls stay calm and "BREAK OVER" grows as on a wall showing nothing
+
+    @accessibility
+    Scenario: Each key names the inputs that send it
+      Given libre-dictum is running
+      Then each row leads with the pedals, their stand-in gestures, the other gestures and up to two phrases that send its key, in the modes those layers are in now
+      And a pair such as "← →" splits into one row per key wherever either key has an input
+      And a key that must be held names only the inputs that hold it
+      And a sleeping layer names nothing, and a libre-dictum that stops or speaks another protocol names nothing at all
+      And the screens-off key is named where it works
 
   Rule: A strict break is announced before it lands
 

@@ -3,15 +3,17 @@ import logging
 import math
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QStackedWidget,
-                             QApplication)
+                             QApplication, QGraphicsOpacityEffect)
 from PyQt6.QtCore import (Qt, QTimer, pyqtProperty, QPropertyAnimation, QDateTime,
-                          QEvent, QRect, QThreadPool, pyqtSignal)
+                          QEvent, QRect, QThreadPool, pyqtSignal, QVariantAnimation,
+                          QEasingCurve)
 from PyQt6.QtGui import (QPainter, QColor, QPen, QPixmap, QIcon, QPainterPath,
                          QKeySequence)
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 
 from src.config import PALETTE
 from src.desktop import activities as break_activities
+from src.desktop import dictum
 from src.desktop import notify as notify_service
 from src.desktop import rest_positions
 from src.desktop import rest_queue
@@ -27,16 +29,16 @@ from src.domain.hints import LETTERS, letters_of
 from src.profile import (DEFAULT_BLINK_SETS_PER_DAY, DEFAULT_EYE_REST_MINS,
                          DEFAULT_GAZE_SECS, DEFAULT_IDLE_PAUSE_SECS,
                          DEFAULT_STOP_HOLD_SECS, UserProfile, get_qt_key)
+from src.gui.components.calm_face import CalmFace
 from src.gui.components.chore_panel import KEYS as CHORE_KEYS, ChorePanel
 from src.gui.components.eye_veil import EyeRest, EyeVeil
-from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
 from src.gui.components.media_surface import MediaSurface
 from src.gui.components.timeline_popup import TimelinePopupWidget
 from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin
 from src.domain.tables import CHORE
-from src.gui.animations import blend
+from src.gui.animations import blend, grey_of
 from src.gui.workers import discard, run_in_background
 
 log = logging.getLogger(__name__)
@@ -80,6 +82,11 @@ OVER_SIGN = blend(QColor(PALETTE['base03']), QColor(PALETTE['blue']), 0.75)
 
 PLAYING_TITLE = "NOW PLAYING"
 PROGRESS_PX = 420
+
+CALM_FADE_MS = 1600
+CALM_GROUND = grey_of(PALETTE['base03'], 0.5)
+CALM_TIMER = grey_of(PALETTE['base01'], 0.85)
+CALM_TIMER_PX = 22
 
 WALL_NAME = "strictWall"
 
@@ -335,12 +342,11 @@ class StrictOverlay(QWidget):
         self.setWindowFlags(self.FLAGS)
         self.setWindowTitle(wall_caption(screen))
         self.setObjectName(WALL_NAME)
-        self.setStyleSheet(
-            f"#{WALL_NAME} {{ background-color: {PALETTE['base03']}; }}")
-
-        self.keys = KeyCard(parent=self)
-        self.keys.setVisible(False)
-        self.veil = EyeVeil(self)
+        self.calm = 0.0
+        self._calm_target = None
+        self._calming = QVariantAnimation(self)
+        self._calming.setEasingCurve(QEasingCurve.Type.InOutSine)
+        self._calming.valueChanged.connect(self._apply_calm)
 
         # Workaround: Qt rebuilds a mapped window when a GL child first reaches it, so one comes first.
         self.texture_page = QOpenGLWidget(self)
@@ -355,6 +361,19 @@ class StrictOverlay(QWidget):
         self.media = None
 
         self._build_body(QVBoxLayout(self.readouts))
+
+        self.calm_ring = HoldRing(self.timer_ref.release_hold_secs)
+        self.calm_ring.setVisible(False)
+        self.calm_face = CalmFace(self.calm_ring, self)
+        self.keys = self.calm_face.legend
+        self._calm_shown = QGraphicsOpacityEffect(self.calm_face)
+        self.calm_face.setGraphicsEffect(self._calm_shown)
+        self.calm_face.setVisible(False)
+        self._full_shown = QGraphicsOpacityEffect(self.readouts)
+        self._full_shown.setEnabled(False)
+        self.readouts.setGraphicsEffect(self._full_shown)
+        self.veil = EyeVeil(self)
+
         self.setGeometry(screen.geometry())
         self.update_display()
 
@@ -403,7 +422,32 @@ class StrictOverlay(QWidget):
         """Name the keys that drive what is showing, or none of them."""
         self.keys.set_hints(hints)
         self.keys.setVisible(bool(hints))
-        self._stack_the_overlays()
+
+    def set_calm(self, calm, at_once=False):
+        """Fade the readouts into the time left, what is showing and its keys, or back."""
+        target = 1.0 if calm else 0.0
+        if target == self._calm_target:
+            return
+        first = self._calm_target is None
+        self._calm_target = target
+        self._calming.stop()
+        if at_once or first:
+            self._apply_calm(target)
+            return
+        self._calming.setStartValue(self.calm)
+        self._calming.setEndValue(target)
+        self._calming.setDuration(max(1, round(CALM_FADE_MS * abs(target - self.calm))))
+        self._calming.start()
+
+    def _apply_calm(self, value):
+        """Fade the readouts out, then the calm face in, as value rises."""
+        self.calm = float(value)
+        self.calm_face.setVisible(self.calm > 0)
+        self._calm_shown.setOpacity(max(0.0, 2 * self.calm - 1))
+        self._full_shown.setEnabled(self.calm > 0)
+        self._full_shown.setOpacity(max(0.0, 1 - 2 * self.calm))
+        self.stack.setVisible(self.calm < 0.5)
+        self.update()
 
     def resizeEvent(self, event):
         """Keep the overlays in place and the sign at the screen's scale."""
@@ -412,9 +456,9 @@ class StrictOverlay(QWidget):
         self._dress_for_the_state()
 
     def _stack_the_overlays(self):
-        """Place the card in its corner and the veil over everything, the card included."""
-        self.keys.place_top_right(self.rect())
-        self.keys.raise_()
+        """Lay the calm face over the readouts and the veil over everything."""
+        self.calm_face.setGeometry(self.rect())
+        self.calm_face.raise_()
         self.veil.setGeometry(self.rect())
         self.veil.raise_()
 
@@ -469,6 +513,7 @@ class StrictOverlay(QWidget):
 
     def set_playing(self, playing):
         """Name what is on the screen beside this one, and where it has reached."""
+        self.calm_face.set_playing(playing)
         self.progress.setVisible(playing is not None)
         if playing is None:
             self._playing_name = None
@@ -481,16 +526,22 @@ class StrictOverlay(QWidget):
         self.progress.show_place(place, unit)
 
     def update_display(self):
-        """Update the countdown and the way on, both on every tick."""
-        if self.timer_ref.is_absent():
-            self.label.setText(f"AWAY\n+{media.as_elapsed(self.timer_ref.absent_for_ms())}")
-        elif self.timer_ref.waiting_for_work_start:
-            self.label.setText(
-                f"BREAK OVER\n+{media.as_elapsed(self.timer_ref.over_by_ms())}")
+        """Update the countdown and the way on, both on every tick, the calm face by minute."""
+        timer = self.timer_ref
+        if timer.is_absent():
+            self.label.setText(f"AWAY\n+{media.as_elapsed(timer.absent_for_ms())}")
+            calm = ("AWAY", media.as_past(timer.absent_for_ms()))
+        elif timer.waiting_for_work_start:
+            self.label.setText(f"BREAK OVER\n+{media.as_elapsed(timer.over_by_ms())}")
+            calm = ("BREAK OVER", media.as_past(timer.over_by_ms()))
         else:
-            mins, secs = divmod(int(self.timer_ref.time_left_ms // 1000), 60)
+            mins, secs = divmod(int(timer.time_left_ms // 1000), 60)
             self.label.setText(f"REST INTERVAL\n{mins:02d}:{secs:02d}")
-        self.lbl_hint.setText(self.timer_ref.wall_hint())
+            calm = ("REST", media.as_left(timer.time_left_ms))
+        said = " · ".join(part for part in calm if part)
+        if self.calm_face.label.text() != said:
+            self.calm_face.label.setText(said)
+        self.lbl_hint.setText(timer.wall_hint())
         self._dress_for_the_state()
 
     def _dress_for_the_state(self):
@@ -516,15 +567,19 @@ class StrictOverlay(QWidget):
         self.lbl_hint.setStyleSheet(f"color: {hint}; font-size: {instruction}px;"
                                     f" font-family: 'Fira Code';"
                                     f" letter-spacing: {max(2, instruction // 6)}px;")
+        calm_px = round(CALM_TIMER_PX + (max(28, self.height() // 22) - CALM_TIMER_PX) * strength)
+        self.calm_face.label.setStyleSheet(
+            f"color: {blend(CALM_TIMER, OVER_SIGN, strength).name()}; font-size: {calm_px}px;"
+            f" font-family: 'Fira Code'; letter-spacing: 2px;")
         self.update()
 
     def paintEvent(self, event):
-        """Paint the frame around a wall whose break has run out."""
-        super().paintEvent(event)
+        """Paint the ground, darker as it calms, and the frame once the break runs out."""
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), blend(QColor(PALETTE['base03']), CALM_GROUND, self.calm))
         prompting, strength, _ = self._dressed
         if not prompting:
             return
-        painter = QPainter(self)
         pen = QPen(blend(QColor(PALETTE['base03']), OVER_SIGN, strength), PROMPT_BORDER_PX)
         pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
         painter.setPen(pen)
@@ -532,8 +587,9 @@ class StrictOverlay(QWidget):
         painter.drawRect(self.rect().adjusted(inset, inset, -inset, -inset))
 
     def show_hold(self, fraction, visible):
-        self.hold_ring.set_fraction(fraction)
-        self.hold_ring.setVisible(visible)
+        for ring in (self.hold_ring, self.calm_ring):
+            ring.set_fraction(fraction)
+            ring.setVisible(visible)
 
     def changeEvent(self, event):
         """Return to the front a moment after something else takes the focus."""
@@ -855,6 +911,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.media_pane_factory = None
         self.hook = StateHook(self.profile.get_metric("hooks", "state", ""))
         self._hook_pending = False
+        self.dictum = dictum.DictumListener(parent=self)
+        self.dictum.changed.connect(self._say_which_keys_drive_it)
 
         self.kwin_pin = None
         if self.profile.get_metric("strict_break", "follow_across_desktops", True):
@@ -1644,6 +1702,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             hints.append(zero)
         if len(self._offers) > 1 and kind != break_activities.PAGE:
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
+        if self.screen_power.available and kind != break_activities.PAGE:
+            hints.append((self._screens_off_name, "screens off"))
         if self.prompts_for_focus():
             hints.append((RELEASE_KEY_NAME,
                           "resume focus" if self.is_absent() else "start focus"))
@@ -1753,6 +1813,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             surface.update_display()
         for wall in self.overlays:
             wall.set_playing(playing)
+            wall.set_calm(self._showing is not None and wall is not self._media_host)
         if self.media_surface is not None:
             self.media_surface.show_progress(playing[1:] if playing else None)
         self._say_when_the_offers_open()
@@ -2059,7 +2120,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Name the keys that drive what is showing, on every surface showing it."""
         if self._showing is None:
             return
-        hints = self.media_key_hints(self._showing.kind)
+        hints = dictum.legend(self.media_key_hints(self._showing.kind), self.dictum.inputs)
         if self.media_surface is not None:
             self.media_surface.set_keys(hints)
         for wall in self.overlays:
@@ -2361,6 +2422,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._apply_exit_controls()
         self._read_upcoming()
         self._read_chores()
+        self.dictum.start()
 
     def _stand_down_enforcement(self):
         """Stop enforcing, with the walls still up, still in front and lit."""
@@ -2405,6 +2467,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._filtering_keys = False
 
         self._stop_watching_the_outputs()
+        self.dictum.stop()
 
         if self.do_not_disturb is not None:
             self.do_not_disturb.release()
