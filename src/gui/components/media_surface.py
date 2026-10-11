@@ -949,7 +949,7 @@ class MediaSurface(QWidget):
         self.update_display()
 
     def _under_a_page(self) -> bool:
-        """Report whether a web page or a terminal fills the surface, leaving the keys to the strip."""
+        """Report whether a page or a terminal fills the surface, keys left to the strip."""
         if self.activity is None:
             return False
         return self.activity.kind == PAGE or (self.activity.kind == TERMINAL

@@ -27,7 +27,8 @@ class TestTheListing:
 
 class TestOpening:
     def test_a_named_session_is_attached(self):
-        assert sessions.opening("desk --x", "/p/a b", "s") == ["desk", "--x", "--open", "/p/a b", "s"]
+        assert sessions.opening("desk --x", "/p/a b", "s") == [
+            "desk", "--x", "--open", "/p/a b", "s"]
 
     def test_no_session_asks_for_a_new_chat(self):
         assert sessions.opening("desk", "/p/a") == ["desk", "--open", "/p/a"]

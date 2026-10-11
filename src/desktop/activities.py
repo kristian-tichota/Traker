@@ -26,7 +26,7 @@ SHELVED = (".epub", ".pdf", ".mkv", ".mp4", ".webm", ".avi", ".mov", ".m4v", ".w
 
 
 class BreakActivity(NamedTuple):
-    """One thing a break may show: a file, a deck or ANY_DECK, a web page, sessions or a shelf."""
+    """One thing a break may show: a file, a deck, a page, sessions or a shelf."""
 
     name: str
     path: str

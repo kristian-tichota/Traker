@@ -148,7 +148,7 @@ class Pty(QObject):
 
 
 class Bridge(QObject):
-    """What the page's terminal calls: its size once laid out, what is typed, and each resize."""
+    """What the page's terminal calls: its first size, what is typed, and each resize."""
 
     output = pyqtSignal(str)
     laid_out = pyqtSignal(int, int)
@@ -247,7 +247,7 @@ class TerminalPane(WebPane, MarkedList):
             self._mark(self.marked + int(direction) * PAGE_ROWS)
 
     def back(self) -> bool:
-        """Leave a session for its project, or a project for the projects, reporting whether it did."""
+        """Leave a session or a project for the list above, reporting whether it did."""
         if self.chooser is None:
             return False
         if not self.choosing:

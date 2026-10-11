@@ -1964,7 +1964,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         return super().eventFilter(watched, event)
 
     def _page_takes_keys(self) -> bool:
-        """Report whether a web page or a terminal shows, which every key reaches but the break's own."""
+        """Report whether a page or a terminal shows, taking every key but the break's."""
         if self._showing is None:
             return False
         if self._showing.kind == break_activities.TERMINAL:

@@ -49,7 +49,7 @@ def listing(command) -> list:
 
 
 def opening(command, path, session="") -> list:
-    """Return the argv that runs session of the project at path, or a new chat without one."""
+    """Return the argv running session at path, or a new chat without one."""
     return [*shlex.split(command), "--open", str(path), *([session] if session else [])]
 
 
