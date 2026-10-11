@@ -362,7 +362,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Shut the client down, unless a strict break is holding the screens."""
         timer = self.views.get("pomodoro")
-        if timer is not None and timer.holds_the_screens():
+        if timer is not None and timer.holds_the_screens() and not timer.restarting:
             log.info("Refusing to quit: a strict break is holding the screens.")
             event.ignore()
             return

@@ -1007,6 +1007,23 @@ Feature: Focus timer
     Scenario: A hook that fails costs one warning
       Given the command fails every time
       Then the log warns once, however often it fails
+      And each run is retried for about a minute while its state is still the latest
+
+    Scenario: A follower that comes back hears the state again
+      When libre-dictum's display socket returns during a break
+      Then the command runs again with what the break shows
+
+  Rule: A restart from a wall keeps the break
+
+    Scenario: Restarting to load new code
+      Given walls stand for a break, an absence or a break that is over
+      When I press CTRL+SHIFT+F5 on a wall
+      Then Traker runs again and raises the walls with the clock where it would have been
+      And what was showing reopens, and an attached session is reattached
+
+    Scenario: A saved break that is too old
+      When Traker starts more than two minutes after the walls were saved
+      Then it ignores them and starts without walls
 
   Rule: Shutdown is orderly
 

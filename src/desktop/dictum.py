@@ -138,6 +138,7 @@ class DictumListener(QObject):
     """libre-dictum's live bindings, read off its display socket while started."""
 
     changed = pyqtSignal()
+    returned = pyqtSignal()
 
     def __init__(self, path=None, parent=None):
         super().__init__(parent)
@@ -147,7 +148,9 @@ class DictumListener(QObject):
         self._state = None
         self._listening = False
         self._refused = False
+        self._returning = False
         self._socket = QLocalSocket(self)
+        self._socket.connected.connect(self._connected)
         self._socket.readyRead.connect(self._read)
         self._socket.disconnected.connect(self._lost)
         self._socket.errorOccurred.connect(self._lost)
@@ -159,6 +162,7 @@ class DictumListener(QObject):
     def start(self):
         """Read the bindings until stopped, connecting again whenever the socket goes."""
         self._listening = True
+        self._returning = False
         self._connect()
 
     def stop(self):
@@ -174,9 +178,16 @@ class DictumListener(QObject):
         if self._listening and idle:
             self._socket.connectToServer(self.path)
 
+    def _connected(self):
+        """Say libre-dictum is back where the socket had gone or never answered."""
+        if self._returning:
+            self._returning = False
+            self.returned.emit()
+
     def _lost(self, *_):
         if not self._listening:
             return
+        self._returning = True
         self._catalogue = self._state = None
         self._settle()
         self._retry.start()

@@ -1,5 +1,17 @@
 from PyQt6.QtCore import QTimer
 
+_restart = False
+
+
+def request_restart() -> None:
+    """Have the application run itself again once its event loop ends."""
+    global _restart
+    _restart = True
+
+
+def restart_requested() -> bool:
+    return _restart
+
 
 def stop_timers(widget) -> None:
     """Stop every QTimer parented anywhere under widget."""

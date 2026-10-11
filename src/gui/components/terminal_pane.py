@@ -187,6 +187,7 @@ class TerminalPane(WebPane, MarkedList):
         self._spawn = spawn
         self._argv = None
         self._session = ""
+        self._resuming = None
         self._generation = 0
         if self.view is None:
             return
@@ -246,6 +247,18 @@ class TerminalPane(WebPane, MarkedList):
         self._list()
         return True
 
+    def attached(self):
+        """Return (project, session) of the session shown, or None while the list shows."""
+        if self.choosing or self.project is None:
+            return None
+        return self.project, self._session
+
+    def reattach(self, project, session=""):
+        """Attach session of project once listed, the project's latest where it is unnamed."""
+        self._resuming = (str(project), str(session or ""))
+        if not self.busy and self.projects:
+            self._resume()
+
     def escape(self):
         """Send one Escape to the session shown."""
         self._type(ESCAPE)
@@ -286,6 +299,23 @@ class TerminalPane(WebPane, MarkedList):
             return
         self.projects = projects
         self._render((self.project, self._session))
+        self._resume()
+
+    def _resume(self):
+        """Attach the session reattach() asked for, where its project is still listed."""
+        if self._resuming is None:
+            return
+        path, session = self._resuming
+        self._resuming = None
+        project = next((each for each in self.projects if each.path == path), None)
+        if project is None:
+            return
+        if not session and project.sessions:
+            session = max(project.sessions, key=lambda each: each.active_at).name
+        if not any(each.name == session for each in project.sessions):
+            return
+        self.project = path
+        self._attach(session)
 
     def _crashed(self, failure):
         self.busy = False

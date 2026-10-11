@@ -64,6 +64,51 @@ class TestTheCommand:
         assert run.commands == ["follow break"]
 
 
+class Flaky:
+    def __init__(self, failures):
+        self.commands = []
+        self.failures = failures
+
+    def __call__(self, command, **kwargs):
+        self.commands.append(command)
+        failed = len(self.commands) <= self.failures
+        return type("Finished", (), {"returncode": int(failed), "stderr": "not yet"})()
+
+
+class TestTellingAgain:
+    def test_a_state_told_again_runs_once_more(self):
+        run = Flaky(0)
+        hook = StateHook("follow {state}", run=run)
+
+        hook.tell("break")
+        hook.tell_again()
+        hook.close()
+
+        assert run.commands == ["follow break", "follow break"]
+
+    def test_a_failure_is_retried_until_it_runs(self):
+        run = Flaky(2)
+        hook = StateHook("follow {state}", run=run, retry_secs=(0.01, 0.01, 0.01))
+
+        hook.tell("break")
+        hook._pool.submit(lambda: None).result(5)
+
+        assert run.commands == ["follow break"] * 3
+        hook.close()
+
+    def test_a_newer_state_ends_the_retries(self):
+        run = Flaky(99)
+        hook = StateHook("follow {state}", run=run, retry_secs=(30,))
+
+        hook.tell("break")
+        while not run.commands:
+            threading.Event().wait(0.01)
+        hook.tell("focus")
+        hook.close()
+
+        assert run.commands == ["follow break", "follow focus"]
+
+
 class TestWhatGoesWrong:
     def test_a_failing_command_is_one_warning_however_often_it_fails(self, caplog):
         hook = StateHook("echo refused >&2; exit 3")

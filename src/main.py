@@ -13,6 +13,7 @@ from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtCore import Qt
 from src.database import DatabaseClient
 from src.desktop.kwin import release_stale_hold
+from src.gui.lifecycle import restart_requested
 from src.gui.main_window import MainWindow
 from src.logging_setup import configure as configure_logging
 from src.config import STYLESHEET, PALETTE
@@ -74,7 +75,12 @@ def main():
     window = MainWindow(db)
     window.show()
 
-    sys.exit(app.exec())
+    code = app.exec()
+    if restart_requested():
+        log.info("Running Traker again.")
+        logging.shutdown()
+        os.execv(sys.executable, sys.orig_argv)
+    sys.exit(code)
 
 if __name__ == "__main__":
     main()

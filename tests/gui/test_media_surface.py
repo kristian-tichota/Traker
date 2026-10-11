@@ -498,6 +498,27 @@ class TestSessionsInATerminal:
         assert pane.marked == LISTED.index("Fix it")
         assert pane.back() is False
 
+    def test_a_restart_reattaches_the_session_it_named(self, qapp, sessions_pane):
+        pane = sessions_pane()
+
+        pane.reattach("/elsewhere", "claude-box")
+
+        assert until(qapp, lambda: "opened /elsewhere claude-box" in screen_of(qapp, pane))
+
+    def test_an_unnamed_one_is_the_latest_of_its_project(self, qapp, sessions_pane):
+        pane = sessions_pane()
+
+        pane.reattach("/elsewhere")
+
+        assert until(qapp, lambda: "opened /elsewhere claude-box" in screen_of(qapp, pane))
+
+    def test_a_project_without_sessions_leaves_the_list_up(self, sessions_pane):
+        pane = sessions_pane()
+
+        pane.reattach("/here")
+
+        assert pane.choosing is True and pane.attached() is None
+
     def test_a_session_that_fails_leaves_its_last_words(self, qapp, sessions_pane):
         pane = sessions_pane()
 

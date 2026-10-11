@@ -18,6 +18,7 @@ from src.desktop import dictum
 from src.desktop import notify as notify_service
 from src.desktop import rest_positions
 from src.desktop import rest_queue
+from src.desktop import standing_break
 from src.desktop.hooks import StateHook
 from src.desktop.idle import idle_ms as session_idle_ms
 from src.desktop.kwin import KWinPin, default_app_id
@@ -38,7 +39,7 @@ from src.gui.components.media_progress import MediaProgress
 from src.gui.components.media_surface import MediaSurface
 from src.gui.components.timeline_popup import TimelinePopupWidget
 from src.gui.components.upcoming_panel import UpcomingPanel
-from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin
+from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin, request_restart
 from src.domain.tables import CHORE
 from src.gui.animations import blend, grey_of, retarget
 from src.gui.workers import discard, run_in_background
@@ -58,6 +59,9 @@ PAGE_BACK_KEY_NAME = "CTRL 0"
 
 HOME_KEY = Qt.Key.Key_Home
 HOME_KEY_NAME = "CTRL HOME"
+
+RESTART_KEY = Qt.Key.Key_F5
+RESTART_MODIFIERS = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
 BACK_TO_TRAKER = "back to Traker"
 
 TAP_MS = 400
@@ -934,6 +938,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._hook_pending = False
         self.dictum = dictum.DictumListener(parent=self)
         self.dictum.changed.connect(self._say_which_keys_drive_it)
+        self.dictum.returned.connect(lambda: self.hook.tell_again())
+        self.restarting = False
+        self._standing_path = standing_break.beside(self._queue_path)
 
         self.kwin_pin = None
         if self.profile.get_metric("strict_break", "follow_across_desktops", True):
@@ -1003,6 +1010,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self.refresh_timer.start(self.visible_interval_ms())
         self._idle_watch.start(IDLE_POLL_MS)
+        QTimer.singleShot(0, self._raise_the_standing_walls)
 
     HIDDEN_INTERVAL_MS = 1000
 
@@ -1609,18 +1617,11 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         if self.current_phase == "work":
             if self._long_break_queued and self.long_breaks_left() > 0:
-                self.current_phase = "long_break"
+                phase = "long_break"
                 self._spend_long_break()
             else:
-                self.current_phase = "break"
-            self.time_left_ms = self.phase_length_ms()
-            self._apply_long_break_controls()
-            self._say_running_phase()
-            self.waiting_for_work_start = False
-            self._set_running(True)
-
-            if self.strict_mode:
-                self._enforce_strict_mode()
+                phase = "break"
+            self._hold_a_break(phase)
             self._lead_with_a_blink_set()
         else:
             self.current_phase = "work"
@@ -1639,6 +1640,85 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._apply_exit_controls()
         self._redraw_break_surfaces()
         self._reload_day()
+
+    def _hold_a_break(self, phase, left_ms=None):
+        """Run phase for left_ms, its whole length by default, walling every screen if strict."""
+        self.current_phase = phase
+        self.time_left_ms = self.phase_length_ms() if left_ms is None else left_ms
+        self._apply_long_break_controls()
+        self._say_running_phase()
+        self.waiting_for_work_start = False
+        self._set_running(True)
+        if self.strict_mode:
+            self._enforce_strict_mode()
+
+    def standing(self) -> dict | None:
+        """Return what the walls stand for, for a restart to raise them again, or None."""
+        if not self._strict_engaged:
+            return None
+        state = {"phase": self.current_phase, "left_ms": int(max(0, self.time_left_ms)),
+                 "over_since_ms": self._over_since_ms if self.waiting_for_work_start else 0,
+                 "absent_since_ms": self._absent_since_ms,
+                 "owed_until_ms": self._owed_until_ms,
+                 "showing": self._showing, "behind": self._list_behind}
+        pane = self.media_surface.pane if self.media_surface is not None else None
+        attached = getattr(pane, "attached", None)
+        if self._showing is not None and callable(attached):
+            state["session"] = attached()
+        return state
+
+    def restart(self):
+        """Run Traker again, raising the walls anew where they stand."""
+        standing = self.standing()
+        if standing is not None:
+            standing_break.save(standing, self._standing_path)
+        self.restarting = True
+        request_restart()
+        if self.window().close():
+            QApplication.quit()
+
+    def _raise_the_standing_walls(self):
+        """Raise the walls a restart took down, their clock having run on meanwhile."""
+        if self.is_shut_down():
+            return
+        state = standing_break.take(self._standing_path)
+        if state is None or not self.strict_mode or self._strict_engaged:
+            return
+        try:
+            phase = str(state.get("phase"))
+            left_ms = int(state.get("left_ms") or 0)
+            absent_since_ms = int(state.get("absent_since_ms") or 0)
+            over_since_ms = int(state.get("over_since_ms") or 0)
+            self._owed_until_ms = int(state.get("owed_until_ms") or 0)
+        except (TypeError, ValueError) as e:
+            log.warning("Not raising the standing walls again: %s", e)
+            return
+        if absent_since_ms:
+            self.time_left_ms = left_ms
+            self.waiting_for_work_start = False
+            self._say_phase(f"AWAY - PRESS {RELEASE_KEY_NAME} TO RETURN", "green")
+            self._enforce_strict_mode()
+            self._absent_since_ms = absent_since_ms
+        elif phase in ("break", "long_break"):
+            self._hold_a_break(phase, max(0, left_ms - state["gone_ms"]))
+        else:
+            self._over_since_ms = over_since_ms or QDateTime.currentMSecsSinceEpoch()
+            self._say_phase("REST OVER - PRESS PLAY")
+            self._enforce_strict_mode()
+            self._stand_down_enforcement()
+        self._said_the_offers_are_open = self.opens_in_ms() <= 0
+        showing = standing_break.activity(state.get("showing"))
+        if showing is not None:
+            self._show_activity(showing, standing_break.activity(state.get("behind")))
+            pane = self.media_surface.pane if self.media_surface is not None else None
+            reattach = getattr(pane, "reattach", None)
+            session = state.get("session")
+            if callable(reattach) and isinstance(session, list) and len(session) == 2:
+                reattach(*session)
+        log.info("Raised the walls of a %s again after a restart.", phase.replace("_", " "))
+        self._apply_exit_controls()
+        self._update_tray()
+        self._redraw_break_surfaces()
 
     def over_by_ms(self) -> int:
         """Return how long the wall has stood past the end of its break."""
@@ -1990,6 +2070,10 @@ class PomodoroView(ShutdownMixin, QWidget):
         typing = is_typing_into(watched)
         if key == RELEASE_KEY and not typing and self.prompts_for_focus():
             self._toggle_timer()
+            return True
+
+        if key == RESTART_KEY and event.modifiers() & RESTART_MODIFIERS == RESTART_MODIFIERS:
+            self.restart()
             return True
 
         if (key == HOME_KEY and event.modifiers() & Qt.KeyboardModifier.ControlModifier

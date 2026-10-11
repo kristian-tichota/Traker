@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import threading
 
@@ -10,7 +11,7 @@ from PyQt6.QtNetwork import QLocalServer
 from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 import src.profile as profile_module
-from src.desktop import rest_positions, rest_queue
+from src.desktop import rest_positions, rest_queue, standing_break
 from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, TERMINAL,
                                     VIDEO, BreakActivity)
 from src.domain.media import Place
@@ -899,6 +900,81 @@ class TestThePointer:
         timer._release_strict_break()
 
         assert QApplication.overrideCursor() is None
+
+
+class TestARestart:
+    @pytest.fixture
+    def restart(self, timer, recording_db, monkeypatch):
+        monkeypatch.setattr(pomodoro_view, "request_restart", lambda: None)
+        monkeypatch.setattr(QApplication, "quit", staticmethod(lambda: None))
+        started = []
+
+        def _restart():
+            timer.restart()
+            timer.shutdown()
+            started.append(a_view(recording_db))
+            view = next(started[-1])
+            QApplication.processEvents()
+            return view
+
+        yield _restart
+        for view in started:
+            next(view, None)
+
+    def test_the_key_restarts_it_from_a_wall(self, timer, monkeypatch):
+        asked = []
+        monkeypatch.setattr(timer, "restart", lambda: asked.append(True))
+        enter_strict_break(timer)
+
+        assert press(timer, Qt.Key.Key_F5, pomodoro_view.RESTART_MODIFIERS) is True
+        assert asked == [True]
+
+    def test_the_walls_rise_again_with_the_clock_where_it_was(self, timer, restart):
+        enter_strict_break(timer)
+        left = timer.time_left_ms
+
+        view = restart()
+
+        assert view.holds_the_screens() and view.overlays
+        assert view.current_phase == "break"
+        assert 0 <= left - view.time_left_ms < 2000
+
+    def test_what_was_showing_shows_again(self, timer, restart):
+        enter_strict_break(timer)
+        send_key(timer, Qt.Key.Key_Return)
+        showing = timer._showing
+
+        view = restart()
+
+        assert view._showing == showing
+
+    def test_walls_standing_after_the_break_stand_again(self, timer, restart):
+        enter_strict_break(timer)
+        timer._next_phase()
+
+        view = restart()
+
+        assert view.prompts_for_focus() and view.overlays
+
+    def test_an_absence_stays_an_absence(self, timer, restart):
+        timer.step_away()
+
+        view = restart()
+
+        assert view.is_absent() and view.overlays
+
+    def test_walls_saved_too_long_ago_stay_down(self, timer):
+        enter_strict_break(timer)
+        path = timer._standing_path
+        standing_break.save(timer.standing(), path)
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+        saved["saved_at_ms"] -= standing_break.RESUME_WITHIN_MS + 1000
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(saved, f)
+
+        assert standing_break.take(path) is None
+        assert not os.path.exists(path)
 
 
 class TestTheBreakGoesOnBeingABreak:
@@ -2200,6 +2276,9 @@ class Told:
             self.told = state
             self.states.append(state)
 
+    def tell_again(self):
+        self.states.append(self.told)
+
     def close(self):
         pass
 
@@ -2457,6 +2536,17 @@ class TestTheInputsThatSendEachKey:
         hud.held[0].disconnectFromServer()
 
         assert until(lambda: not any(beside_it(reviewing).keys.inputs))
+
+    def test_a_libre_dictum_that_comes_back_hears_the_state_again(self, reviewing, hud):
+        assert until(lambda: any(beside_it(reviewing).keys.inputs))
+        reviewing.hook = told = Told()
+        told.told = "deck"
+
+        hud.held[0].disconnectFromServer()
+        assert until(lambda: not any(beside_it(reviewing).keys.inputs))
+        reviewing.dictum._retry.setInterval(10)
+
+        assert until(lambda: told.states == ["deck"])
 
     def test_another_protocol_names_nobody(self, deck_timer, hud):
         hud.frames[:] = [{**frame, "protocol": 9} for frame in hud.frames]

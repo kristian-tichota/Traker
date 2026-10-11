@@ -31,6 +31,11 @@ walls away. A wall shows the session, the chores that are due and, after `away_s
 pressed offer glows, yellow while the offers are held back. The chore tick is the one surface that
 writes to the service.
 
+`Ctrl+Shift+F5` on a wall restarts Traker to load new code. The walls fall for the few seconds the
+start takes, then rise again with the break's clock, an absence or `BREAK OVER` as they stood, what
+was showing reopened and an attached session reattached. The state is saved in
+`standing-break.json` beside the queue and MUST be taken within two minutes, or it is ignored.
+
 ## Break activities
 
 Offers come in key order: the queue, the `[[strict_break.activities]]` entries, then one shelf per
@@ -73,6 +78,8 @@ by `focus`, `break`, `list`, `video`, `document`, `book`, `deck`, `page` or `ter
 every other wall fades to a grey face with the time left by the minute, what is showing and its keys.
 Each key names the libre-dictum inputs that send it, read from that program's display socket at
 `LIBRE_DICTUM_HUD_SOCKET` or `$XDG_RUNTIME_DIR/libre-dictum/hud.sock`; another protocol names none.
+When that socket returns after a loss, the hook hears the current state again, and a failing run is
+retried for about a minute while its state is still the latest.
 
 ## Session verification
 
