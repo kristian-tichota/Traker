@@ -890,6 +890,16 @@ class TestTheExitStillCostsTheSameSeconds:
         assert timer._strict_engaged is False
 
 
+class TestThePointer:
+    def test_it_is_hidden_while_the_walls_stand_and_back_once_they_go(self, timer):
+        enter_strict_break(timer)
+        assert QApplication.overrideCursor().shape() == Qt.CursorShape.BlankCursor
+
+        timer._release_strict_break()
+
+        assert QApplication.overrideCursor() is None
+
+
 class TestTheBreakGoesOnBeingABreak:
     def test_the_time_still_accrues_to_rest(self, timer):
         enter_strict_break(timer)
@@ -1425,6 +1435,7 @@ CARD_KEYS = {
     "0": Qt.Key.Key_0,
     "BACKSPACE": Qt.Key.Key_Backspace,
     pomodoro_view.HINT_KEYS_NAME: Qt.Key.Key_A,
+    pomodoro_view.HOME_KEY_NAME: pomodoro_view.HOME_KEY,
 }
 
 
@@ -1434,6 +1445,14 @@ def key_named(label):
     if label.startswith("1-"):
         return Qt.Key.Key_1
     return CARD_KEYS.get(label)
+
+
+def press_named(view, label, key) -> bool:
+    """Press the key a card names, Ctrl held where the card names a chord."""
+    assert key is not None, f"the card names {label!r} and nothing presses it"
+    held = (Qt.KeyboardModifier.ControlModifier if label.startswith("CTRL ")
+            else Qt.KeyboardModifier.NoModifier)
+    return view.eventFilter(view, QKeyEvent(QEvent.Type.KeyPress, key, held))
 
 
 class TestTheCardOfKeys:
@@ -1629,6 +1648,13 @@ class TestAPage:
 
         assert rest_positions.read(browsing._positions_path) == {}
 
+    def test_the_pointer_shows_over_it_alone(self, browsing):
+        assert QApplication.overrideCursor() is None
+
+        press(browsing, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier)
+
+        assert QApplication.overrideCursor().shape() == Qt.CursorShape.BlankCursor
+
     def test_the_hook_hears_a_page(self, browsing, settled):
         browsing.hook = told = Told()
         browsing._follow_the_state()
@@ -1698,7 +1724,13 @@ class TestSessions:
 
     def test_the_strip_names_the_keys_the_break_keeps(self, attached):
         assert attached.media_surface.strip.text().endswith(
-            "CTRL 0 BACK TO THE SESSIONS · ESC TO THE SESSION · ESC 10s LEAVE THE BREAK")
+            "CTRL 0 BACK TO THE SESSIONS · ESC TO THE SESSION · CTRL HOME BACK TO TRAKER"
+            " · ESC 10s LEAVE THE BREAK")
+
+    def test_ctrl_home_puts_the_wall_back_from_inside_a_session(self, attached):
+        assert press(attached, Qt.Key.Key_Home, Qt.KeyboardModifier.ControlModifier) is True
+
+        assert attached._showing is None
 
 
 class TestEveryDeck:
@@ -1765,11 +1797,7 @@ class TestEveryDeck:
 
     def test_every_key_it_names_is_one_the_break_answers(self, listing):
         for label, _says in listing.media_surface.keys.hints:
-            key = key_named(label)
-            assert key is not None, f"the card names {label!r} and nothing presses it"
-            pressed = QKeyEvent(QEvent.Type.KeyPress, key,
-                                Qt.KeyboardModifier.NoModifier)
-            assert listing.eventFilter(listing, pressed) is True, label
+            assert press_named(listing, label, key_named(label)), label
 
 
 class TestTheReadoutIsOnTheWallBesideTheFilm:
@@ -1966,6 +1994,14 @@ class TestTheLibrary:
         send_key(library_timer, Qt.Key.Key_0)
         assert library_timer._showing is None
 
+    def test_ctrl_home_in_that_file_puts_the_wall_back_at_once(self, library_timer):
+        enter_with_the_shelves(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+        send_key(library_timer, Qt.Key.Key_Space)
+
+        assert press(library_timer, Qt.Key.Key_Home, Qt.KeyboardModifier.ControlModifier)
+        assert library_timer._showing is None
+
     def test_left_climbs_to_the_media_folder_and_right_into_another(self, library_timer,
                                                                    media):
         enter_with_the_shelves(library_timer)
@@ -2075,10 +2111,7 @@ class TestABook:
 
     def test_every_key_it_names_is_one_the_break_answers(self, reading):
         for label, _says in reading.media_surface.keys.hints:
-            key = BOOK_KEYS.get(label) or key_named(label)
-            assert key is not None, f"the card names {label!r} and nothing presses it"
-            pressed = QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier)
-            assert reading.eventFilter(reading, pressed) is True, label
+            assert press_named(reading, label, BOOK_KEYS.get(label) or key_named(label)), label
 
     def test_where_it_was_left_is_kept_like_any_file(self, reading):
         pane = showing_pane(reading)

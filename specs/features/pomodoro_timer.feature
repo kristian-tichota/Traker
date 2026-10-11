@@ -743,7 +743,7 @@ Feature: Focus timer
     Scenario: A session takes the keyboard
       When I open a session or a new chat
       Then the wall runs it in a terminal with the keyboard focus
-      And every key reaches it except the release key and CTRL+0, which goes back to the sessions
+      And every key reaches it except the release key, CTRL+HOME and CTRL+0, which goes back to the sessions
       And a tap of the release key reaches the session, while a hold still leaves the break
 
     Scenario: Leaving a session does not end it
@@ -753,6 +753,15 @@ Feature: Focus timer
     Scenario: A session that fails
       When the program exits with a failure
       Then its last output stays on the wall until CTRL+0
+
+    Scenario: One key returns to the wall from any depth
+      Given a file opened from a list, a deck from the decks or a running session shows
+      When I press CTRL+HOME
+      Then the wall shows its readouts and offers again, every position kept
+
+    Scenario: The pointer stays out of sight
+      When the walls stand
+      Then the pointer is hidden, except over a web page
 
   Rule: What to open on a break is queued, not configured
 

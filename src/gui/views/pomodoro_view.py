@@ -54,6 +54,10 @@ UNDO_KEY_NAME = "BACKSPACE"
 PAGE_BACK_KEY = Qt.Key.Key_0
 PAGE_BACK_KEY_NAME = "CTRL 0"
 
+HOME_KEY = Qt.Key.Key_Home
+HOME_KEY_NAME = "CTRL HOME"
+BACK_TO_TRAKER = "back to Traker"
+
 TAP_MS = 400
 
 HINT_KEYS_NAME = "LETTERS"
@@ -872,6 +876,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.last_tray_second = -1
         self.last_logged_minute = -1
         self.overlays = []
+        self._pointer_hidden = False
 
         self._strict_engaged = False
         self._media_host = None
@@ -1659,7 +1664,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Return every key that drives what is showing, in reading order."""
         pane = self.media_surface.pane if self.media_surface is not None else None
         zero = ("0", "back to the list" if self._list_behind is not None
-                else "back to Traker")
+                else BACK_TO_TRAKER)
         if kind == break_activities.SHELF:
             hints = [
                 ("\u2191 \u2193", "choose"),
@@ -1674,7 +1679,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("\u2190 \u2192", "one with cards due"),
                 ("SPACE", "review it"),
                 (HINT_KEYS_NAME, "review by its hint"),
-                ("0", "back to Traker"),
+                ("0", BACK_TO_TRAKER),
             ]
         elif kind == break_activities.DECK:
             hints = [
@@ -1683,10 +1688,10 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("\u2191 \u2193", "scroll"),
                 (UNDO_KEY_NAME, "undo"),
                 ("0", "back to the decks" if getattr(pane, "from_list", False)
-                 else "back to Traker"),
+                 else BACK_TO_TRAKER),
             ]
         elif kind == break_activities.PAGE:
-            hints = [(PAGE_BACK_KEY_NAME, "back to Traker")]
+            hints = [(PAGE_BACK_KEY_NAME, BACK_TO_TRAKER)]
         elif kind == break_activities.TERMINAL and getattr(pane, "choosing", True):
             hints = [
                 ("\u2191 \u2193", "choose"),
@@ -1695,7 +1700,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             ]
             if getattr(pane, "project", None) is not None:
                 hints.append((f"{UNDO_KEY_NAME} \u2190", "the projects"))
-            hints.append(("0", "back to Traker" if getattr(pane, "project", None) is None
+            hints.append(("0", BACK_TO_TRAKER if getattr(pane, "project", None) is None
                           else "back to the projects"))
         elif kind == break_activities.TERMINAL:
             hints = [(PAGE_BACK_KEY_NAME, "back to the sessions"),
@@ -1720,6 +1725,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             if shown:
                 hints.append(("PGUP PGDN", f"subtitles: {shown}"))
             hints.append(zero)
+        if all(says != BACK_TO_TRAKER for _, says in hints):
+            hints.append((HOME_KEY_NAME, BACK_TO_TRAKER))
         if len(self._offers) > 1 and not self._page_takes_keys():
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
         if self.screen_power.available and not self._page_takes_keys():
@@ -1838,6 +1845,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             self.media_surface.show_progress(playing[1:] if playing else None)
         self._say_when_the_offers_open()
         self._keep_the_walls_on_their_screens()
+        self._place_the_pointer()
         self._follow_the_state()
 
     def hook_state(self) -> str:
@@ -1938,6 +1946,11 @@ class PomodoroView(ShutdownMixin, QWidget):
         typing = is_typing_into(watched)
         if key == RELEASE_KEY and not typing and self.prompts_for_focus():
             self._toggle_timer()
+            return True
+
+        if (key == HOME_KEY and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                and self._showing is not None):
+            self._stop_showing()
             return True
 
         if self._page_takes_keys():
@@ -2186,6 +2199,18 @@ class PomodoroView(ShutdownMixin, QWidget):
         if self._media_host is not None:
             self._media_host.hide_media()
         self._redraw_break_surfaces()
+
+    def _place_the_pointer(self):
+        """Hide the pointer while walls stand, unless a web page on them takes it."""
+        hidden = bool(self.overlays) and (self._showing is None
+                                          or self._showing.kind != break_activities.PAGE)
+        if hidden == self._pointer_hidden:
+            return
+        self._pointer_hidden = hidden
+        if hidden:
+            QApplication.setOverrideCursor(Qt.CursorShape.BlankCursor)
+        else:
+            QApplication.restoreOverrideCursor()
 
     def _bring_the_front_forward(self):
         """Have KWin hold the walls on every desktop, the keyboard on the one showing files."""
@@ -2490,6 +2515,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             o.dismiss()
             o.deleteLater()
         self.overlays.clear()
+        self._place_the_pointer()
         self.media_surface = None
         self._media_host = None
 

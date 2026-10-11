@@ -65,6 +65,7 @@ class TestWhoSendsWhat:
 class TestTheLabelsOfTheCard:
     def test_a_chord_is_one_key(self):
         assert keys_of("CTRL 0") == [("CTRL 0", "ctrl+0", False)]
+        assert keys_of("CTRL HOME") == [("CTRL HOME", "ctrl+home", False)]
 
     def test_a_duration_marks_a_hold(self):
         assert keys_of("ESC 10s") == [("ESC 10s", "esc", True)]
