@@ -363,6 +363,22 @@ font_px = 28
 width_em = 32
 height_em = 30
 
+# The sound under the walls: one scene of the ambience bank, each of its
+# layers drifting slowly in level and played from places chosen at random. It
+# fades in as the walls rise and out when they fall, while a film or a song
+# plays, and while the walls stand for an absence. On a wall showing nothing,
+# LEFT/RIGHT change the scene and UP/DOWN the volume until Traker restarts.
+[strict_break.ambience]
+enabled = true
+# A folder of the bank, such as rain, ocean or stream. noise is generated and
+# needs no folder; it also plays where the bank holds no scene of that name.
+scene = "rain"
+# 0.0 to 1.0.
+volume = 0.6
+# The bank: one folder per scene, filled by scripts/fetch_ambience.py. Empty
+# means ~/.local/share/traker/ambience.
+path = ""
+
 # A shell command run each time what a break shows changes. Every {{state}} in it
 # becomes focus, break, list, video, document, book, deck or page, so that another
 # program can follow the break; list is a list of decks or of a folder. It MUST

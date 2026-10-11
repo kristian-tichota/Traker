@@ -57,6 +57,15 @@ program runs its sessions in a terminal: the pane is xterm.js from `assets/xterm
 pseudo-terminal that `setsid --ctty` (util-linux) makes the program's own, and a tap of `Esc` shorter
 than `TAP_MS` reaches the session. The program's two calls are in the generated profile.
 
+## Ambience
+
+`[strict_break.ambience]` names a scene of the bank, `~/.local/share/traker/ambience` unless `path`
+names another. A scene is a folder of recordings, each with its gain and the span that plays in
+`scene.toml`; `scripts/fetch_ambience.py` downloads the curated scenes from Freesound with their
+credits. Each recording plays from places chosen at random with 6 s crossfades, its level drifting
+between 50 % and 125 %, and `noise` is generated. The mix renders on its own thread through Qt
+Multimedia and needs the `ambience` extra.
+
 ## Assistive Input Integration
 
 `[hooks] state` is a shell command run each time what the break shows changes, with `{state}` replaced

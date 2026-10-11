@@ -17,6 +17,7 @@ from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
 from src.config import PALETTE
+from src.gui.components.ambience_player import AmbiencePlayer
 from src.gui.components.book_pane import BookPane
 from src.gui.components.media_surface import DeckPane, LibraryPane
 from src.gui.components.upcoming_panel import UpcomingPanel
@@ -2473,3 +2474,91 @@ class TestTheInputsThatSendEachKey:
         reviewing._clear_overlays()
 
         assert reviewing.dictum.inputs == {}
+
+
+class Heard(AmbiencePlayer):
+    def __init__(self, bank):
+        super().__init__(str(bank), "rain", 0.6)
+        self.wishes = []
+
+    def _renders(self):
+        return True
+
+    def _send(self):
+        self.wishes.append((self.scene.name, self.volume, self.audible))
+
+
+@pytest.fixture
+def heard(timer, tmp_path):
+    for name in ("rain", "stream"):
+        (tmp_path / "bank" / name).mkdir(parents=True)
+        (tmp_path / "bank" / name / "a.ogg").write_bytes(b"")
+    timer.ambience = Heard(tmp_path / "bank")
+    return timer
+
+
+class TestTheSoundUnderTheWalls:
+    def test_a_break_fades_the_named_scene_in(self, heard):
+        enter_strict_break(heard)
+
+        assert heard.ambience.wishes == [("rain", 0.6, True)]
+
+    def test_the_walls_name_the_scene_and_its_volume(self, heard):
+        enter_strict_break(heard)
+
+        assert heard.overlays[0].upcoming.lines()[-3:] == [
+            "SOUND", "\u2190 \u2192  Rain", "\u2191 \u2193  60 %"]
+
+    def test_a_film_hushes_it_until_the_wall_is_back(self, heard):
+        enter_strict_break(heard)
+
+        send_key(heard, Qt.Key.Key_2)
+        assert heard.ambience.wishes[-1] == ("rain", 0.6, False)
+
+        send_key(heard, Qt.Key.Key_0)
+        assert heard.ambience.wishes[-1] == ("rain", 0.6, True)
+
+    def test_a_document_keeps_it(self, heard):
+        enter_strict_break(heard)
+
+        send_key(heard, Qt.Key.Key_Return)
+
+        assert heard.ambience.audible is True
+
+    def test_the_walls_falling_hush_it(self, heard):
+        enter_strict_break(heard)
+
+        heard._clear_overlays()
+
+        assert heard.ambience.wishes[-1] == ("rain", 0.6, False)
+
+    def test_walls_for_an_absence_stay_silent(self, heard):
+        heard.step_away()
+
+        assert heard.ambience.wishes == []
+
+    def test_left_and_right_change_the_scene(self, heard):
+        enter_strict_break(heard)
+
+        send_key(heard, Qt.Key.Key_Right)
+        assert heard.ambience.wishes[-1] == ("stream", 0.6, True)
+
+        send_key(heard, Qt.Key.Key_Left)
+        send_key(heard, Qt.Key.Key_Left)
+        assert heard.ambience.wishes[-1] == ("noise", 0.6, True)
+
+    def test_up_and_down_change_the_volume(self, heard):
+        enter_strict_break(heard)
+
+        send_key(heard, Qt.Key.Key_Up)
+
+        assert heard.ambience.wishes[-1] == ("rain", 0.7, True)
+        assert heard.overlays[0].upcoming.lines()[-1] == "\u2191 \u2193  70 %"
+
+    def test_the_arrows_drive_what_is_showing_first(self, heard):
+        enter_strict_break(heard)
+        send_key(heard, Qt.Key.Key_Return)
+
+        send_key(heard, Qt.Key.Key_Right)
+
+        assert heard.ambience.wishes == [("rain", 0.6, True)]

@@ -264,8 +264,12 @@ def strict_timer(profile_path):
     profile_module.UserProfile()
     written = profile_path.read_text(encoding="utf-8")
     assert "strict = false" in written, "the [timer] template no longer says this"
-    profile_path.write_text(written.replace("strict = false", "strict = true"),
-                            encoding="utf-8")
+    assert "[strict_break.ambience]\nenabled = true" in written
+    profile_path.write_text(
+        written.replace("strict = false", "strict = true")
+        .replace("[strict_break.ambience]\nenabled = true",
+                 "[strict_break.ambience]\nenabled = false"),
+        encoding="utf-8")
     profile_module.reload_profile()
     return profile_path
 

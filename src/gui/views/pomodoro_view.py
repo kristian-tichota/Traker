@@ -13,6 +13,7 @@ from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 
 from src.config import PALETTE
 from src.desktop import activities as break_activities
+from src.desktop import ambience
 from src.desktop import dictum
 from src.desktop import notify as notify_service
 from src.desktop import rest_positions
@@ -29,6 +30,7 @@ from src.domain.hints import LETTERS, letters_of
 from src.profile import (DEFAULT_BLINK_SETS_PER_DAY, DEFAULT_EYE_REST_MINS,
                          DEFAULT_GAZE_SECS, DEFAULT_IDLE_PAUSE_SECS,
                          DEFAULT_STOP_HOLD_SECS, UserProfile, get_qt_key)
+from src.gui.components.ambience_player import AmbiencePlayer
 from src.gui.components.calm_face import CalmFace
 from src.gui.components.chore_panel import KEYS as CHORE_KEYS, ChorePanel
 from src.gui.components.eye_veil import EyeRest, EyeVeil
@@ -920,6 +922,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._library_path = break_activities.library_for(self.profile)
         self._offers = list(self.activities)
         self.media_pane_factory = None
+        self.ambience = None
+        if self.profile.get_metric("strict_break.ambience", "enabled", True) is not False:
+            self.ambience = AmbiencePlayer(
+                ambience.bank_for(self.profile),
+                self.profile.get_metric("strict_break.ambience", "scene", "rain"),
+                self.profile.number("strict_break.ambience", "volume", 0.6,
+                                    low=0.0, high=1.0),
+                parent=self)
         self.hook = StateHook(self.profile.get_metric("hooks", "state", ""))
         self._hook_pending = False
         self.dictum = dictum.DictumListener(parent=self)
@@ -1861,10 +1871,47 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _follow_the_state(self):
         """Tell the hook what the break shows, once the change in hand has settled."""
+        self._steer_the_ambience()
         if self._hook_pending or self.hook_state() == self.hook.told:
             return
         self._hook_pending = True
         QTimer.singleShot(0, self._tell_the_hook)
+
+    def _steer_the_ambience(self):
+        """Play the ambience while walls stand for a break and nothing plays a film."""
+        if self.ambience is None:
+            return
+        wanted = (self._strict_engaged and not self.is_absent()
+                  and (self._showing is None or self._showing.kind != break_activities.VIDEO))
+        if wanted == self.ambience.audible:
+            return
+        if wanted:
+            self.ambience.play()
+        else:
+            self.ambience.hush()
+        self._show_upcoming()
+
+    SOUND_TITLE = "SOUND"
+
+    def sound_section(self) -> list:
+        """Return the scene playing and its volume, with the keys that change them."""
+        if self.ambience is None or not self.ambience.audible:
+            return []
+        return [(self.SOUND_TITLE, [f"\u2190 \u2192  {self.ambience.scene_name}",
+                                    f"\u2191 \u2193  {round(self.ambience.volume * 100)} %"])]
+
+    def _drive_ambience(self, key) -> bool:
+        """Change the scene or its volume, on a wall that shows nothing else."""
+        if self.ambience is None or not self.ambience.audible or self._showing is not None:
+            return False
+        if key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+            self.ambience.step(1 if key == Qt.Key.Key_Right else -1)
+        elif key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+            self.ambience.nudge(1 if key == Qt.Key.Key_Up else -1)
+        else:
+            return False
+        self._show_upcoming()
+        return True
 
     def _tell_the_hook(self):
         self._hook_pending = False
@@ -1965,7 +2012,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 self._show_activity(self._offers[index])
                 self._acknowledge_offer(index)
                 return True
-            if self._drive_media(key):
+            if self._drive_media(key) or self._drive_ambience(key):
                 return True
             chore = self._chore_for(key)
             if chore is not None:
@@ -2295,7 +2342,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _show_upcoming(self):
         """Hand what is coming to every surface with room for it."""
-        sections = (self._upcoming + self.offer_section()
+        sections = (self._upcoming + self.offer_section() + self.sound_section()
                     if self._strict_engaged else [])
         for panel in self._offer_panels():
             panel.set_sections(sections)
@@ -2546,6 +2593,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             self.eye_rest.shutdown()
         super().shutdown()
         self._clear_overlays()
+        if self.ambience is not None:
+            self.ambience.shutdown()
         self.hook.tell(FOCUS_STATE)
         self.hook.close()
 

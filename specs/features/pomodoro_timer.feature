@@ -905,6 +905,23 @@ Feature: Focus timer
       And a sleeping layer names nothing, and a libre-dictum that stops or speaks another protocol names nothing at all
       And the screens-off key is named where it works
 
+  Rule: A held break sounds an ambient scene under its walls
+
+    Scenario: The walls rise
+      When a held break begins
+      Then the scene my profile names fades in, and the walls name it and its volume
+      And each of its recordings plays from places chosen at random, crossfaded, its level drifting slowly
+      And a scene the bank lacks is generated noise, which needs no recordings
+
+    @accessibility
+    Scenario: Choosing on a wall that shows nothing
+      Then left and right crossfade to the scene before or after, and up and down change the volume
+      And with an activity open, the arrows are the activity's
+
+    Scenario: Silence
+      Then a film or a song fades it out for its length, and the walls falling fade it out
+      And walls raised for an absence are silent
+
   Rule: A strict break is announced before it lands
 
     Scenario: The warning

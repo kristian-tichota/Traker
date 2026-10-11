@@ -43,6 +43,10 @@ import src.desktop.activities  # noqa: E402
 
 src.desktop.activities.DEFAULT_LIBRARY = str(_SANDBOX / "Media")
 
+import src.desktop.ambience  # noqa: E402
+
+src.desktop.ambience.DEFAULT_BANK = str(_SANDBOX / "ambience")
+
 import src.desktop.kwin_rules  # noqa: E402
 import src.desktop.kde_config  # noqa: E402
 
