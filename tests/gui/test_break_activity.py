@@ -159,6 +159,10 @@ class FakeTerminalPane(FakePane):
     def undo(self):
         self.calls.append("undo")
 
+    def close_marked(self):
+        self.calls.append("close")
+        return True
+
     def back(self):
         self.calls.append("back")
         if self.choosing:
@@ -1762,6 +1766,11 @@ class TestSessions:
         assert press(listing, Qt.Key.Key_Space) is True
 
         assert showing_pane(listing).calls == ["toggle"]
+
+    def test_del_on_the_list_asks_to_end_the_marked_session(self, listing):
+        assert press(listing, Qt.Key.Key_Delete) is True
+
+        assert showing_pane(listing).calls == ["close"]
 
     def test_the_hook_hears_a_list_and_then_a_terminal(self, listing, settled):
         listing.hook = told = Told()

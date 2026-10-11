@@ -31,6 +31,7 @@ PAGE_ROWS = 10
 ESCAPE = "\x1b"
 NEW_CHAT = "NEW CHAT"
 SESSIONS = "SESSIONS"
+CLOSING = "DEL AGAIN TO END IT"
 LISTING_FAILED = (OSError, ValueError, subprocess.SubprocessError)
 
 THEME = {
@@ -188,6 +189,7 @@ class TerminalPane(WebPane, MarkedList):
         self._argv = None
         self._session = ""
         self._resuming = None
+        self._closing = None
         self._generation = 0
         if self.view is None:
             return
@@ -246,6 +248,42 @@ class TerminalPane(WebPane, MarkedList):
             return False
         self._list()
         return True
+
+    def close_marked(self) -> bool:
+        """Ask once, then end the marked session, reporting whether a session is marked."""
+        if not self.choosing or self.busy or not self.listing:
+            return False
+        project, session = self.listing[self.marked]
+        if session is None:
+            return False
+        if self._closing is None:
+            row = self._rows[self.marked]
+            self._closing = (self.marked, row.text(1))
+            row.setText(1, CLOSING)
+            row.setForeground(1, QColor(PALETTE['red']))
+            return True
+        self._closing = None
+        self.busy = True
+        run_in_background(QThreadPool.globalInstance(), _end, self._ended_one,
+                          self._ended_one, self.command, project.path, session.name)
+        return True
+
+    def _mark(self, index):
+        """Mark the row at index, taking back a pending request to end a session."""
+        if self._closing is not None:
+            at, note = self._closing
+            self._closing = None
+            if at < len(self._rows):
+                self._rows[at].setText(1, note)
+                self._rows[at].setForeground(1, QColor(PALETTE['base1']))
+        MarkedList._mark(self, index)
+
+    def _ended_one(self, outcome):
+        """List again once the program has ended a session or failed to."""
+        if isinstance(outcome, tuple) and outcome:
+            log.warning("Could not end a session of %r: %s", self.command, outcome[0])
+        self._session = ""
+        self._list()
 
     def attached(self):
         """Return (project, session) of the session shown, or None while the list shows."""
@@ -335,6 +373,7 @@ class TerminalPane(WebPane, MarkedList):
                  for project, session in held]
         marks = [(project.path, session.name if session is not None else "")
                  for project, session in self.listing]
+        self._closing = None
         self.chooser.clear()
         self.chooser.headerItem().setText(0, SESSIONS)
         for row in rows:
@@ -405,6 +444,10 @@ class TerminalPane(WebPane, MarkedList):
 
     def _shown(self):
         return self.chooser if self.choosing else self.view
+
+
+def _end(command, path, session):
+    sessions.close(command, path, session)
 
 
 def _attempt(generation, command) -> tuple:

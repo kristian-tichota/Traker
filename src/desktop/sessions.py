@@ -53,6 +53,13 @@ def opening(command, path, session="") -> list:
     return [*shlex.split(command), "--open", str(path), *([session] if session else [])]
 
 
+def close(command, path, session) -> None:
+    """Have the program end session at path."""
+    subprocess.run([*shlex.split(command), "--close", str(path), str(session)],
+                   stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                   timeout=LIST_TIMEOUT_SECS, check=True)
+
+
 def ago(secs) -> str:
     """Format a time since in its largest whole unit: "NOW", "12 MIN AGO", "3 H AGO"."""
     secs = max(0, int(secs))

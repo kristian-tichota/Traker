@@ -739,6 +739,10 @@ Feature: Focus timer
       Then the wall lists a new chat per project, then every session, latest first, each with its project and last activity
       And every row opens by its hint, two letters where one does not suffice
 
+    Scenario: Ending a stale session
+      When I press DEL on a session in the list, and DEL again before marking another row
+      Then the program ends that session and the list is read again
+
     Scenario: A session takes the keyboard
       When I open a session or a new chat
       Then the wall runs it in a Solarized light terminal with the keyboard focus

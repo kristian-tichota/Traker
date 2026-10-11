@@ -19,7 +19,7 @@ VOICE_PHRASES = 2
 
 TOKENS = {
     "SPACE": "space", "ENTER": "enter", "ESC": "esc", "TAB": "tab", "BACKSPACE": "backspace",
-    "←": "left", "→": "right", "↑": "up", "↓": "down", "PGUP": "pageup", "PGDN": "pagedown", "HOME": "home",
+    "←": "left", "→": "right", "↑": "up", "↓": "down", "PGUP": "pageup", "PGDN": "pagedown", "HOME": "home", "DEL": "delete",
     **{str(digit): str(digit) for digit in range(10)},
 }
 

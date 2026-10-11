@@ -315,7 +315,8 @@ anki_url = "http://127.0.0.1:8765"
 # A session program lists its projects with "<program> --list" and runs one
 # session with "<program> --open <project> [<session>]", a new one without a
 # session. One list offers a new chat per project, then every session, latest
-# first, each by its hint. A session then takes every key
+# first, each by its hint; DEL pressed twice on a session runs
+# "<program> --close <project> <session>". A session then takes every key
 # but ESC and CTRL+0, which goes back to the sessions; a tap of ESC reaches the
 # session, and leaving it detaches without ending it.
 #

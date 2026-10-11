@@ -1787,6 +1787,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("\u2191 \u2193", "choose"),
                 ("SPACE \u2192", "open"),
                 (HINT_KEYS_NAME, "open by its hint"),
+                ("DEL", "end a session, pressed twice"),
                 ("0", BACK_TO_TRAKER),
             ]
         elif kind == break_activities.TERMINAL:
@@ -2158,6 +2159,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             back = getattr(pane, "back", None)
             if not (callable(back) and back()) and not self._back_to_the_list():
                 self._stop_showing()
+        elif key == Qt.Key.Key_Delete and callable(getattr(pane, "close_marked", None)):
+            return pane.close_marked()
         elif key == UNDO_KEY and callable(getattr(pane, "undo", None)):
             pane.undo()
         elif Qt.Key.Key_A <= key <= Qt.Key.Key_Z and callable(getattr(pane, "hint", None)):

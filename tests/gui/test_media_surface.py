@@ -399,6 +399,7 @@ SESSION_PROGRAM = """#!/bin/sh
 case "$1" in
   --list) printf 'project\t/here\tHere\nproject\t/elsewhere\tElsewhere\n'
           printf 'session\t/elsewhere\tclaude-box\t1\t1\tFix it\nproject\t/fails\tFails\n' ;;
+  --close) printf '%s %s\n' "$2" "$3" >> "$0.closed" ;;
   --open) [ "$2" = /fails ] && { echo boom; exit 3; }
           printf 'opened %s %s\n' "$2" "$3"; exec cat -v ;;
 esac
@@ -497,6 +498,37 @@ class TestSessionsInATerminal:
         assert [name for name, _ in rows_of(pane)] == LISTED
         assert pane.marked == LISTED.index("Fix it")
         assert pane.back() is False
+
+    def test_del_twice_ends_the_marked_session_and_lists_again(self, qapp, sessions_pane,
+                                                               tmp_path, settled):
+        pane = sessions_pane()
+        pane._mark(LISTED.index("Fix it"))
+
+        assert pane.close_marked() is True
+        assert rows_of(pane)[-1][1] == "DEL AGAIN TO END IT"
+        assert pane.close_marked() is True
+        closed = tmp_path / "sessions.closed"
+
+        assert until(qapp, lambda: closed.exists() and not pane.busy)
+        assert closed.read_text() == "/elsewhere claude-box\n"
+
+    def test_marking_another_row_takes_the_request_back(self, sessions_pane, tmp_path):
+        pane = sessions_pane()
+        pane._mark(LISTED.index("Fix it"))
+        note = rows_of(pane)[-1][1]
+        pane.close_marked()
+
+        pane._mark(0)
+        assert rows_of(pane)[-1][1] == note
+        pane._mark(LISTED.index("Fix it"))
+        pane.close_marked()
+
+        assert not (tmp_path / "sessions.closed").exists()
+
+    def test_a_new_chat_cannot_be_ended(self, sessions_pane):
+        pane = sessions_pane()
+
+        assert pane.close_marked() is False
 
     def test_a_restart_reattaches_the_session_it_named(self, qapp, sessions_pane):
         pane = sessions_pane()
