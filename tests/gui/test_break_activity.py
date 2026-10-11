@@ -11,8 +11,8 @@ from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 import src.profile as profile_module
 from src.desktop import rest_positions, rest_queue
-from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, VIDEO,
-                                    BreakActivity)
+from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, TERMINAL,
+                                    VIDEO, BreakActivity)
 from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
@@ -54,6 +54,12 @@ PAGE_TOML = f"""
 [[strict_break.activities]]
 name = "Tutor"
 url = "{PAGE_URL}"
+"""
+
+SESSIONS_TOML = """
+[[strict_break.activities]]
+name = "Agents"
+sessions = "session-program"
 """
 
 
@@ -139,6 +145,32 @@ class FakeVideoPane(FakePane):
         self.calls.append(("turn", direction))
 
 
+class FakeTerminalPane(FakePane):
+    changed = pyqtSignal()
+    choosing = True
+    project = None
+
+    def hint(self, letter):
+        self.calls.append(("hint", letter))
+        return True
+
+    def undo(self):
+        self.calls.append("undo")
+
+    def back(self):
+        self.calls.append("back")
+        if self.choosing:
+            return False
+        self.choosing = True
+        return True
+
+    def escape(self):
+        self.calls.append("escape")
+
+    def title(self):
+        return ""
+
+
 class Panes:
     def __init__(self):
         self.built = []
@@ -147,8 +179,8 @@ class Panes:
         if activity.kind == SHELF:
             pane = LibraryPane(activity.path, start_at, parent)
         else:
-            kind = {DECK: FakeDeckPane, BOOK: FakeBookPane,
-                    VIDEO: FakeVideoPane}.get(activity.kind, FakePane)
+            kind = {DECK: FakeDeckPane, BOOK: FakeBookPane, VIDEO: FakeVideoPane,
+                    TERMINAL: FakeTerminalPane}.get(activity.kind, FakePane)
             pane = kind(activity, start_at, parent)
         self.built.append(pane)
         return pane
@@ -237,6 +269,14 @@ def with_a_page(with_no_wait):
 
 
 @pytest.fixture
+def with_sessions(with_no_wait):
+    with_no_wait.write_text(with_no_wait.read_text(encoding="utf-8") + SESSIONS_TOML,
+                            encoding="utf-8")
+    profile_module.reload_profile()
+    return with_no_wait
+
+
+@pytest.fixture
 def media(tmp_path):
     folder = tmp_path / "Media"
     for name in ("Books/a.epub", "Books/b.epub", "Videos/e1.mkv", "Videos/e2.mkv"):
@@ -280,6 +320,11 @@ def deck_timer(qapp, app_id, with_a_deck, recording_db):
 
 @pytest.fixture
 def page_timer(qapp, app_id, with_a_page, recording_db):
+    yield from a_view(recording_db)
+
+
+@pytest.fixture
+def sessions_timer(qapp, app_id, with_sessions, recording_db):
     yield from a_view(recording_db)
 
 
@@ -1539,6 +1584,11 @@ def press(view, key, modifiers=Qt.KeyboardModifier.NoModifier) -> bool:
     return view.eventFilter(view, QKeyEvent(QEvent.Type.KeyPress, key, modifiers))
 
 
+def release(view, key) -> bool:
+    return view.eventFilter(view, QKeyEvent(QEvent.Type.KeyRelease, key,
+                                            Qt.KeyboardModifier.NoModifier))
+
+
 class TestAPage:
     @pytest.fixture
     def browsing(self, page_timer):
@@ -1585,6 +1635,70 @@ class TestAPage:
         settled()
 
         assert told.states == ["page"]
+
+
+class TestSessions:
+    @pytest.fixture
+    def listing(self, sessions_timer):
+        enter_strict_break(sessions_timer)
+        send_key(sessions_timer, Qt.Key.Key_3)
+        return sessions_timer
+
+    @pytest.fixture
+    def attached(self, listing):
+        pane = showing_pane(listing)
+        pane.choosing = False
+        pane.changed.emit()
+        return listing
+
+    def test_its_key_lists_the_projects_of_the_program_it_names(self, listing):
+        assert showing_pane(listing).activity == BreakActivity(
+            "Agents", "session-program", TERMINAL)
+
+    def test_the_list_takes_the_break_s_keys(self, listing):
+        assert press(listing, Qt.Key.Key_Space) is True
+
+        assert showing_pane(listing).calls == ["toggle"]
+
+    def test_the_hook_hears_a_list_and_then_a_terminal(self, listing, settled):
+        listing.hook = told = Told()
+        listing._follow_the_state()
+        settled()
+        pane = showing_pane(listing)
+        pane.choosing = False
+        pane.changed.emit()
+        settled()
+
+        assert told.states == ["list", "terminal"]
+
+    @pytest.mark.parametrize("key", [Qt.Key.Key_Return, Qt.Key.Key_1, Qt.Key.Key_0,
+                                     Qt.Key.Key_Space, Qt.Key.Key_A, Qt.Key.Key_Backspace])
+    def test_every_other_key_reaches_the_session(self, attached, key):
+        assert press(attached, key) is False
+        assert showing_pane(attached).calls == []
+
+    def test_ctrl_0_goes_back_to_the_sessions_not_the_wall(self, attached):
+        assert press(attached, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier) is True
+
+        assert showing_pane(attached).calls == ["back"]
+        assert attached._showing.kind == TERMINAL
+
+    def test_a_tap_of_the_release_key_reaches_the_session(self, attached):
+        press(attached, RELEASE_KEY)
+        release(attached, RELEASE_KEY)
+
+        assert showing_pane(attached).calls == ["escape"]
+
+    def test_a_hold_of_it_reaches_only_the_break(self, attached):
+        press(attached, RELEASE_KEY)
+        attached._release_down_ms -= pomodoro_view.TAP_MS
+        release(attached, RELEASE_KEY)
+
+        assert showing_pane(attached).calls == []
+
+    def test_the_strip_names_the_keys_the_break_keeps(self, attached):
+        assert attached.media_surface.strip.text().endswith(
+            "CTRL 0 BACK TO THE SESSIONS · ESC TO THE SESSION · ESC 10s LEAVE THE BREAK")
 
 
 class TestEveryDeck:

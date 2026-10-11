@@ -18,6 +18,7 @@ from src.domain import media
 from src.domain.media import Place
 from src.gui.components import media_progress
 from src.gui.components.book_pane import BookPane
+from src.gui.components.terminal_pane import TerminalPane
 from src.gui.components.media_surface import (AGAIN_SAID, ANSWER, GOOD_SAID, QUESTION,
                                               UNDONE, DeckPane, DocumentPane,
                                               LibraryPane, MediaSurface, MpvScreen,
@@ -392,6 +393,126 @@ class TestOpeningAPage:
         pane = PagePane()
 
         assert pane.view is None and "COULD NOT OPEN" in failure_of(pane)
+
+
+SESSION_PROGRAM = """#!/bin/sh
+case "$1" in
+  --list) printf 'project\t/here\tHere\nproject\t/elsewhere\tElsewhere\n'
+          printf 'session\t/elsewhere\tclaude-box\t1\t1\tFix it\nproject\t/fails\tFails\n' ;;
+  --open) [ "$2" = /fails ] && { echo boom; exit 3; }
+          printf 'opened %s %s\n' "$2" "$3"; exec cat -v ;;
+esac
+"""
+
+
+def until(qapp, condition, secs=10):
+    deadline = time.monotonic() + secs
+    while time.monotonic() < deadline and not condition():
+        qapp.processEvents()
+        time.sleep(0.005)
+    return condition()
+
+
+def screen_of(qapp, pane) -> str:
+    got = []
+    pane.view.page().runJavaScript(
+        "document.querySelector('.xterm-rows')?.innerText ?? ''", got.append)
+    until(qapp, lambda: got)
+    return got[0] if got else ""
+
+
+def rows_of(pane) -> list:
+    return [(row.text(0), row.text(1)) for row in pane._rows]
+
+
+@pytest.fixture
+def sessions_pane(qapp, tmp_path, settled):
+    program = tmp_path / "sessions"
+    program.write_text(SESSION_PROGRAM)
+    program.chmod(0o755)
+    built = []
+
+    def _open(command=str(program)):
+        pane = TerminalPane(command)
+        pane.resize(900, 500)
+        pane.show()
+        built.append(pane)
+        settled()
+        return pane
+
+    yield _open
+    for pane in built:
+        pane.shutdown()
+
+
+def choose(pane, label):
+    pane._mark([row.text(0) for row in pane._rows].index(label))
+    pane.toggle()
+
+
+class TestSessionsInATerminal:
+    def test_each_project_says_how_many_sessions_it_has(self, sessions_pane):
+        pane = sessions_pane()
+
+        assert rows_of(pane) == [("Here", ""), ("Elsewhere", "1 SESSION"), ("Fails", "")]
+
+    def test_a_project_with_sessions_lists_them_under_a_new_chat(self, sessions_pane):
+        pane = sessions_pane()
+
+        choose(pane, "Elsewhere")
+
+        assert [name for name, _ in rows_of(pane)] == ["NEW CHAT", "Fix it"]
+
+    def test_a_project_without_one_starts_a_new_chat_at_once(self, qapp, sessions_pane):
+        pane = sessions_pane()
+
+        choose(pane, "Here")
+
+        assert until(qapp, lambda: "opened /here" in screen_of(qapp, pane))
+
+    def test_a_session_is_attached_by_its_name(self, qapp, sessions_pane):
+        pane = sessions_pane()
+        choose(pane, "Elsewhere")
+
+        choose(pane, "Fix it")
+
+        assert until(qapp, lambda: "opened /elsewhere claude-box" in screen_of(qapp, pane))
+
+    def test_what_is_typed_and_an_escape_reach_the_session(self, qapp, sessions_pane):
+        pane = sessions_pane()
+        choose(pane, "Here")
+        until(qapp, lambda: pane.pty is not None)
+
+        pane.escape()
+        pane.bridge.send("said\r")
+
+        assert until(qapp, lambda: "^[said" in screen_of(qapp, pane))
+
+    def test_back_detaches_and_lists_the_project_again(self, qapp, sessions_pane, settled):
+        pane = sessions_pane()
+        choose(pane, "Elsewhere")
+        choose(pane, "Fix it")
+        until(qapp, lambda: pane.pty is not None)
+        process = pane.pty.process
+
+        assert pane.back() is True
+        settled()
+
+        assert process.poll() is not None
+        assert [name for name, _ in rows_of(pane)] == ["NEW CHAT", "Fix it"]
+
+    def test_a_session_that_fails_leaves_its_last_words(self, qapp, sessions_pane):
+        pane = sessions_pane()
+
+        choose(pane, "Fails")
+
+        assert until(qapp, lambda: "boom" in screen_of(qapp, pane) and pane.pty is None)
+        assert pane.choosing is False
+
+    def test_a_program_that_cannot_list_says_so(self, sessions_pane):
+        pane = sessions_pane("/nonexistent/sessions")
+
+        assert failure_of(pane).startswith("COULD NOT LIST THE SESSIONS")
 
 
 class TestPlayingAVideo:

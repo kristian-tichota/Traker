@@ -54,6 +54,8 @@ UNDO_KEY_NAME = "BACKSPACE"
 PAGE_BACK_KEY = Qt.Key.Key_0
 PAGE_BACK_KEY_NAME = "CTRL 0"
 
+TAP_MS = 400
+
 HINT_KEYS_NAME = "LETTERS"
 
 LONG_BREAK_EVENT = "long_break_started"
@@ -965,6 +967,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._hold_timer = QTimer(self)
         self._hold_timer.timeout.connect(self._hold_tick)
         self._hold_started_ms = 0
+        self._release_down_ms = 0
         self._hold_for = None
         self._paid_stop_hold = False
 
@@ -1684,6 +1687,19 @@ class PomodoroView(ShutdownMixin, QWidget):
             ]
         elif kind == break_activities.PAGE:
             hints = [(PAGE_BACK_KEY_NAME, "back to Traker")]
+        elif kind == break_activities.TERMINAL and getattr(pane, "choosing", True):
+            hints = [
+                ("\u2191 \u2193", "choose"),
+                ("SPACE \u2192", "open"),
+                (HINT_KEYS_NAME, "open by its hint"),
+            ]
+            if getattr(pane, "project", None) is not None:
+                hints.append((f"{UNDO_KEY_NAME} \u2190", "the projects"))
+            hints.append(("0", "back to Traker" if getattr(pane, "project", None) is None
+                          else "back to the projects"))
+        elif kind == break_activities.TERMINAL:
+            hints = [(PAGE_BACK_KEY_NAME, "back to the sessions"),
+                     (RELEASE_KEY_NAME, "to the session")]
         elif kind == break_activities.BOOK:
             ahead, behind = (("\u2190", "\u2192") if getattr(pane, "rtl", False)
                              else ("\u2192", "\u2190"))
@@ -1704,9 +1720,9 @@ class PomodoroView(ShutdownMixin, QWidget):
             if shown:
                 hints.append(("PGUP PGDN", f"subtitles: {shown}"))
             hints.append(zero)
-        if len(self._offers) > 1 and kind != break_activities.PAGE:
+        if len(self._offers) > 1 and not self._page_takes_keys():
             hints.append((f"1-{min(len(self._offers), 9)}", "another offer"))
-        if self.screen_power.available and kind != break_activities.PAGE:
+        if self.screen_power.available and not self._page_takes_keys():
             hints.append((self._screens_off_name, "screens off"))
         if self.prompts_for_focus():
             hints.append((RELEASE_KEY_NAME,
@@ -1852,7 +1868,8 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _playing(self) -> tuple:
         """Return what is showing and where it has reached: (name, place, unit)."""
         if (self._showing is None or self.media_surface is None
-                or self._showing.kind in (break_activities.SHELF, break_activities.PAGE)):
+                or self._showing.kind in (break_activities.SHELF, break_activities.PAGE,
+                                          break_activities.TERMINAL)):
             return None
         place = self.media_surface.place()
         return ((self.media_surface.title(),) + place) if place else None
@@ -1909,9 +1926,11 @@ class PomodoroView(ShutdownMixin, QWidget):
         key, pressed = event.key(), event.type() == QEvent.Type.KeyPress
         if key == RELEASE_KEY and self.holds_the_screens():
             if pressed:
+                self._release_down_ms = QDateTime.currentMSecsSinceEpoch()
                 self.begin_hold()
             else:
                 self.cancel_hold()
+                self._pass_a_tap_on()
             return True
         if not pressed:
             return super().eventFilter(watched, event)
@@ -1945,8 +1964,20 @@ class PomodoroView(ShutdownMixin, QWidget):
         return super().eventFilter(watched, event)
 
     def _page_takes_keys(self) -> bool:
-        """Report whether a web page shows, which every key reaches but the break's own."""
-        return self._showing is not None and self._showing.kind == break_activities.PAGE
+        """Report whether a web page or a terminal shows, which every key reaches but the break's own."""
+        if self._showing is None:
+            return False
+        if self._showing.kind == break_activities.TERMINAL:
+            return not getattr(self.media_surface.pane, "choosing", True)
+        return self._showing.kind == break_activities.PAGE
+
+    def _pass_a_tap_on(self):
+        """Hand a tap of the release key to a terminal that takes the keys."""
+        tapped = QDateTime.currentMSecsSinceEpoch() - self._release_down_ms < TAP_MS
+        if tapped and self._page_takes_keys():
+            escape = getattr(self.media_surface.pane, "escape", None)
+            if callable(escape):
+                escape()
 
     def _offer_index(self, key):
         """Return the index of the offer a key opens, or None for a key left alone."""
@@ -2138,7 +2169,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         where = self.media_surface.stop()
         path = self._showing.path
         if self._showing.kind not in (break_activities.DECK, break_activities.SHELF,
-                                      break_activities.PAGE):
+                                      break_activities.PAGE, break_activities.TERMINAL):
             length = where.of or rest_positions.place_for(path, self._positions_path).of
             rest_positions.remember(path, where.at, self._positions_path, length)
         self._showing = None

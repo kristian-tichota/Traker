@@ -42,20 +42,23 @@ queue is `rest-queue.m3u`, one path per line, so any process can append to it; `
 and prunes it. Positions are kept in `rest-positions.json`, so a film or a book spans several breaks.
 
 A film needs the `video` extra and the system `libmpv` (`media-video/mpv` with `USE="libmpv"`), which
-no lockfile carries; an EPUB, an Anki deck and a web page need QtWebEngine, the `anki` extra. Without
-them the screen displays `COULD NOT PLAY`, `COULD NOT READ`, `COULD NOT REVIEW` or `COULD NOT OPEN`,
-and the break still holds.
+no lockfile carries; an EPUB, an Anki deck, a web page and a terminal need QtWebEngine, the `anki`
+extra. Without them the screen displays `COULD NOT PLAY`, `COULD NOT READ`, `COULD NOT REVIEW` or
+`COULD NOT OPEN`, and the break still holds.
 
 A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`; a `deck` of `*` lists
 every deck first. Anki MUST be running, its window MAY stay minimized, and its timebox MUST be 0.
 
 A `url` opens as a web page that takes every key except `Esc` and `Ctrl+0`, which puts the wall back.
-It stays loaded until the walls go, and Traker writes none of its storage to disk.
+It stays loaded until the walls go, and Traker writes none of its storage to disk. A `sessions`
+program runs its sessions in a terminal: the pane is xterm.js from `assets/xterm/` over a
+pseudo-terminal that `setsid --ctty` (util-linux) makes the program's own, and a tap of `Esc` shorter
+than `TAP_MS` reaches the session. The program's two calls are in the generated profile.
 
 ## Assistive Input Integration
 
 `[hooks] state` is a shell command run each time what the break shows changes, with `{state}` replaced
-by `focus`, `break`, `list`, `video`, `document`, `book`, `deck` or `page`. While an activity is open,
+by `focus`, `break`, `list`, `video`, `document`, `book`, `deck`, `page` or `terminal`. While an activity is open,
 every other wall fades to a grey face with the time left by the minute, what is showing and its keys.
 Each key names the libre-dictum inputs that send it, read from that program's display socket at
 `LIBRE_DICTUM_HUD_SOCKET` or `$XDG_RUNTIME_DIR/libre-dictum/hud.sock`; another protocol names none.
@@ -63,7 +66,6 @@ Each key names the libre-dictum inputs that send it, read from that program's di
 ## Session verification
 
 `scripts/check_desktop_integration.py` listens for a desktop switch; `--screens`, `--release`,
-`--media`, `--idle` and `--notifications` report the outputs, clear what a crashed break left
-behind, and check the player, the idle time and Do Not Disturb. `journalctl --user -b -g 'traker:'`
-prints one `holding '<caption>' wall=… everyDesktop=…` line per window. The script MUST be re-run
-after a Plasma upgrade. Mechanism: `docs/architecture/invariants.md` and `placing-the-window.md`.
+`--media`, `--idle` and `--notifications` check the outputs, a crashed break, the player, the idle
+time and Do Not Disturb. The script MUST be re-run after a Plasma upgrade. Mechanism:
+`docs/architecture/invariants.md` and `placing-the-window.md`.

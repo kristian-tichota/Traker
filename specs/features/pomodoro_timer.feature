@@ -731,6 +731,29 @@ Feature: Focus timer
       When I press that offer's key and the page does not load
       Then that screen says it cannot open the url, and the break goes on
 
+  Rule: A held break runs a session of a program I named
+
+    Scenario: The projects come first
+      Given my profile names an activity with a session program
+      When I press that offer's key
+      Then the wall lists the program's projects by their hints, each with how many sessions it has
+      And a project with sessions lists them under a new chat, latest first, each with its last activity
+      And a project with none starts a new chat at once
+
+    Scenario: A session takes the keyboard
+      When I open a session or a new chat
+      Then the wall runs it in a terminal with the keyboard focus
+      And every key reaches it except the release key and CTRL+0, which goes back to the sessions
+      And a tap of the release key reaches the session, while a hold still leaves the break
+
+    Scenario: Leaving a session does not end it
+      When I go back to the sessions, open another offer, or the walls go
+      Then the terminal detaches, the session goes on running, and another client keeps it
+
+    Scenario: A session that fails
+      When the program exits with a failure
+      Then its last output stays on the wall until CTRL+0
+
   Rule: What to open on a break is queued, not configured
 
     Scenario: Queuing something
@@ -942,7 +965,7 @@ Feature: Focus timer
       Given my profile names a hook command
       When a break begins, shows a document, and gives the screens back
       Then the command runs with "break", "document" and "focus", in that order
-      And a list of decks or of a folder runs it with "list", and what is opened from it with its kind
+      And a list of decks, of a folder or of sessions runs it with "list", and what is opened from it with its kind
 
     Scenario: A burst of changes is one change
       When one offer replaces another

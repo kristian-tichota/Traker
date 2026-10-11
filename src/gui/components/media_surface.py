@@ -5,21 +5,23 @@ import re
 from PyQt6.QtCore import QPointF, QThreadPool, QUrl, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QOpenGLContext, QPalette
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtWidgets import (QAbstractItemView, QFrame, QHeaderView, QLabel,
+from PyQt6.QtWidgets import (QFrame, QHeaderView, QLabel,
                              QStackedWidget, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
 from src.config import PALETTE
 from src.desktop import anki, rest_positions, rest_queue
-from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, contents,
-                                    kind_of, library_for, readout_of)
-from src.domain.hints import LETTERS, labels
+from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, TERMINAL,
+                                    contents, kind_of, library_for, readout_of)
+from src.domain.hints import LETTERS
 from src.domain.media import (UNKNOWN, Place, as_left, as_past, finished, how_far,
                               next_subtitle, subtitle_shown, subtitles)
 from src.gui.components.book_pane import BookPane
-from src.gui.components.break_pane import BreakPane, WebPane
+from src.gui.components.break_pane import (RIGHT, BreakPane, MarkedList, WebPane, ink,
+                                          key_list, named_list)
 from src.gui.components.key_card import KeyCard
 from src.gui.components.media_progress import MediaProgress
+from src.gui.components.terminal_pane import TerminalPane
 from src.gui.icons import ASSETS_DIR
 from src.gui.workers import run_in_background
 from src.profile import UserProfile
@@ -71,12 +73,7 @@ VERDICT_CSS = f"""
 
 DECK_COLUMNS = ("DECK", "NEW", "LEARN", "DUE", "")
 COUNT_COLOURS = ('blue', 'red', 'green')
-FOLDER_COLUMNS = ("", "")
-LIST_INDENT_PX = 28
-LIST_FONT_PX = 20
 PAGE_ROWS = 10
-RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-UNMARKED = Qt.ItemDataRole.UserRole
 
 
 class MpvScreen(QOpenGLWidget):
@@ -442,35 +439,9 @@ def _first_marked(decks, left="") -> int:
     return _next_owing(decks, -1)
 
 
-def _chooser(parent, columns) -> QTreeWidget:
-    """Build a list driven by keys alone, in Solarized light, each row's hint in front."""
-    tree = QTreeWidget(parent)
-    tree.setColumnCount(len(columns) + 1)
-    tree.setHeaderLabels((*columns, ""))
-    tree.header().moveSection(len(columns), 0)
-    tree.header().setSectionResizeMode(len(columns), QHeaderView.ResizeMode.ResizeToContents)
-    tree.setRootIsDecorated(False)
-    tree.setItemsExpandable(False)
-    tree.setIndentation(LIST_INDENT_PX)
-    tree.setUniformRowHeights(True)
-    tree.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-    tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-    tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    tree.setFrameShape(QFrame.Shape.NoFrame)
-    tree.setStyleSheet(
-        f"QTreeWidget {{ background-color: {PALETTE['base3']}; border: none;"
-        f" font-family: 'Fira Code'; font-size: {LIST_FONT_PX}px; padding: 20px; }}"
-        f" QTreeWidget::item {{ padding: 4px 16px; }}"
-        f" QHeaderView::section {{ background-color: {PALETTE['base3']};"
-        f" color: {PALETTE['base1']}; border: none; font-family: 'Fira Code';"
-        f" font-size: 11px; letter-spacing: 2px; padding: 4px 16px; }}")
-    return tree
-
-
 def _deck_list(parent) -> QTreeWidget:
     """Build the list a deck is chosen from, in the columns of Anki's own."""
-    tree = _chooser(parent, DECK_COLUMNS)
+    tree = key_list(parent, DECK_COLUMNS)
     header = tree.header()
     header.setStretchLastSection(True)
     for column in range(len(DECK_COLUMNS) - 1):
@@ -480,26 +451,9 @@ def _deck_list(parent) -> QTreeWidget:
     return tree
 
 
-def _folder_list(parent) -> QTreeWidget:
-    """Build the list a file is chosen from: each name, and how far into it."""
-    tree = _chooser(parent, FOLDER_COLUMNS)
-    header = tree.header()
-    header.setStretchLastSection(False)
-    header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-    header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-    tree.headerItem().setTextAlignment(1, RIGHT)
-    return tree
-
-
 def _name_colour(deck) -> QColor:
     """Return the colour of a deck's name: faint when it owes nothing."""
     return QColor(PALETTE['base00' if deck.owed else 'base1'])
-
-
-def _ink(row, colour):
-    """Colour a row's name, kept for when the row is no longer marked."""
-    row.setForeground(0, colour)
-    row.setData(0, UNMARKED, colour)
 
 
 def _deck_rows(tree, decks) -> list:
@@ -510,7 +464,7 @@ def _deck_rows(tree, decks) -> list:
         counts = (deck.new, deck.learning, deck.review)
         row = QTreeWidgetItem([deck.name if parent is None else deck.leaf,
                                *map(str, counts)])
-        _ink(row, _name_colour(deck))
+        ink(row, _name_colour(deck))
         for column, (count, colour) in enumerate(zip(counts, COUNT_COLOURS), start=1):
             row.setTextAlignment(column, RIGHT)
             row.setForeground(column, QColor(PALETTE[colour if count else 'base1']))
@@ -524,83 +478,7 @@ def _deck_rows(tree, decks) -> list:
     return rows
 
 
-class _MarkedList:
-    """A pane choosing one row of its chooser, by the mark or by a hint."""
-
-    marked = 0
-    typed = ""
-    letters = LETTERS
-    _rows = ()
-    _labels = ()
-
-    def set_letters(self, letters):
-        """Build the hints from letters, the rows listed included."""
-        self.letters = str(letters)
-        self._label()
-
-    def hint(self, letter) -> bool:
-        """Open the row whose hint the letters typed spell, reporting whether letter was taken."""
-        typed = self.typed + letter
-        if not any(label.startswith(typed) for label in self._labels):
-            typed = letter
-        if not any(label.startswith(typed) for label in self._labels):
-            self._narrow("")
-            return False
-        if typed not in self._labels:
-            self._narrow(typed)
-            return True
-        self._narrow("")
-        self._mark(self._labels.index(typed))
-        self.toggle()
-        return True
-
-    def forget_hint(self) -> bool:
-        """Drop the letters typed towards a hint, reporting whether there were any."""
-        if not self.typed:
-            return False
-        self._narrow("")
-        return True
-
-    def _label(self):
-        """Give every row listed its hint, in list order."""
-        self._labels = labels(len(self._rows), self.letters)
-        self._narrow("")
-
-    def _narrow(self, typed):
-        """Show the hints that begin with typed, and blank the rest."""
-        self.typed = typed
-        if not self._rows:
-            return
-        column = self.chooser.columnCount() - 1
-        for index, row in enumerate(self._rows):
-            label = self._labels[index] if index < len(self._labels) else ""
-            row.setText(column, label if label.startswith(typed) else "")
-            row.setForeground(column, QColor(PALETTE['orange']))
-
-    def _mark(self, index):
-        """Mark the row at index, within the list, and keep it in view."""
-        if not self._rows:
-            return
-        if self.typed:
-            self._narrow("")
-        self._paint_row(False)
-        self.marked = max(0, min(len(self._rows) - 1, int(index)))
-        self._paint_row(True)
-        self.chooser.scrollToItem(self._rows[self.marked],
-                                  QAbstractItemView.ScrollHint.PositionAtCenter)
-
-    def _paint_row(self, marked):
-        """Paint the marked row as marked, or as it reads once it is not."""
-        if not 0 <= self.marked < len(self._rows):
-            return
-        row = self._rows[self.marked]
-        row.setForeground(0, QColor(PALETTE['base02']) if marked else row.data(0, UNMARKED))
-        for column in range(self.chooser.columnCount()):
-            row.setData(column, Qt.ItemDataRole.BackgroundRole,
-                        QColor(PALETTE['base2']) if marked else None)
-
-
-class DeckPane(WebPane, _MarkedList):
+class DeckPane(WebPane, MarkedList):
     """One Anki deck, a card at a time, chosen and scheduled by Anki's reviewer."""
 
     changed = pyqtSignal()
@@ -869,7 +747,7 @@ class PagePane(WebPane):
         self._show_message(f"COULD NOT OPEN\n{self.url}")
 
 
-class LibraryPane(BreakPane, _MarkedList):
+class LibraryPane(BreakPane, MarkedList):
     """The media folder as a list, a folder at a time, to open a file from."""
 
     chosen = pyqtSignal(str)
@@ -881,7 +759,7 @@ class LibraryPane(BreakPane, _MarkedList):
         self.positions = positions or rest_positions.beside(rest_queue.path_for(profile))
         self.folder = self.root
         self.entries = []
-        self.chooser = _folder_list(self)
+        self.chooser = named_list(self)
         self.layout().addWidget(self.chooser)
         if path:
             self.open(path, start_at)
@@ -944,7 +822,7 @@ class LibraryPane(BreakPane, _MarkedList):
         for entry in self.entries:
             said, ended = _how_far_into(entry, places)
             row = QTreeWidgetItem([entry.name + ("/" if entry.folder else ""), said])
-            _ink(row, _entry_colour(entry, ended))
+            ink(row, _entry_colour(entry, ended))
             row.setForeground(1, QColor(PALETTE['base1']))
             row.setTextAlignment(1, RIGHT)
             self.chooser.addTopLevelItem(row)
@@ -963,7 +841,7 @@ class LibraryPane(BreakPane, _MarkedList):
 
 
 PANES = {DOCUMENT: DocumentPane, DECK: DeckPane, BOOK: BookPane, SHELF: LibraryPane,
-         PAGE: PagePane}
+         PAGE: PagePane, TERMINAL: TerminalPane}
 
 
 def build_pane(activity, start_at=0, parent=None) -> QWidget:
@@ -1038,11 +916,11 @@ class MediaSurface(QWidget):
             pane.open(activity.path, start_at)
 
         self.activity = activity
-        self._dress(light=activity.kind in (BOOK, DECK, SHELF, PAGE))
+        self._dress(light=activity.kind in (BOOK, DECK, SHELF, PAGE, TERMINAL))
         self.stack.setCurrentWidget(pane)
         self.set_keys(key_hints)
         if self.progress is not None:
-            self.progress.setVisible(activity.kind not in (SHELF, PAGE))
+            self.progress.setVisible(activity.kind not in (SHELF, PAGE, TERMINAL))
             self.show_progress()
         return pane
 
@@ -1071,8 +949,11 @@ class MediaSurface(QWidget):
         self.update_display()
 
     def _under_a_page(self) -> bool:
-        """Report whether a web page fills the surface, leaving the keys to the strip."""
-        return self.activity is not None and self.activity.kind == PAGE
+        """Report whether a web page or a terminal fills the surface, leaving the keys to the strip."""
+        if self.activity is None:
+            return False
+        return self.activity.kind == PAGE or (self.activity.kind == TERMINAL
+                                              and not getattr(self.pane, "choosing", True))
 
     def stop(self):
         """Stop what is showing and return the place it reached."""

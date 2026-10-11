@@ -5,7 +5,8 @@ description = "Keyboard-centric health and productivity tracker: a PyQt6 client 
 readme = "README.md"
 requires-python = ">=3.13"
 license = "AGPL-3.0-or-later"
-license-files = ["LICENSE", "assets/icons/LICENSE", "assets/mathjax/LICENSE"]
+license-files = ["LICENSE", "assets/icons/LICENSE", "assets/mathjax/LICENSE",
+                 "assets/xterm/LICENSE"]
 keywords = ["health", "nutrition", "pomodoro", "vim", "pyqt6", "self-hosted"]
 authors = [{ name = "Kristian Tichota", email = "kristian.tichota@proton.me" }]
 
@@ -23,8 +24,9 @@ graphs = ["matplotlib==3.11.1", "numpy==2.5.2"]
 # The film a strict break can play. Needs system libmpv as well; see
 # docs/guides/enforcing-a-break.md.
 video = ["python-mpv==1.0.8"]
-# The deck a strict break can review, the EPUB it can read and the web page it can
-# open. A deck needs Anki with AnkiConnect running; see docs/guides/enforcing-a-break.md.
+# The deck a strict break can review, the EPUB it can read, the web page it can
+# open and the terminal it can run sessions in. A deck needs Anki with
+# AnkiConnect running; see docs/guides/enforcing-a-break.md.
 anki = ["PyQt6-WebEngine==6.11.0"]
 
 [project.urls]

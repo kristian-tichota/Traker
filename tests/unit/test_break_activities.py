@@ -3,7 +3,8 @@ import os
 import pytest
 
 from src.desktop import activities as break_activities
-from src.desktop.activities import BOOK, DECK, DOCUMENT, PAGE, SHELF, VIDEO, BreakActivity
+from src.desktop.activities import (BOOK, DECK, DOCUMENT, PAGE, SHELF, TERMINAL, VIDEO,
+                                    BreakActivity)
 from src.domain.media import Place
 
 pytestmark = pytest.mark.exact
@@ -42,10 +43,16 @@ class TestTheStandingEntries:
 
         assert read == [BreakActivity("Tutor", "http://127.0.0.1:9743/", PAGE)]
 
+    def test_a_session_program_is_opened_in_a_terminal(self):
+        read = break_activities.read([{"name": "Agents", "sessions": "desk --x"}])
+
+        assert read == [BreakActivity("Agents", "desk --x", TERMINAL)]
+
     @pytest.mark.parametrize("entry", [
         {"name": "R", "path": "/x/a.pdf", "deck": "Japanese"},
         {"name": "R", "path": "/x/a.pdf", "url": "http://x/"},
         {"name": "R", "deck": "Japanese", "url": "http://x/"},
+        {"name": "R", "url": "http://x/", "sessions": "desk"},
     ])
     def test_one_naming_more_than_one_thing_to_show_is_skipped(self, entry):
         assert break_activities.read([entry]) == []

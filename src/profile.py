@@ -292,8 +292,9 @@ hint_keys = "abcdefghijklmnopqrstuvwxyz"
 anki_url = "http://127.0.0.1:8765"
 
 # What a break may open on the screen it took: a PDF is read, an EPUB is read
-# as a book, anything else is played, a deck is reviewed in Anki, and a url is
-# opened as a web page. The queue
+# as a book, anything else is played, a deck is reviewed in Anki, a url is
+# opened as a web page, and sessions names a session program whose sessions
+# open in a terminal. The queue
 # is offered first, then these entries, then the library below, each only on
 # its key: the first on Enter, the rest on 1-9 in that order.
 #
@@ -311,6 +312,13 @@ anki_url = "http://127.0.0.1:8765"
 # it goes back to the list. A web page takes every key but ESC and CTRL+0,
 # which puts the wall back.
 #
+# A session program lists its projects with "<program> --list" and runs one
+# session with "<program> --open <project> [<session>]", a new one without a
+# session. Its projects list first, each with how many sessions it has; a
+# project with none starts a new chat at once. A session then takes every key
+# but ESC and CTRL+0, which goes back to the sessions; a tap of ESC reaches the
+# session, and leaving it detaches without ending it.
+#
 # [[strict_break.activities]]
 # name = "Reading"
 # path = "~/Documents/reading.pdf"
@@ -326,6 +334,10 @@ anki_url = "http://127.0.0.1:8765"
 # [[strict_break.activities]]
 # name = "Notes"
 # url = "http://127.0.0.1:8080/"
+#
+# [[strict_break.activities]]
+# name = "Sessions"
+# sessions = "session-program"
 
 # Where the queue of paths added with ":rest <path>" is kept. It is a plain
 # file, one path per line, m3u-shaped, so anything else may append to it.

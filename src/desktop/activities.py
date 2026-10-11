@@ -13,6 +13,7 @@ DOCUMENT = "document"
 BOOK = "book"
 DECK = "deck"
 PAGE = "page"
+TERMINAL = "terminal"
 SHELF = "shelf"
 ANY_DECK = "*"
 
@@ -25,7 +26,7 @@ SHELVED = (".epub", ".pdf", ".mkv", ".mp4", ".webm", ".avi", ".mov", ".m4v", ".w
 
 
 class BreakActivity(NamedTuple):
-    """One thing a break may show: a file, a deck or ANY_DECK, a web page, or a shelf."""
+    """One thing a break may show: a file, a deck or ANY_DECK, a web page, sessions or a shelf."""
 
     name: str
     path: str
@@ -179,21 +180,24 @@ def _one(entry, position):
     path = str(entry.get("path") or "").strip()
     deck = str(entry.get("deck") or "").strip()
     url = str(entry.get("url") or "").strip()
-    if sum(map(bool, (path, deck, url))) > 1:
-        log.warning("Break activity %r names more than one of a path, a deck and a url: "
-                    "skipped.", name)
+    program = str(entry.get("sessions") or "").strip()
+    if sum(map(bool, (path, deck, url, program))) > 1:
+        log.warning("Break activity %r names more than one of a path, a deck, a url and "
+                    "sessions: skipped.", name)
         return None
     if deck:
         return BreakActivity(name, deck, DECK)
     if url:
         return BreakActivity(name, url, PAGE)
+    if program:
+        return BreakActivity(name, program, TERMINAL)
     if not path:
         if entry.get("command") is not None or entry.get("app_id") is not None:
             log.warning("Break activity %r still names a command and an app "
                         "id; a break shows the file itself now. Replace both "
                         "with path = \"<the file>\": skipped.", name)
         else:
-            log.warning("Break activity %r has no path, deck or url: skipped.", name)
+            log.warning("Break activity %r has no path, deck, url or sessions: skipped.", name)
         return None
 
     return BreakActivity(name, os.path.expanduser(path), kind_of(path))
