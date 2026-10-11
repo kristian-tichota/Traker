@@ -30,19 +30,20 @@ QUIT_WAIT_SECS = 1.0
 PAGE_ROWS = 10
 ESCAPE = "\x1b"
 NEW_CHAT = "NEW CHAT"
-PROJECTS = "PROJECTS"
+SESSIONS = "SESSIONS"
 LISTING_FAILED = (OSError, ValueError, subprocess.SubprocessError)
 
 THEME = {
-    "background": PALETTE['base03'], "foreground": PALETTE['base0'],
-    "cursor": PALETTE['base1'], "selectionBackground": PALETTE['base02'],
-    "black": PALETTE['base02'], "brightBlack": PALETTE['base01'],
+    "background": PALETTE['base3'], "foreground": PALETTE['base00'],
+    "cursor": PALETTE['base01'], "cursorAccent": PALETTE['base3'],
+    "selectionBackground": PALETTE['base2'],
+    "black": PALETTE['base02'], "brightBlack": PALETTE['base03'],
     "red": PALETTE['red'], "brightRed": PALETTE['orange'],
-    "green": PALETTE['green'], "brightGreen": PALETTE['green'],
-    "yellow": PALETTE['yellow'], "brightYellow": PALETTE['yellow'],
-    "blue": PALETTE['blue'], "brightBlue": PALETTE['blue'],
+    "green": PALETTE['green'], "brightGreen": PALETTE['base01'],
+    "yellow": PALETTE['yellow'], "brightYellow": PALETTE['base00'],
+    "blue": PALETTE['blue'], "brightBlue": PALETTE['base0'],
     "magenta": PALETTE['magenta'], "brightMagenta": PALETTE['violet'],
-    "cyan": PALETTE['cyan'], "brightCyan": PALETTE['cyan'],
+    "cyan": PALETTE['cyan'], "brightCyan": PALETTE['base1'],
     "white": PALETTE['base2'], "brightWhite": PALETTE['base3'],
 }
 
@@ -169,7 +170,7 @@ class Bridge(QObject):
 
 
 class TerminalPane(WebPane, MarkedList):
-    """The projects a session program lists, a project's sessions, and one session running."""
+    """A new chat per project and every session in one list, and one session running."""
 
     changed = pyqtSignal()
 
@@ -204,37 +205,29 @@ class TerminalPane(WebPane, MarkedList):
             self.open(command, start_at)
 
     def open(self, command, start_at=0):
-        """List the projects command offers, with the sessions each has."""
+        """List a new chat for each project command offers, then every session."""
         self.command = str(command)
         self.project = None
         self._list()
 
     def toggle(self):
-        """Open the marked project, session or new chat."""
+        """Open the marked new chat or session."""
         if not self.choosing or self.busy or not self.listing:
             return
-        chosen = self.listing[self.marked]
-        if isinstance(chosen, sessions.Project):
-            self.project = chosen.path
-            if chosen.sessions:
-                self._render()
-                self.changed.emit()
-            else:
-                self._attach()
-        else:
-            self._attach(chosen.name if chosen is not None else "")
+        project, session = self.listing[self.marked]
+        self.project = project.path
+        self._attach(session.name if session is not None else "")
 
     def step(self, direction):
-        """Open the marked row going right, or go back to the projects going left."""
+        """Open the marked row going right, or drop a half-typed hint going left."""
         if int(direction) > 0:
             self.toggle()
         else:
             self.undo()
 
     def undo(self):
-        """Drop a half-typed hint, or leave a project's sessions for the projects."""
-        if not self.forget_hint() and self.choosing and self.project is not None:
-            self._to_the_projects()
+        """Drop a half-typed hint."""
+        self.forget_hint()
 
     def nudge(self, direction):
         """Mark the row above or below."""
@@ -247,25 +240,20 @@ class TerminalPane(WebPane, MarkedList):
             self._mark(self.marked + int(direction) * PAGE_ROWS)
 
     def back(self) -> bool:
-        """Leave a session or a project for the list above, reporting whether it did."""
-        if self.chooser is None:
+        """Leave a session for the list, reporting whether it did."""
+        if self.chooser is None or self.choosing:
             return False
-        if not self.choosing:
-            self._list()
-            return True
-        if self.project is not None:
-            self._to_the_projects()
-            return True
-        return False
+        self._list()
+        return True
 
     def escape(self):
         """Send one Escape to the session shown."""
         self._type(ESCAPE)
 
     def title(self) -> str:
-        """Return the project chosen, or nothing while the projects are listed."""
+        """Return the project of the session shown, or nothing while the list shows."""
         project = self._project()
-        return project.label if project is not None else ""
+        return project.label if project is not None and not self.choosing else ""
 
     def stop(self):
         """Detach from the session shown, which goes on running, and forget the listing."""
@@ -297,30 +285,28 @@ class TerminalPane(WebPane, MarkedList):
             self._show_message(f"COULD NOT LIST THE SESSIONS\n{error}")
             return
         self.projects = projects
-        self._render(self._session)
+        self._render((self.project, self._session))
 
     def _crashed(self, failure):
         self.busy = False
         self._show_message(f"COULD NOT LIST THE SESSIONS\n{failure[0]}")
 
-    def _render(self, mark=""):
-        """List the projects, or the chosen project's sessions under a new chat."""
-        project = self._project()
-        self.project = project.path if project is not None else None
+    def _render(self, mark=None):
+        """List a new chat per project, then every session, latest first, marking mark."""
         now = int(time.time())
-        if project is None:
-            title, self.listing = PROJECTS, list(self.projects)
-            rows = [_row(each.label, _how_many(each), 'base00' if each.sessions else 'base1',
-                         'green') for each in self.listing]
-            marks = [each.path for each in self.listing]
-        else:
-            title, self.listing = project.label, [None, *project.sessions]
-            rows = [_row(NEW_CHAT, "", 'blue')]
-            rows += [_row(each.title or each.name, sessions.described(each, now), 'base00')
-                     for each in project.sessions]
-            marks = ["", *(each.name for each in project.sessions)]
+        chats = [(project, None) for project in self.projects]
+        held = sorted(((project, session) for project in self.projects
+                       for session in project.sessions),
+                      key=lambda pair: -pair[1].active_at)
+        self.listing = chats + held
+        rows = [_row(f"{NEW_CHAT} · {project.label}", "", 'blue') for project, _ in chats]
+        rows += [_row(session.title or session.name,
+                      f"{project.label} · {sessions.described(session, now)}", 'base00')
+                 for project, session in held]
+        marks = [(project.path, session.name if session is not None else "")
+                 for project, session in self.listing]
         self.chooser.clear()
-        self.chooser.headerItem().setText(0, title)
+        self.chooser.headerItem().setText(0, SESSIONS)
         for row in rows:
             self.chooser.addTopLevelItem(row)
         self._rows = rows
@@ -331,11 +317,6 @@ class TerminalPane(WebPane, MarkedList):
             self._clear_message()
         else:
             self._show_message("NO PROJECTS LISTED", 'base01')
-
-    def _to_the_projects(self):
-        left, self.project = self.project, None
-        self._render(left)
-        self.changed.emit()
 
     def _project(self):
         return next((each for each in self.projects if each.path == self.project), None)
@@ -404,11 +385,6 @@ def _attempt(generation, command) -> tuple:
         return generation, [], error
 
 
-def _how_many(project) -> str:
-    count = len(project.sessions)
-    return f"{count} SESSION{'' if count == 1 else 'S'}" if count else ""
-
-
 def _row(name, note, colour, note_colour='base1') -> QTreeWidgetItem:
     """Build one row: its name, and its note to the right."""
     row = QTreeWidgetItem([name, note])
@@ -419,7 +395,7 @@ def _row(name, note, colour, note_colour='base1') -> QTreeWidgetItem:
 
 
 def _environment() -> dict:
-    """Return this process's environment for a terminal of xterm's kind, outside any tmux."""
+    """Return this process's environment for a light xterm-like terminal, outside any tmux."""
     kept = {name: value for name, value in os.environ.items()
             if name not in ("TMUX", "TMUX_PANE")}
-    return kept | {"TERM": "xterm-256color", "COLORTERM": "truecolor"}
+    return kept | {"TERM": "xterm-256color", "COLORTERM": "truecolor", "COLORFGBG": "11;15"}

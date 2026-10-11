@@ -450,29 +450,25 @@ def choose(pane, label):
     pane.toggle()
 
 
+LISTED = ["NEW CHAT · Here", "NEW CHAT · Elsewhere", "NEW CHAT · Fails", "Fix it"]
+
+
 class TestSessionsInATerminal:
-    def test_each_project_says_how_many_sessions_it_has(self, sessions_pane):
+    def test_one_list_holds_a_new_chat_per_project_then_every_session(self, sessions_pane):
         pane = sessions_pane()
 
-        assert rows_of(pane) == [("Here", ""), ("Elsewhere", "1 SESSION"), ("Fails", "")]
+        assert [name for name, _ in rows_of(pane)] == LISTED
+        assert rows_of(pane)[-1][1].startswith("Elsewhere · ATTACHED · ")
 
-    def test_a_project_with_sessions_lists_them_under_a_new_chat(self, sessions_pane):
+    def test_a_new_chat_opens_in_its_project(self, qapp, sessions_pane):
         pane = sessions_pane()
 
-        choose(pane, "Elsewhere")
-
-        assert [name for name, _ in rows_of(pane)] == ["NEW CHAT", "Fix it"]
-
-    def test_a_project_without_one_starts_a_new_chat_at_once(self, qapp, sessions_pane):
-        pane = sessions_pane()
-
-        choose(pane, "Here")
+        choose(pane, "NEW CHAT · Here")
 
         assert until(qapp, lambda: "opened /here" in screen_of(qapp, pane))
 
     def test_a_session_is_attached_by_its_name(self, qapp, sessions_pane):
         pane = sessions_pane()
-        choose(pane, "Elsewhere")
 
         choose(pane, "Fix it")
 
@@ -480,7 +476,7 @@ class TestSessionsInATerminal:
 
     def test_what_is_typed_and_an_escape_reach_the_session(self, qapp, sessions_pane):
         pane = sessions_pane()
-        choose(pane, "Here")
+        choose(pane, "NEW CHAT · Here")
         until(qapp, lambda: pane.pty is not None)
 
         pane.escape()
@@ -488,9 +484,8 @@ class TestSessionsInATerminal:
 
         assert until(qapp, lambda: "^[said" in screen_of(qapp, pane))
 
-    def test_back_detaches_and_lists_the_project_again(self, qapp, sessions_pane, settled):
+    def test_back_detaches_and_lists_everything_again(self, qapp, sessions_pane, settled):
         pane = sessions_pane()
-        choose(pane, "Elsewhere")
         choose(pane, "Fix it")
         until(qapp, lambda: pane.pty is not None)
         process = pane.pty.process
@@ -499,12 +494,14 @@ class TestSessionsInATerminal:
         settled()
 
         assert process.poll() is not None
-        assert [name for name, _ in rows_of(pane)] == ["NEW CHAT", "Fix it"]
+        assert [name for name, _ in rows_of(pane)] == LISTED
+        assert pane.marked == LISTED.index("Fix it")
+        assert pane.back() is False
 
     def test_a_session_that_fails_leaves_its_last_words(self, qapp, sessions_pane):
         pane = sessions_pane()
 
-        choose(pane, "Fails")
+        choose(pane, "NEW CHAT · Fails")
 
         assert until(qapp, lambda: "boom" in screen_of(qapp, pane) and pane.pty is None)
         assert pane.choosing is False

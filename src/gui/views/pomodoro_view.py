@@ -1697,11 +1697,8 @@ class PomodoroView(ShutdownMixin, QWidget):
                 ("\u2191 \u2193", "choose"),
                 ("SPACE \u2192", "open"),
                 (HINT_KEYS_NAME, "open by its hint"),
+                ("0", BACK_TO_TRAKER),
             ]
-            if getattr(pane, "project", None) is not None:
-                hints.append((f"{UNDO_KEY_NAME} \u2190", "the projects"))
-            hints.append(("0", BACK_TO_TRAKER if getattr(pane, "project", None) is None
-                          else "back to the projects"))
         elif kind == break_activities.TERMINAL:
             hints = [(PAGE_BACK_KEY_NAME, "back to the sessions"),
                      (RELEASE_KEY_NAME, "to the session")]

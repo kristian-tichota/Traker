@@ -733,16 +733,15 @@ Feature: Focus timer
 
   Rule: A held break runs a session of a program I named
 
-    Scenario: The projects come first
+    Scenario: One list holds every new chat and session
       Given my profile names an activity with a session program
       When I press that offer's key
-      Then the wall lists the program's projects by their hints, each with how many sessions it has
-      And a project with sessions lists them under a new chat, latest first, each with its last activity
-      And a project with none starts a new chat at once
+      Then the wall lists a new chat per project, then every session, latest first, each with its project and last activity
+      And every row opens by its hint, two letters where one does not suffice
 
     Scenario: A session takes the keyboard
       When I open a session or a new chat
-      Then the wall runs it in a terminal with the keyboard focus
+      Then the wall runs it in a Solarized light terminal with the keyboard focus
       And every key reaches it except the release key, CTRL+HOME and CTRL+0, which goes back to the sessions
       And a tap of the release key reaches the session, while a hold still leaves the break
 
