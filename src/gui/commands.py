@@ -22,6 +22,7 @@ MEALS = tuple(MEAL_SHORTCUTS.values())
 HIDE, SHOW, MOVE, RESET, TOGGLE = "hide", "show", "move", "reset", "toggle"
 QUEUE_ADD, QUEUE_REMOVE, QUEUE_CLEAR = "add", "rm", "clear"
 BREAK_LONG, BREAK_CANCEL = "long", "cancel"
+SOUND_ON, SOUND_OFF = "on", "off"
 
 MEAL_SET = "meal_set"
 BEVERAGE_SET = "beverage_set"
@@ -725,6 +726,17 @@ _COMMAND_LIST = [
         ),
         confirm=lambda payload: " Next break changed.",
         window_effect="queue_long_break",
+    ),
+    Command(
+        name="sound",
+        params=(
+            Param("what", "[on/off/scene/volume %]", _as_written,
+                  "on, off, a scene or a volume", default=lambda: "",
+                  choices=(SOUND_ON, SOUND_OFF)),
+        ),
+        confirm=lambda payload: " Sound changed.",
+        window_effect="steer_sound",
+        aliases=("ambience",),
     ),
     Command(
         name="rest",

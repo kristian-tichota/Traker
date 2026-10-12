@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from functools import partial
 from importlib import import_module
 
@@ -32,7 +33,8 @@ from src.gui.sync_listener import SyncListener
 from src.gui.columns import ColumnError, describe, rearranged
 from src.desktop import rest_queue
 from src.gui.commands import (BREAK_LONG, COMMANDS, QUEUE_ADD, QUEUE_CLEAR,
-                              QUEUE_REMOVE, RESET, CommandError, resolve)
+                              QUEUE_REMOVE, RESET, SOUND_OFF, SOUND_ON, CommandError,
+                              resolve)
 from src.gui.filtering import FilterError
 from src.gui.workers import run_in_background, watched
 from src.database import REQUEST_TIMEOUT_S
@@ -579,6 +581,22 @@ class MainWindow(QMainWindow):
             return view.long_break_state()
         return view.set_long_break_queued(payload["action"] == BREAK_LONG)
 
+    def steer_sound(self, payload):
+        """Carry out :sound, switching the ambience, choosing its scene or setting its volume."""
+        view = self.views.get("pomodoro")
+        if view is None:
+            raise CommandError("The Focus Timer is switched off in the profile.")
+        word = payload["what"].strip()
+        if word.lower() in (SOUND_ON, SOUND_OFF):
+            view.switch_sound(word.lower() == SOUND_ON)
+        elif re.fullmatch(r"\d{1,3}%?", word):
+            view.set_sound_volume(int(word.rstrip("%")) / 100)
+        elif word and not view.choose_scene(word):
+            raise CommandError(f"No scene '{word}'; say {', '.join(view.sound_scenes())}.")
+        elif not word:
+            return f"{view.sound_report()} Scenes: {', '.join(view.sound_scenes())}."
+        return view.sound_report()
+
     def queue_rest(self, payload):
         """Carry out :rest, setting what to open on the next break."""
         path = rest_queue.path_for(self.profile)
@@ -688,10 +706,18 @@ class MainWindow(QMainWindow):
                 self._set_nutrient_window(7, " Graphs: 7-Day Windowed Averages.")
             elif k == Qt.Key.Key_M:
                 self._set_nutrient_window(30, " Graphs: 30-Day Windowed Averages.")
+            elif self._drives_the_sound(k):
+                pass
             else:
                 super().keyPressEvent(event)
         else:
             super().keyPressEvent(event)
+
+    def _drives_the_sound(self, key) -> bool:
+        """Hand an arrow on the Focus Timer tab to the ambience playing."""
+        view = self.views.get("pomodoro")
+        return (view is not None and self.tabs.currentWidget() is view
+                and view.drive_ambience(key))
 
     def _set_nutrient_window(self, days, message):
         graphs = [view for view in map(self.views.get, ('food_graphs', 'supplement_graphs'))

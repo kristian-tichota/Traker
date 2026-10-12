@@ -2593,6 +2593,8 @@ def heard(timer, tmp_path):
         (tmp_path / "bank" / name).mkdir(parents=True)
         (tmp_path / "bank" / name / "a.ogg").write_bytes(b"")
     timer.ambience = Heard(tmp_path / "bank")
+    timer.walls_sound = True
+    timer._show_the_sound()
     return timer
 
 
@@ -2661,3 +2663,123 @@ class TestTheSoundUnderTheWalls:
         send_key(heard, Qt.Key.Key_Right)
 
         assert heard.ambience.wishes == [("rain", 0.6, True)]
+
+
+class Mute(Heard):
+    def _renders(self):
+        return False
+
+
+class TestTheSoundFromTheTimerTab:
+    def test_the_tab_lists_every_scene_and_marks_the_one_that_plays(self, heard):
+        panel = heard.sound_panel
+
+        assert [name for name, _ in panel.scenes] == ["noise", "rain", "stream"]
+        assert panel.chosen() == "rain" and panel.toggle.text().endswith("PLAY")
+
+    def test_play_sounds_it_outside_a_break(self, heard):
+        heard.sound_panel.toggle.click()
+
+        assert heard.ambience.wishes == [("rain", 0.6, True)]
+        assert heard.sound_panel.toggle.text().endswith("STOP")
+
+    def test_stop_hushes_it(self, heard):
+        heard.sound_panel.toggle.click()
+
+        heard.sound_panel.toggle.click()
+
+        assert heard.ambience.wishes[-1] == ("rain", 0.6, False)
+
+    def test_a_scene_clicked_plays_it(self, heard):
+        heard.sound_panel._buttons["stream"].click()
+
+        assert heard.ambience.wishes[-1] == ("stream", 0.6, True)
+        assert heard.sound_panel.chosen() == "stream"
+
+    def test_the_slider_sets_the_volume(self, heard):
+        heard.sound_panel.toggle.click()
+
+        heard.sound_panel.slider.setValue(30)
+
+        assert heard.ambience.wishes[-1] == ("rain", 0.3, True)
+        assert heard.sound_panel.lbl_volume.text() == "30 %"
+
+    def test_sound_asked_for_outlasts_the_walls(self, heard):
+        heard.switch_sound(True)
+        enter_strict_break(heard)
+
+        heard._clear_overlays()
+
+        assert heard.ambience.audible is True
+
+    def test_an_absence_still_silences_it(self, heard):
+        heard.switch_sound(True)
+
+        heard.step_away()
+
+        assert heard.ambience.wishes[-1] == ("rain", 0.6, False)
+
+    def test_no_output_is_said_on_the_tab(self, timer, tmp_path):
+        timer.ambience = Mute(tmp_path)
+
+        timer.switch_sound(True)
+
+        assert timer.sound_panel.lbl_note.text() == "No audio output"
+
+
+@pytest.fixture
+def heard_window(window, tmp_path):
+    for name in ("rain", "stream"):
+        (tmp_path / "bank" / name).mkdir(parents=True)
+        (tmp_path / "bank" / name / "a.ogg").write_bytes(b"")
+    view = window.views["pomodoro"]
+    view.ambience = Heard(tmp_path / "bank")
+    window.tabs.setCurrentWidget(view)
+    return window
+
+
+class TestTheSoundCommand:
+    def submit(self, window, text, settled):
+        window.command_line.setText(text)
+        window.execute_command()
+        settled()
+        return window.status_bar.text()
+
+    def test_a_scene_named_plays(self, heard_window, settled):
+        line = self.submit(heard_window, "sound Stream", settled)
+
+        assert heard_window.views["pomodoro"].ambience.wishes == [("stream", 0.6, True)]
+        assert line == " Sound on: Stream at 60 %."
+
+    def test_off_stops_it(self, heard_window, settled):
+        self.submit(heard_window, "sound on", settled)
+
+        self.submit(heard_window, "sound off", settled)
+
+        assert heard_window.views["pomodoro"].ambience.audible is False
+
+    def test_a_number_is_the_volume(self, heard_window, settled):
+        line = self.submit(heard_window, "sound 30", settled)
+
+        assert line == " Sound off: Rain at 30 %."
+
+    def test_sound_alone_names_the_scenes(self, heard_window, settled):
+        line = self.submit(heard_window, "sound", settled)
+
+        assert line.endswith("Scenes: Noise, Rain, Stream.")
+
+    def test_a_scene_the_bank_lacks_is_refused(self, heard_window, settled):
+        line = self.submit(heard_window, "sound fog", settled)
+
+        assert "No scene 'fog'" in line
+
+    def test_the_arrows_on_the_tab_drive_it(self, heard_window):
+        view = heard_window.views["pomodoro"]
+        view.switch_sound(True)
+
+        send_key(heard_window, Qt.Key.Key_Right)
+        send_key(heard_window, Qt.Key.Key_Up)
+
+        assert view.ambience.wishes[-1] == ("stream", 0.7, True)
+        assert view.sound_panel.chosen() == "stream"
+

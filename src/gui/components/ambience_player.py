@@ -96,14 +96,14 @@ class _Engine(QObject):
         """Open the sink and fade the scene in."""
         device = QMediaDevices.defaultAudioOutput()
         if device.isNull():
-            log.warning("No audio output: the walls stay silent.")
+            log.warning("No audio output: the ambience stays silent.")
             return
         shape = QAudioFormat()
         shape.setSampleRate(RATE)
         shape.setChannelCount(2)
         shape.setSampleFormat(QAudioFormat.SampleFormat.Float)
         if not device.isFormatSupported(shape):
-            log.warning("%s cannot play %d Hz stereo floats: the walls stay silent.",
+            log.warning("%s cannot play %d Hz stereo floats: the ambience stays silent.",
                         device.description(), RATE)
             return
         self._mix = ambience.Ambience(RATE, wish.volume)
@@ -135,7 +135,7 @@ class _Engine(QObject):
 
 
 class AmbiencePlayer(QObject):
-    """The sound under a break's walls: one scene of the bank, faded in and out."""
+    """One scene of the bank at a time, faded in and out."""
 
     _steer = pyqtSignal(object)
 
@@ -154,11 +154,20 @@ class AmbiencePlayer(QObject):
     def scene_name(self) -> str:
         return ambience.shown_name(self.scene) if self.scene is not None else ""
 
+    @property
+    def chosen(self) -> str:
+        """Return the name of the scene playing, or of the one play would fade in."""
+        return self.scene.name if self.audible else self._wanted
+
+    def scenes(self) -> list:
+        """Return the scenes the bank offers now, noise included, in name order."""
+        return ambience.scenes(self._bank)
+
     def play(self):
         """Fade the chosen scene in, the bank read afresh."""
         if self.audible or not self._renders():
             return
-        scenes = ambience.scenes(self._bank)
+        scenes = self.scenes()
         self.scene = next((scene for scene in scenes if scene.name == self._wanted),
                           ambience.Scene(ambience.NOISE))
         self.audible = True
@@ -171,11 +180,23 @@ class AmbiencePlayer(QObject):
         self.audible = False
         self._send()
 
+    def choose(self, name) -> str:
+        """Make name the scene to play, crossfading to it if one plays already."""
+        scene = next((scene for scene in self.scenes()
+                      if scene.name.casefold() == str(name).casefold()), None)
+        if scene is None:
+            return ""
+        self._wanted = scene.name
+        if self.audible and scene != self.scene:
+            self.scene = scene
+            self._send()
+        return ambience.shown_name(scene)
+
     def step(self, by) -> str:
         """Crossfade to the scene by places after the one playing, in name order."""
         if not self.audible:
             return ""
-        scenes = ambience.scenes(self._bank)
+        scenes = self.scenes()
         names = [scene.name for scene in scenes]
         at = names.index(self.scene.name) if self.scene.name in names else 0
         self.scene = scenes[(at + by) % len(scenes)]
@@ -185,9 +206,15 @@ class AmbiencePlayer(QObject):
 
     def nudge(self, by) -> float:
         """Raise or lower the volume by VOLUME_STEP per step, within 0 and 1."""
-        self.volume = min(1.0, max(0.0, round(self.volume + by * VOLUME_STEP, 2)))
-        if self.audible:
-            self._send()
+        return self.set_volume(self.volume + by * VOLUME_STEP)
+
+    def set_volume(self, volume) -> float:
+        """Set the volume, held within 0 and 1."""
+        volume = min(1.0, max(0.0, round(float(volume), 2)))
+        if volume != self.volume:
+            self.volume = volume
+            if self.audible:
+                self._send()
         return self.volume
 
     def shutdown(self):
@@ -209,7 +236,7 @@ class AmbiencePlayer(QObject):
                 import soxr  # noqa: F401
                 self._can_render = True
             except (ImportError, OSError) as error:
-                log.warning("No ambience under a break: %s", error)
+                log.warning("No ambience: %s", error)
                 self._can_render = False
         return self._can_render and not QMediaDevices.defaultAudioOutput().isNull()
 

@@ -37,6 +37,7 @@ from src.gui.components.chore_panel import KEYS as CHORE_KEYS, ChorePanel
 from src.gui.components.eye_veil import EyeRest, EyeVeil
 from src.gui.components.media_progress import MediaProgress
 from src.gui.components.media_surface import MediaSurface
+from src.gui.components.sound_panel import SoundPanel
 from src.gui.components.timeline_popup import TimelinePopupWidget
 from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin, request_restart
@@ -926,14 +927,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._library_path = break_activities.library_for(self.profile)
         self._offers = list(self.activities)
         self.media_pane_factory = None
-        self.ambience = None
-        if self.profile.get_metric("strict_break.ambience", "enabled", True) is not False:
-            self.ambience = AmbiencePlayer(
-                ambience.bank_for(self.profile),
-                self.profile.get_metric("strict_break.ambience", "scene", "rain"),
-                self.profile.number("strict_break.ambience", "volume", 0.6,
-                                    low=0.0, high=1.0),
-                parent=self)
+        self.walls_sound = self.profile.get_metric(
+            "strict_break.ambience", "enabled", True) is not False
+        self.sound_on = False
+        self.ambience = AmbiencePlayer(
+            ambience.bank_for(self.profile),
+            self.profile.get_metric("strict_break.ambience", "scene", "rain"),
+            self.profile.number("strict_break.ambience", "volume", 0.6, low=0.0, high=1.0),
+            parent=self)
         self.hook = StateHook(self.profile.get_metric("hooks", "state", ""))
         self._hook_pending = False
         self.dictum = dictum.DictumListener(parent=self)
@@ -1131,6 +1132,12 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.chores_panel.chore_ticked.connect(self.tick_chore)
         layout.addWidget(self.chores_panel)
 
+        self.sound_panel = SoundPanel()
+        self.sound_panel.switched.connect(self.switch_sound)
+        self.sound_panel.scene_chosen.connect(self.choose_scene)
+        self.sound_panel.volume_chosen.connect(self.set_sound_volume)
+        layout.addWidget(self.sound_panel)
+
         self.panel_metrics = QWidget()
         self.panel_metrics.setFixedWidth(500)
         self.panel_metrics.setStyleSheet(f"background-color: {PALETTE['base3']}; border: none; font-family: 'Fira Code'; font-size: 11px;")
@@ -1172,6 +1179,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         layout.addStretch()
 
         self._apply_long_break_controls()
+        self._show_the_sound()
 
     def _record(self, event_type: str, amount_ms: int = 0):
         """Append one telemetry event off-thread, reporting any failure."""
@@ -1958,12 +1966,15 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._hook_pending = True
         QTimer.singleShot(0, self._tell_the_hook)
 
+    def wants_sound(self) -> bool:
+        """Report whether the ambience should sound: asked for, or under walls, and no film."""
+        film = self._showing is not None and self._showing.kind == break_activities.VIDEO
+        return (not self.is_absent() and not film
+                and (self.sound_on or (self._strict_engaged and self.walls_sound)))
+
     def _steer_the_ambience(self):
-        """Play the ambience while walls stand for a break and nothing plays a film."""
-        if self.ambience is None:
-            return
-        wanted = (self._strict_engaged and not self.is_absent()
-                  and (self._showing is None or self._showing.kind != break_activities.VIDEO))
+        """Fade the ambience in or out as wants_sound says."""
+        wanted = self.wants_sound()
         if wanted == self.ambience.audible:
             return
         if wanted:
@@ -1971,19 +1982,60 @@ class PomodoroView(ShutdownMixin, QWidget):
         else:
             self.ambience.hush()
         self._show_upcoming()
+        self._show_the_sound()
+
+    def switch_sound(self, on):
+        """Play the chosen scene from now on, through breaks, or stop it."""
+        self.sound_on = bool(on)
+        self._steer_the_ambience()
+        self._show_the_sound()
+
+    def choose_scene(self, name) -> str:
+        """Play the scene named, crossfading from whatever plays, and return its shown name."""
+        shown = self.ambience.choose(name)
+        if shown:
+            self.switch_sound(True)
+            self._show_upcoming()
+        return shown
+
+    def set_sound_volume(self, volume):
+        """Set the ambience volume, from 0 to 1."""
+        self.ambience.set_volume(volume)
+        self._show_upcoming()
+        self._show_the_sound(rescan=False)
+
+    def sound_scenes(self) -> list:
+        """Return the shown name of every scene the bank offers."""
+        return [ambience.shown_name(scene) for scene in self.ambience.scenes()]
+
+    def sound_report(self) -> str:
+        """Return the status bar line naming whether the ambience plays, its scene and volume."""
+        player = self.ambience
+        scene = ambience.shown_name(ambience.Scene(player.chosen))
+        return (f" Sound {'on' if player.audible else 'off'}: {scene} at "
+                f"{round(player.volume * 100)} %.")
+
+    def _show_the_sound(self, rescan=True):
+        """Mirror the ambience on the timer tab's SOUND panel."""
+        player = self.ambience
+        scenes = ([(scene.name, ambience.shown_name(scene)) for scene in player.scenes()]
+                  if rescan else self.sound_panel.scenes)
+        self.sound_panel.show_state(scenes, player.chosen, player.volume, player.audible)
+        self.sound_panel.set_note(
+            "No audio output" if self.wants_sound() and not player.audible else "")
 
     SOUND_TITLE = "SOUND"
 
     def sound_section(self) -> list:
         """Return the scene playing and its volume, with the keys that change them."""
-        if self.ambience is None or not self.ambience.audible:
+        if not self.ambience.audible:
             return []
         return [(self.SOUND_TITLE, [f"\u2190 \u2192  {self.ambience.scene_name}",
                                     f"\u2191 \u2193  {round(self.ambience.volume * 100)} %"])]
 
-    def _drive_ambience(self, key) -> bool:
-        """Change the scene or its volume, on a wall that shows nothing else."""
-        if self.ambience is None or not self.ambience.audible or self._showing is not None:
+    def drive_ambience(self, key) -> bool:
+        """Change the scene or its volume while it plays, unless something else is showing."""
+        if not self.ambience.audible or self._showing is not None:
             return False
         if key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
             self.ambience.step(1 if key == Qt.Key.Key_Right else -1)
@@ -1992,6 +2044,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         else:
             return False
         self._show_upcoming()
+        self._show_the_sound()
         return True
 
     def _tell_the_hook(self):
@@ -2097,7 +2150,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                 self._show_activity(self._offers[index])
                 self._acknowledge_offer(index)
                 return True
-            if self._drive_media(key) or self._drive_ambience(key):
+            if self._drive_media(key) or self.drive_ambience(key):
                 return True
             chore = self._chore_for(key)
             if chore is not None:
@@ -2680,8 +2733,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             self.eye_rest.shutdown()
         super().shutdown()
         self._clear_overlays()
-        if self.ambience is not None:
-            self.ambience.shutdown()
+        self.ambience.shutdown()
         self.hook.tell(FOCUS_STATE)
         self.hook.close()
 

@@ -264,11 +264,11 @@ def strict_timer(profile_path):
     profile_module.UserProfile()
     written = profile_path.read_text(encoding="utf-8")
     assert "strict = false" in written, "the [timer] template no longer says this"
-    assert "[strict_break.ambience]\nenabled = true" in written
+    walls_sound = "when they fall.\nenabled = true"
+    assert walls_sound in written
     profile_path.write_text(
         written.replace("strict = false", "strict = true")
-        .replace("[strict_break.ambience]\nenabled = true",
-                 "[strict_break.ambience]\nenabled = false"),
+        .replace(walls_sound, "when they fall.\nenabled = false"),
         encoding="utf-8")
     profile_module.reload_profile()
     return profile_path

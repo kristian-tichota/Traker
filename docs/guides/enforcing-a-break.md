@@ -69,7 +69,8 @@ names another. A scene is a folder of recordings, each with its gain and the spa
 `scene.toml`; `scripts/fetch_ambience.py` downloads the curated scenes from Freesound once, with
 their credits, and playback reads only these files. Each recording plays from places chosen at
 random with 6 s crossfades, its level drifting between 50 % and 125 %, and `noise` is generated. The
-mix renders at 48 kHz on its own thread through Qt Multimedia, soxr resampling any recording at
+Focus Timer tab's SOUND panel and `:sound` play a scene at any time, on through breaks until stopped.
+The mix renders at 48 kHz on its own thread through Qt Multimedia, soxr resampling any recording at
 another rate, and needs the `ambience` extra.
 
 ## Assistive Input Integration
