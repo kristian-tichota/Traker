@@ -9,7 +9,7 @@ from PyQt6.QtNetwork import QLocalSocket
 
 log = logging.getLogger(__name__)
 
-PROTOCOL = 10
+PROTOCOL = 11
 
 SOCKET_ENV = "LIBRE_DICTUM_HUD_SOCKET"
 

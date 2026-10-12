@@ -11,7 +11,7 @@ from PyQt6.QtNetwork import QLocalServer
 from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 import src.profile as profile_module
-from src.desktop import rest_positions, rest_queue, standing_break
+from src.desktop import dictum, rest_positions, rest_queue, standing_break
 from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, TERMINAL,
                                     VIDEO, BreakActivity)
 from src.domain.media import Place
@@ -2515,7 +2515,7 @@ class TestTheInputsThatSendEachKey:
             client = server.nextPendingConnection()
             held.append(client)
             for frame in frames:
-                client.write((json.dumps({"protocol": 10, **frame}) + "\n").encode())
+                client.write((json.dumps({"protocol": dictum.PROTOCOL, **frame}) + "\n").encode())
 
         server.newConnection.connect(welcome)
         server.frames, server.held = frames, held
