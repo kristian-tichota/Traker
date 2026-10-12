@@ -915,6 +915,7 @@ Feature: Focus timer
       When a held break begins
       Then the scene my profile names fades in, and the walls name it and its volume
       And each of its recordings plays from places chosen at random, crossfaded, its level drifting slowly
+      And no crossfade or drift is heard as a fade out and in
       And a scene the bank lacks is generated noise, which needs no recordings
       And every recording plays from the bank on the disk, never from the network
 

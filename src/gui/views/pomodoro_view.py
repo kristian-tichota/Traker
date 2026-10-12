@@ -2021,8 +2021,10 @@ class PomodoroView(ShutdownMixin, QWidget):
         scenes = ([(scene.name, ambience.shown_name(scene)) for scene in player.scenes()]
                   if rescan else self.sound_panel.scenes)
         self.sound_panel.show_state(scenes, player.chosen, player.volume, player.audible)
+        silent = self.wants_sound() and not player.audible
         self.sound_panel.set_note(
-            "No audio output" if self.wants_sound() and not player.audible else "")
+            "" if not silent else "Needs the ambience extra" if player.lacks_extra
+            else "No audio output")
 
     SOUND_TITLE = "SOUND"
 

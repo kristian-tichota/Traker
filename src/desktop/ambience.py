@@ -17,8 +17,10 @@ DEFAULT_BANK = os.path.join(
 SEGMENT_SECS = (40.0, 110.0)
 CROSSFADE_SECS = 6.0
 SHORTEST_SECS = 3.0
-DRIFT = (0.5, 1.25)
-DRIFT_SECS = (15.0, 45.0)
+CANDIDATES = 6
+PROBE_SECS = 2.0
+DRIFT = (0.79, 1.12)
+DRIFT_SECS = (30.0, 90.0)
 NOISE_BLOCK = 1 << 16
 KNEE = 0.5
 
@@ -207,7 +209,7 @@ class _Head:
 
 
 class FileVoice:
-    """A recording played at rate from random places, each segment crossfaded into the next."""
+    """A recording played at rate from random places, each crossfaded into the next at its level."""
 
     def __init__(self, layer, rate, rng):
         import soundfile
@@ -226,6 +228,10 @@ class FileVoice:
         self._rng = rng
         self._fade = min(int(CROSSFADE_SECS * rate), self._span // 3)
         self._shortest, self._longest = (int(secs * rate) for secs in SEGMENT_SECS)
+        self._probe = soundfile.SoundFile(layer.path)
+        self._probe_frames = max(1, min(int(PROBE_SECS * info.samplerate),
+                                        int(self._fade / self._ratio)))
+        self._stop = None
         self._current, length = self._head()
         self._until_cross = length - self._fade
         self._incoming = None
@@ -233,12 +239,26 @@ class FileVoice:
         self._crossed = 0
 
     def _head(self):
-        """Open a segment at a random place within the span, with its length at the mix rate."""
+        """Open a segment at a random place, its level after the fade nearest the current one."""
         length = min(self._span, int(self._rng.integers(self._shortest, self._longest + 1)))
         length = max(length, 3 * self._fade)
-        start = self._first + int(self._rng.integers(0, self._span - length + 1) / self._ratio)
-        stop = min(self._last, start + math.ceil(length / self._ratio))
-        return _Head(self._path, start, stop, self._rate), length
+        starts = self._first + (self._rng.integers(0, self._span - length + 1, CANDIDATES)
+                                / self._ratio).astype(int)
+        start = int(starts[0])
+        if self._stop is not None:
+            fade = int(self._fade / self._ratio)
+            level = self._level(self._stop - fade - self._probe_frames)
+            start = int(min(starts, key=lambda at: abs(self._level(at + fade) - level)))
+        self._stop = min(self._last, start + math.ceil(length / self._ratio))
+        return _Head(self._path, start, self._stop, self._rate), length
+
+    def _level(self, at) -> float:
+        """Return the level in dB of the probe's length of the recording from frame at."""
+        import numpy as np
+
+        self._probe.seek(max(self._first, at))
+        data = self._probe.read(self._probe_frames, dtype="float32")
+        return 10 * math.log10(float(np.mean(np.square(data))) + 1e-12) if len(data) else -120.0
 
     def render(self, frames):
         """Return the next frames, crossfading wherever a segment ends."""
@@ -269,6 +289,7 @@ class FileVoice:
         return out
 
     def close(self):
+        self._probe.close()
         for head in (self._current, self._incoming):
             if head is not None:
                 head.close()

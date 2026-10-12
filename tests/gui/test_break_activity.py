@@ -2726,6 +2726,14 @@ class TestTheSoundFromTheTimerTab:
 
         assert timer.sound_panel.lbl_note.text() == "No audio output"
 
+    def test_a_missing_extra_is_named_on_the_tab(self, timer, tmp_path):
+        timer.ambience = Mute(tmp_path)
+        timer.ambience.lacks_extra = True
+
+        timer.switch_sound(True)
+
+        assert timer.sound_panel.lbl_note.text() == "Needs the ambience extra"
+
 
 @pytest.fixture
 def heard_window(window, tmp_path):

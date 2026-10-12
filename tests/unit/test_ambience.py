@@ -59,6 +59,27 @@ def test_segments_join_without_a_dip(tmp_path):
     assert levels.min() > 0.8 * np.median(levels)
 
 
+def test_a_passage_joins_at_the_level_it_follows(tmp_path):
+    noise = np.random.default_rng(7).standard_normal((160 * RATE, 2))
+    noise *= np.where(np.arange(160 * RATE) // (10 * RATE) % 2, 0.4, 0.05)[:, None]
+    soundfile.write(tmp_path / "bed.flac", noise.astype(np.float32), RATE)
+    voice = ambience.FileVoice(ambience.Layer(str(tmp_path / "bed.flac")), RATE,
+                               np.random.default_rng(8))
+    block = RATE // 20
+    levels, joining = [], []
+    for _ in range(600 * 20):
+        levels.append(np.sqrt(np.mean(voice.render(block) ** 2)))
+        joining.append(voice._incoming is not None)
+    edges = np.diff(np.array(joining, dtype=int))
+    starts, ends = np.where(edges == 1)[0] + 1, np.where(edges == -1)[0] + 1
+    level = np.log10(levels) * 20
+
+    jumps = [level[end:end + 40].mean() - level[start - 40:start].mean()
+             for start, end in zip(starts, ends)]
+
+    assert len(jumps) > 4 and max(map(abs, jumps)) < 10
+
+
 def test_nothing_outside_the_span_plays(tmp_path):
     quiet = np.random.default_rng(2).standard_normal((60 * RATE, 2)) * 0.01
     quiet[:10 * RATE] = quiet[50 * RATE:] = 0.9
@@ -126,7 +147,7 @@ def test_a_new_scene_crossfades_in_as_the_old_one_leaves(tmp_path):
 
 def test_loud_peaks_round_off_below_full_scale(tmp_path):
     scene = ambience.Scene("storm", (ambience.Layer(recording(tmp_path / "a.flac", 20, level=0.5),
-                                                    12.0),))
+                                                    6.0),))
     mix = ambience.Ambience(RATE, 1.0, np.random.default_rng(9))
     mix.play(scene, 0.01)
 

@@ -149,6 +149,7 @@ class AmbiencePlayer(QObject):
         self._thread = None
         self._engine = None
         self._can_render = None
+        self.lacks_extra = False
 
     @property
     def scene_name(self) -> str:
@@ -238,6 +239,7 @@ class AmbiencePlayer(QObject):
             except (ImportError, OSError) as error:
                 log.warning("No ambience: %s", error)
                 self._can_render = False
+                self.lacks_extra = True
         return self._can_render and not QMediaDevices.defaultAudioOutput().isNull()
 
     def _send(self):
