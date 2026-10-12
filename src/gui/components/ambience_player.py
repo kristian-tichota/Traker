@@ -16,7 +16,7 @@ VOLUME_SECS = 0.4
 VOLUME_STEP = 0.1
 BUFFER_SECS = 0.5
 TEND_MS = 250
-NOISE_RATE = 48_000
+RATE = 48_000
 FRAME_BYTES = 8
 
 
@@ -64,17 +64,14 @@ class _Engine(QObject):
 
     def __init__(self):
         super().__init__()
-        self._wish = None
         self._mix = None
         self._sink = None
         self._stream = None
-        self._rates = {}
         self._tending = None
 
     @pyqtSlot(object)
     def steer(self, wish):
         """Move towards wish: start, crossfade, change volume or fade out."""
-        self._wish = wish
         if self._tending is None:
             self._tending = QTimer(self)
             self._tending.setInterval(TEND_MS)
@@ -85,8 +82,6 @@ class _Engine(QObject):
             return
         if not wish.audible:
             self._mix.hush(FADE_OUT_SECS)
-        elif self._rate_of(wish.scene) not in (None, self._mix.rate):
-            self._mix.hush(SCENE_SECS / 2)
         elif self._mix.scene != wish.scene:
             fading_in = self._mix.scene is None
             self._mix.play(wish.scene, FADE_IN_SECS if fading_in else SCENE_SECS)
@@ -95,46 +90,35 @@ class _Engine(QObject):
     @pyqtSlot()
     def halt(self):
         """Stop the sink at once."""
-        self._wish = None
         self._stop()
 
-    def _rate_of(self, scene):
-        """Return a scene's sample rate, read once per scene."""
-        if scene not in self._rates:
-            self._rates[scene] = ambience.native_rate(scene)
-        return self._rates[scene]
-
     def _start(self, wish):
-        """Open the sink at the scene's own rate and fade the scene in."""
+        """Open the sink and fade the scene in."""
         device = QMediaDevices.defaultAudioOutput()
         if device.isNull():
             log.warning("No audio output: the walls stay silent.")
             return
-        rate = self._rate_of(wish.scene) or NOISE_RATE
         shape = QAudioFormat()
-        shape.setSampleRate(rate)
+        shape.setSampleRate(RATE)
         shape.setChannelCount(2)
         shape.setSampleFormat(QAudioFormat.SampleFormat.Float)
         if not device.isFormatSupported(shape):
             log.warning("%s cannot play %d Hz stereo floats: the walls stay silent.",
-                        device.description(), rate)
+                        device.description(), RATE)
             return
-        self._mix = ambience.Ambience(rate, wish.volume)
+        self._mix = ambience.Ambience(RATE, wish.volume)
         self._mix.play(wish.scene, FADE_IN_SECS)
         self._stream = _Stream(self._mix.render, self)
         self._stream.open(QIODevice.OpenModeFlag.ReadOnly)
         self._sink = QAudioSink(device, shape, self)
-        self._sink.setBufferSize(int(rate * BUFFER_SECS) * FRAME_BYTES)
+        self._sink.setBufferSize(int(RATE * BUFFER_SECS) * FRAME_BYTES)
         self._sink.start(self._stream)
         self._tending.start()
 
     def _tend(self):
-        """Close the sink once the mix fell silent, reopening it if a scene still waits."""
-        if self._mix is None or not self._mix.silent:
-            return
-        self._stop()
-        if self._wish is not None and self._wish.audible:
-            self._start(self._wish)
+        """Close the sink once the mix fell silent."""
+        if self._mix is not None and self._mix.silent:
+            self._stop()
 
     def _stop(self):
         if self._tending is not None:
@@ -217,11 +201,12 @@ class AmbiencePlayer(QObject):
         self._thread = self._engine = None
 
     def _renders(self) -> bool:
-        """Report whether numpy and soundfile load and an output exists, warning once."""
+        """Report whether numpy, soundfile and soxr load and an output exists, warning once."""
         if self._can_render is None:
             try:
                 import numpy  # noqa: F401
                 import soundfile  # noqa: F401
+                import soxr  # noqa: F401
                 self._can_render = True
             except (ImportError, OSError) as error:
                 log.warning("No ambience under a break: %s", error)

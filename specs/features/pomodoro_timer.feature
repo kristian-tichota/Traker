@@ -916,6 +916,7 @@ Feature: Focus timer
       Then the scene my profile names fades in, and the walls name it and its volume
       And each of its recordings plays from places chosen at random, crossfaded, its level drifting slowly
       And a scene the bank lacks is generated noise, which needs no recordings
+      And every recording plays from the bank on the disk, never from the network
 
     @accessibility
     Scenario: Choosing on a wall that shows nothing

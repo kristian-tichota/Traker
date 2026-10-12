@@ -377,7 +377,7 @@ scene = "rain"
 # 0.0 to 1.0.
 volume = 0.6
 # The bank: one folder per scene, filled by scripts/fetch_ambience.py. Empty
-# means ~/.local/share/traker/ambience.
+# means the Ambience folder in Traker's own checkout.
 path = ""
 
 # A shell command run each time what a break shows changes. Every {{state}} in it

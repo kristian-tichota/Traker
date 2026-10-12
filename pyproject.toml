@@ -29,7 +29,7 @@ video = ["python-mpv==1.0.8"]
 # AnkiConnect running; see docs/guides/enforcing-a-break.md.
 anki = ["PyQt6-WebEngine==6.11.0"]
 # The sound under a strict break's walls; see docs/guides/enforcing-a-break.md.
-ambience = ["numpy==2.5.2", "soundfile==0.14.0"]
+ambience = ["numpy==2.5.2", "soundfile==0.14.0", "soxr==1.1.0"]
 
 [project.urls]
 Homepage = "https://github.com/kristian-tichota/Traker"

@@ -7,9 +7,9 @@ from src.desktop import ambience
 RATE = 8000
 
 
-def recording(path, seconds, level=0.1, rate=RATE, seed=0):
-    noise = np.random.default_rng(seed).standard_normal((int(seconds * rate), 2)) * level
-    soundfile.write(path, noise.astype(np.float32), rate)
+def recording(path, seconds, level=0.1, seed=0):
+    noise = np.random.default_rng(seed).standard_normal((int(seconds * RATE), 2)) * level
+    soundfile.write(path, noise.astype(np.float32), RATE)
     return str(path)
 
 
@@ -69,11 +69,16 @@ def test_nothing_outside_the_span_plays(tmp_path):
     assert np.abs(rendered(voice, 300)).max() < 0.1
 
 
-def test_a_layer_at_another_rate_is_left_out(tmp_path):
-    layer = ambience.Layer(recording(tmp_path / "bed.flac", 10, rate=2 * RATE))
+def test_a_layer_at_another_rate_keeps_its_pitch(tmp_path):
+    rate = 2 * RATE
+    tone = np.sin(2 * np.pi * 440 * np.arange(20 * rate) / rate) * 0.5
+    soundfile.write(tmp_path / "bed.flac", np.stack([tone, tone], axis=1).astype(np.float32), rate)
+    voice = ambience.FileVoice(ambience.Layer(str(tmp_path / "bed.flac")), RATE,
+                               np.random.default_rng(4))
 
-    with pytest.raises(ValueError):
-        ambience.FileVoice(layer, RATE, np.random.default_rng(4))
+    out = rendered(voice, 10)[:, 0]
+
+    assert np.argmax(np.abs(np.fft.rfft(out))) * RATE / len(out) == pytest.approx(440, abs=1)
 
 
 def test_each_layer_drifts_within_its_bounds():
@@ -117,3 +122,15 @@ def test_a_new_scene_crossfades_in_as_the_old_one_leaves(tmp_path):
     rendered(mix, 3)
 
     assert mix.scene == stream and len(mix._mixes) == 1
+
+
+def test_loud_peaks_round_off_below_full_scale(tmp_path):
+    scene = ambience.Scene("storm", (ambience.Layer(recording(tmp_path / "a.flac", 20, level=0.5),
+                                                    12.0),))
+    mix = ambience.Ambience(RATE, 1.0, np.random.default_rng(9))
+    mix.play(scene, 0.01)
+
+    out = rendered(mix, 5)
+
+    assert np.abs(out).max() <= 1.0 and len(np.unique(out)) > 0.9 * out.size
+

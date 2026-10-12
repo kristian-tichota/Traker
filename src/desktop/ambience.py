@@ -12,8 +12,7 @@ MANIFEST = "scene.toml"
 AUDIO = (".ogg", ".oga", ".opus", ".flac", ".wav")
 
 DEFAULT_BANK = os.path.join(
-    os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
-    "traker", "ambience")
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Ambience")
 
 SEGMENT_SECS = (40.0, 110.0)
 CROSSFADE_SECS = 6.0
@@ -21,6 +20,7 @@ SHORTEST_SECS = 3.0
 DRIFT = (0.5, 1.25)
 DRIFT_SECS = (15.0, 45.0)
 NOISE_BLOCK = 1 << 16
+KNEE = 0.5
 
 NOISE_BANDS = (
     ("deep", 2.0, 25.0, 300.0, -19.5),
@@ -102,18 +102,6 @@ def _layer(folder, entry):
     return Layer(path, gain, (max(0.0, start), stop))
 
 
-def native_rate(scene):
-    """Return the sample rate of a scene's first layer, or None for noise."""
-    import soundfile
-
-    for layer in scene.layers:
-        try:
-            return soundfile.info(layer.path).samplerate
-        except (OSError, RuntimeError) as error:
-            log.warning("Ambience layer %r cannot be read: %s", layer.path, error)
-    return None
-
-
 def shown_name(scene) -> str:
     """Return a scene's name as the walls write it."""
     return re.sub(r"[-_]+", " ", scene.name).strip().capitalize()
@@ -180,47 +168,63 @@ class Drift:
 
 
 class _Head:
-    """One read position in a file, yielding stereo frames until its stop."""
+    """One read position in a file, yielding stereo frames at rate until its stop."""
 
-    def __init__(self, path, start, stop):
+    def __init__(self, path, start, stop, rate):
+        import numpy as np
         import soundfile
 
         self._file = soundfile.SoundFile(path)
         self._file.seek(start)
         self._left = stop - start
+        self._channels = min(self._file.channels, 2)
+        self._resampler = None
+        if self._file.samplerate != rate:
+            import soxr
+
+            self._resampler = soxr.ResampleStream(self._file.samplerate, rate, self._channels,
+                                                  dtype="float32")
+        self._ready = np.zeros((0, 2), dtype=np.float32)
 
     def read(self, frames):
         import numpy as np
 
-        data = self._file.read(min(frames, self._left), dtype="float32", always_2d=True)
-        self._left -= len(data)
-        stereo = np.repeat(data, 2, axis=1) if data.shape[1] == 1 else data[:, :2]
-        if len(stereo) < frames:
-            stereo = np.concatenate([stereo, np.zeros((frames - len(stereo), 2), np.float32)])
-        return stereo
+        while len(self._ready) < frames and self._left > 0:
+            data = self._file.read(min(frames, self._left), dtype="float32",
+                                   always_2d=True)[:, :self._channels]
+            self._left = self._left - len(data) if len(data) else 0
+            if self._resampler is not None:
+                data = self._resampler.resample_chunk(data, last=self._left == 0)
+            stereo = np.repeat(data, 2, axis=1) if self._channels == 1 else data
+            self._ready = np.concatenate([self._ready, stereo])
+        out, self._ready = self._ready[:frames], self._ready[frames:]
+        if len(out) < frames:
+            out = np.concatenate([out, np.zeros((frames - len(out), 2), np.float32)])
+        return out
 
     def close(self):
         self._file.close()
 
 
 class FileVoice:
-    """A recording played from random places, each segment crossfaded into the next."""
+    """A recording played at rate from random places, each segment crossfaded into the next."""
 
     def __init__(self, layer, rate, rng):
         import soundfile
 
         info = soundfile.info(layer.path)
-        if info.samplerate != rate:
-            raise ValueError(f"{info.samplerate} Hz where the scene plays at {rate} Hz")
         start, stop = layer.span
-        self._first = min(int(start * rate), info.frames)
-        self._last = info.frames if math.isinf(stop) else min(info.frames, int(stop * rate))
-        span = self._last - self._first
-        if span < SHORTEST_SECS * rate:
-            raise ValueError(f"{span / rate:.1f} s to play, under {SHORTEST_SECS:.0f} s")
+        self._first = min(int(start * info.samplerate), info.frames)
+        self._last = (info.frames if math.isinf(stop)
+                      else min(info.frames, int(stop * info.samplerate)))
+        self._ratio = rate / info.samplerate
+        self._span = int((self._last - self._first) * self._ratio)
+        if self._span < SHORTEST_SECS * rate:
+            raise ValueError(f"{self._span / rate:.1f} s to play, under {SHORTEST_SECS:.0f} s")
         self._path = layer.path
+        self._rate = rate
         self._rng = rng
-        self._fade = min(int(CROSSFADE_SECS * rate), span // 3)
+        self._fade = min(int(CROSSFADE_SECS * rate), self._span // 3)
         self._shortest, self._longest = (int(secs * rate) for secs in SEGMENT_SECS)
         self._current, length = self._head()
         self._until_cross = length - self._fade
@@ -229,12 +233,12 @@ class FileVoice:
         self._crossed = 0
 
     def _head(self):
-        """Open a segment at a random place within the span, with its length."""
-        span = self._last - self._first
-        length = min(span, int(self._rng.integers(self._shortest, self._longest + 1)))
+        """Open a segment at a random place within the span, with its length at the mix rate."""
+        length = min(self._span, int(self._rng.integers(self._shortest, self._longest + 1)))
         length = max(length, 3 * self._fade)
-        start = self._first + int(self._rng.integers(0, span - length + 1))
-        return _Head(self._path, start, start + length), length
+        start = self._first + int(self._rng.integers(0, self._span - length + 1) / self._ratio)
+        stop = min(self._last, start + math.ceil(length / self._ratio))
+        return _Head(self._path, start, stop, self._rate), length
 
     def render(self, frames):
         """Return the next frames, crossfading wherever a segment ends."""
@@ -390,7 +394,7 @@ class Ambience:
         self._volume.to(volume, secs * self.rate)
 
     def render(self, frames):
-        """Return the next frames, interleaved stereo, dropping scenes that fell silent."""
+        """Return the next frames, peaks above KNEE rounded off below full scale."""
         import numpy as np
 
         out = np.zeros((frames, 2), dtype=np.float32)
@@ -400,7 +404,10 @@ class Ambience:
             mix.close()
             self._mixes.remove(mix)
         out *= (self._volume.levels(frames) ** 2)[:, None]
-        return np.clip(out, -1.0, 1.0)
+        peaks = np.abs(out) > KNEE
+        out[peaks] = np.sign(out[peaks]) * (
+            KNEE + (1 - KNEE) * np.tanh((np.abs(out[peaks]) - KNEE) / (1 - KNEE)))
+        return out
 
     def close(self):
         for mix in self._mixes:
