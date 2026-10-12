@@ -2583,6 +2583,9 @@ class Heard(AmbiencePlayer):
     def _renders(self):
         return True
 
+    def has_output(self):
+        return True
+
     def _send(self):
         self.wishes.append((self.scene.name, self.volume, self.audible))
 
@@ -2633,10 +2636,10 @@ class TestTheSoundUnderTheWalls:
 
         assert heard.ambience.wishes[-1] == ("rain", 0.6, False)
 
-    def test_walls_for_an_absence_stay_silent(self, heard):
+    def test_walls_for_an_absence_sound_it(self, heard):
         heard.step_away()
 
-        assert heard.ambience.wishes == []
+        assert heard.ambience.wishes == [("rain", 0.6, True)]
 
     def test_left_and_right_change_the_scene(self, heard):
         enter_strict_break(heard)
@@ -2666,7 +2669,7 @@ class TestTheSoundUnderTheWalls:
 
 
 class Mute(Heard):
-    def _renders(self):
+    def has_output(self):
         return False
 
 
@@ -2712,12 +2715,13 @@ class TestTheSoundFromTheTimerTab:
 
         assert heard.ambience.audible is True
 
-    def test_an_absence_still_silences_it(self, heard):
+    def test_an_absence_keeps_it(self, heard):
+        heard.walls_sound = False
         heard.switch_sound(True)
 
         heard.step_away()
 
-        assert heard.ambience.wishes[-1] == ("rain", 0.6, False)
+        assert heard.ambience.wishes == [("rain", 0.6, True)]
 
     def test_no_output_is_said_on_the_tab(self, timer, tmp_path):
         timer.ambience = Mute(tmp_path)

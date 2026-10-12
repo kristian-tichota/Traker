@@ -1969,8 +1969,7 @@ class PomodoroView(ShutdownMixin, QWidget):
     def wants_sound(self) -> bool:
         """Report whether the ambience should sound: asked for, or under walls, and no film."""
         film = self._showing is not None and self._showing.kind == break_activities.VIDEO
-        return (not self.is_absent() and not film
-                and (self.sound_on or (self._strict_engaged and self.walls_sound)))
+        return not film and (self.sound_on or (self._strict_engaged and self.walls_sound))
 
     def _steer_the_ambience(self):
         """Fade the ambience in or out as wants_sound says."""
@@ -2021,10 +2020,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         scenes = ([(scene.name, ambience.shown_name(scene)) for scene in player.scenes()]
                   if rescan else self.sound_panel.scenes)
         self.sound_panel.show_state(scenes, player.chosen, player.volume, player.audible)
-        silent = self.wants_sound() and not player.audible
         self.sound_panel.set_note(
-            "" if not silent else "Needs the ambience extra" if player.lacks_extra
-            else "No audio output")
+            "" if not self.wants_sound() else "Needs the ambience extra" if player.lacks_extra
+            else "" if player.has_output() else "No audio output")
 
     SOUND_TITLE = "SOUND"
 

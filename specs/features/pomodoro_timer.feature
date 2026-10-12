@@ -926,7 +926,11 @@ Feature: Focus timer
 
     Scenario: Silence
       Then a film or a song fades it out for its length, and the walls falling fade it out
-      And walls raised for an absence are silent
+      And walls raised for an absence sound it as a break's walls do
+
+    Scenario: An output that drops
+      When the audio output stops or the default output changes while the scene should sound
+      Then the scene fades in again on the default output as soon as one exists
 
   Rule: The ambient sound plays from the Focus Timer tab at any time
 
@@ -934,7 +938,7 @@ Feature: Focus timer
       Then the tab's SOUND panel shows play or stop, every scene with the chosen one marked, and the volume
       And clicking any of them, or :sound with on, off, a scene or a volume, changes the sound at once
       And while it plays, the arrows on the tab change the scene and the volume as on a wall
-      And it plays on through breaks until stopped, and an absence still silences it
+      And it plays on through breaks and absences until stopped
 
   Rule: A strict break is announced before it lands
 

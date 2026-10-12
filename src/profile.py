@@ -367,11 +367,12 @@ height_em = 30
 # The ambient sound: one scene of the ambience bank, each of its layers
 # drifting slowly in level and played from places chosen at random. The Focus
 # Timer tab's SOUND panel and :sound play it at any time, until stopped. It
-# falls silent while a film or a song plays and while the walls stand for an
-# absence. On a wall showing nothing, or on the Focus Timer tab while it plays,
-# LEFT/RIGHT change the scene and UP/DOWN the volume until Traker restarts.
+# falls silent while a film or a song plays. On a wall showing nothing, or on
+# the Focus Timer tab while it plays, LEFT/RIGHT change the scene and UP/DOWN
+# the volume until Traker restarts.
 [strict_break.ambience]
-# Whether the walls fade it in as they rise and out when they fall.
+# Whether the walls, an absence's included, fade it in as they rise and out
+# when they fall.
 enabled = true
 # A folder of the bank, such as rain, ocean or stream. noise is generated and
 # needs no folder; it also plays where the bank holds no scene of that name.

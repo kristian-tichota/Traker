@@ -70,9 +70,10 @@ names another. A scene is a folder of recordings, each with its gain and the spa
 their credits, and playback reads only these files. Each recording plays from places chosen at
 random with 6 s crossfades, each new place the closest in level of six candidates, its level
 drifting between 79 % and 112 %, and `noise` is generated. The
-Focus Timer tab's SOUND panel and `:sound` play a scene at any time, on through breaks until stopped.
-The mix renders at 48 kHz on its own thread through Qt Multimedia, soxr resampling any recording at
-another rate, and needs the `ambience` extra.
+Focus Timer tab's SOUND panel and `:sound` play a scene at any time, on through breaks and absences
+until stopped. The mix renders at 48 kHz on its own thread through Qt Multimedia, soxr resampling any
+recording at another rate, and needs the `ambience` extra. An output that stops or stops being the
+default is reopened on the default output, retried every 5 s while none exists.
 
 ## Assistive Input Integration
 
