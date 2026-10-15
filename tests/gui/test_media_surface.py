@@ -851,6 +851,33 @@ class TestReviewingADeck:
 
         assert "not answering" in failure_of(pane)
 
+    def test_anki_not_running_is_started_and_the_deck_opened(self, reviewing, settled,
+                                                               monkeypatch):
+        fake, started = FakeAnki(), []
+        fake.down, fake.command = True, "anki"
+
+        def launch(client):
+            started.append(client.command)
+            client.down = False
+
+        monkeypatch.setattr(anki, "launch", launch)
+        pane, _ = reviewing(fake)
+        settled()
+        settled()
+
+        assert started == ["anki"] and pane.card.card_id == 100
+
+    def test_anki_that_does_not_come_up_is_started_once(self, reviewing, settled,
+                                                        monkeypatch):
+        fake, started = FakeAnki(), []
+        fake.down, fake.command = True, "anki"
+        monkeypatch.setattr(anki, "launch", lambda client: started.append(client.command))
+        pane, _ = reviewing(fake)
+        settled()
+        settled()
+
+        assert started == ["anki"] and "not answering" in failure_of(pane)
+
     def test_what_anki_says_after_it_was_let_go_is_dropped(self, qapp, settled):
         pane = DeckPane("Japanese", client=FakeAnki())
 

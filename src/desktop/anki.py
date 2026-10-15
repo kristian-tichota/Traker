@@ -1,4 +1,5 @@
 import logging
+import shlex
 import time
 from typing import NamedTuple
 
@@ -7,6 +8,7 @@ import requests
 log = logging.getLogger(__name__)
 
 DEFAULT_URL = "http://127.0.0.1:8765"
+DEFAULT_COMMAND = "anki"
 API_VERSION = 6
 TIMEOUT_SECS = 5.0
 
@@ -14,6 +16,9 @@ AGAIN, GOOD = 1, 3
 
 POLL_SECS = 0.05
 SETTLE_SECS = 5.0
+
+LAUNCH_SECS = 30.0
+LAUNCH_POLL_SECS = 0.5
 
 SEPARATOR = "::"
 
@@ -34,7 +39,11 @@ class AnkiStalled(TimeoutError):
     """Anki did not take the answer in time, or did not move on from it."""
 
 
-EXPECTED = (AnkiUnreachable, AnkiRefused, NoSuchDeck, AnkiStalled)
+class AnkiNotStarted(OSError):
+    """The command that starts Anki did not run."""
+
+
+EXPECTED = (AnkiUnreachable, AnkiRefused, NoSuchDeck, AnkiStalled, AnkiNotStarted)
 
 
 class Shown(NamedTuple):
@@ -70,11 +79,12 @@ class Deck(NamedTuple):
 
 
 class AnkiConnect:
-    """AnkiConnect's HTTP interface, one action per call."""
+    """AnkiConnect's HTTP interface, one action per call, and the command that starts Anki."""
 
-    def __init__(self, url=DEFAULT_URL, timeout=TIMEOUT_SECS):
+    def __init__(self, url=DEFAULT_URL, timeout=TIMEOUT_SECS, command=""):
         self.url = str(url or DEFAULT_URL)
         self.timeout = timeout
+        self.command = str(command or "")
 
     def call(self, action, **params):
         """Run one action and return its result."""
@@ -88,6 +98,21 @@ class AnkiConnect:
         if reply.get("error"):
             raise AnkiRefused(f"{action}: {reply['error']}")
         return reply.get("result")
+
+
+def launch(client, start=None, sleep=time.sleep, clock=time.monotonic):
+    """Start Anki with the client's command and wait until its collection answers."""
+    if not (start or _start)(client.command):
+        raise AnkiNotStarted(f"“{client.command}” did not start Anki")
+    deadline = clock() + LAUNCH_SECS
+    while True:
+        try:
+            client.call("deckNames")
+            return
+        except (AnkiUnreachable, AnkiRefused):
+            if clock() >= deadline:
+                raise
+        sleep(LAUNCH_POLL_SECS)
 
 
 def begin(client, deck) -> tuple:
@@ -146,6 +171,18 @@ def take_back(client, deck):
     """Undo the last answer and open the deck again on the card it restored."""
     client.call("guiUndo")
     return begin(client, deck)[1]
+
+
+def _start(command) -> bool:
+    """Start command apart from Traker, without waiting for it."""
+    from PyQt6.QtCore import QProcess
+
+    try:
+        program, *arguments = shlex.split(command)
+    except ValueError:
+        return False
+    started, _pid = QProcess.startDetached(program, arguments)
+    return started
 
 
 def _many(client, *actions) -> list:

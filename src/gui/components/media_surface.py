@@ -62,6 +62,7 @@ TO_THE_ANSWER = "document.getElementById('answer')?.scrollIntoView();"
 GOOD_SAID, AGAIN_SAID, UNDONE = "good", "again", "undone"
 VERDICTS = {GOOD_SAID: ("GOOD", 'green'), AGAIN_SAID: ("AGAIN", 'red'),
             UNDONE: ("TAKEN BACK", 'yellow')}
+STARTING = "STARTING ANKI"
 
 VERDICT_CSS = f"""
 #traker-verdict {{ position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -485,8 +486,14 @@ class DeckPane(WebPane, MarkedList):
 
     def __init__(self, deck=None, start_at=0, parent=None, client=None):
         super().__init__("COULD NOT REVIEW", parent)
-        self.client = client or anki.AnkiConnect(UserProfile().get_metric(
-            "strict_break", "anki_url", anki.DEFAULT_URL))
+        if client is None:
+            profile = UserProfile()
+            client = anki.AnkiConnect(
+                profile.get_metric("strict_break", "anki_url", anki.DEFAULT_URL),
+                command=profile.get_metric("strict_break", "anki_command",
+                                           anki.DEFAULT_COMMAND))
+        self.client = client
+        self.launched = False
         self.deck = ""
         self.card = None
         self.side = None
@@ -616,20 +623,40 @@ class DeckPane(WebPane, MarkedList):
         if generation != self._generation:
             return False
         self.busy = False
-        if error is not None:
+        if error is not None and not self._launch(error):
             log.warning("Could not review %r: %s", self.deck, error)
             self._failed(_why_not(error, self.client.url, self.deck))
+        return error is None
+
+    def _launch(self, error) -> bool:
+        """Start Anki once where nothing answered, reporting whether it is starting."""
+        if (self.launched or not self.client.command
+                or not isinstance(error, anki.AnkiUnreachable)):
             return False
+        self.launched = True
+        log.info("Starting Anki with %r.", self.client.command)
+        self.card, self.side, self.verdict = None, None, None
+        self._show_message(STARTING, colour='base01')
+        self._run(anki.launch, self._started, self.client)
         return True
+
+    def _started(self, outcome):
+        if self._settles(outcome):
+            if self.choosing:
+                self._list()
+            else:
+                self._review(self.deck)
 
     def _began(self, outcome):
         if self._settles(outcome):
+            self.launched = False
             self._media, shown = outcome[1]
             self._present(shown)
 
     def _listed(self, outcome):
         if not self._settles(outcome):
             return
+        self.launched = False
         self.listing = list(outcome[1])
         self.chooser.clear()
         self._rows = _deck_rows(self.chooser, self.listing)

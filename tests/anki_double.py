@@ -7,6 +7,7 @@ class FakeAnki:
     """Anki's reviewer as AnkiConnect drives it: it answers late and does not refresh on undo."""
 
     url = "http://anki.test"
+    command = ""
 
     def __init__(self, cards=("q1", "q2", "q3"), lag=0, decks=("Japanese",)):
         """Hold decks by name, or by name to their cards, where None is a deck the list hides."""
@@ -25,6 +26,7 @@ class FakeAnki:
         self.shown = None
         self.state = None
         self.lag = lag
+        self.down = False
         self.pending = None
         self.answers = []
         self.calls = []
@@ -34,6 +36,8 @@ class FakeAnki:
         return self.queues.get(self.reviewing, [])
 
     def call(self, action, **params):
+        if self.down:
+            raise anki.AnkiUnreachable(self.url)
         self.calls.append(action)
         self._tick()
         return self._run(action, params)
@@ -109,6 +113,9 @@ class FakeAnki:
 
     def cardsInfo(self, cards):
         return [{"cardId": card, "reps": self.reps[card]} for card in cards]
+
+    def deckNames(self):
+        return list(self.ids)
 
     def deckNamesAndIds(self):
         return dict(self.ids)

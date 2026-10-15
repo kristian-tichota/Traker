@@ -54,7 +54,8 @@ extra. Without them the screen displays `COULD NOT PLAY`, `COULD NOT READ`, `COU
 `COULD NOT OPEN`, and the break still holds.
 
 A deck is reviewed by Anki's own reviewer through AnkiConnect at `anki_url`; a `deck` of `*` lists
-every deck first. Anki MUST be running, its window MAY stay minimized, and its timebox MUST be 0.
+every deck first. Where nothing answers, `anki_command` starts Anki. Its window MAY stay minimized,
+and its timebox MUST be 0.
 
 A `url` opens as a web page that takes every key except `Esc` and `Ctrl+0`, which puts the wall back.
 It stays loaded until the walls go, and Traker writes none of its storage to disk. A `sessions`

@@ -286,10 +286,14 @@ screens_off_key = "Tab"
 # no hint is the start of another. The letters of the chores on the walls are
 # left out. Fewer than two letters means a-z.
 hint_keys = "abcdefghijklmnopqrstuvwxyz"
-# Where AnkiConnect listens, for an activity that names a deck. Anki has to be
-# running, and its window may stay minimized. Its timebox (Preferences, Review)
-# has to be 0: the timebox dialog holds the next card until it is answered.
+# Where AnkiConnect listens, for an activity that names a deck. Anki's window
+# may stay minimized. Its timebox (Preferences, Review) has to be 0: the
+# timebox dialog holds the next card until it is answered.
 anki_url = "http://127.0.0.1:8765"
+# The command that starts Anki when nothing answers at anki_url. The wall says
+# STARTING ANKI until its collection opens, so Anki has to open its profile
+# without asking. Empty never starts it.
+anki_command = "anki"
 
 # What a break may open on the screen it took: a PDF is read, an EPUB is read
 # as a book, anything else is played, a deck is reviewed in Anki, a url is

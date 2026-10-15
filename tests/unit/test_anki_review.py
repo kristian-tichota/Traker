@@ -110,6 +110,37 @@ class TestTakingBack:
         assert (shown.card_id, fake.reps[100]) == (100, 0)
 
 
+def stopped(command="anki"):
+    fake = FakeAnki()
+    fake.down, fake.command = True, command
+    return fake
+
+
+class TestStartingAnki:
+    def test_it_waits_for_the_collection_of_the_anki_it_started(self):
+        fake, started, polls = stopped("anki -p Me"), [], itertools.count()
+
+        def start(command):
+            started.append(command)
+            return True
+
+        def sleep(_seconds):
+            fake.down = next(polls) < 2
+
+        anki.launch(fake, start=start, sleep=sleep)
+
+        assert started == ["anki -p Me"] and fake.calls == ["deckNames"]
+
+    def test_a_command_that_does_not_run_is_named(self):
+        with pytest.raises(anki.AnkiNotStarted, match="nope"):
+            anki.launch(stopped("nope"), start=lambda _command: False)
+
+    def test_anki_that_never_answers_is_unreachable(self):
+        with pytest.raises(anki.AnkiUnreachable):
+            anki.launch(stopped(), start=lambda _command: True, sleep=no_wait,
+                        clock=itertools.count(step=10).__next__)
+
+
 class TestTheConnection:
     def test_the_request_is_the_one_ankiconnect_reads(self, monkeypatch):
         posted = []

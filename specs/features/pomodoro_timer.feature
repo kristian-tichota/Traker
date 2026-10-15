@@ -708,7 +708,12 @@ Feature: Focus timer
       And the deck I left stays marked while it owes cards, or the next one that does is
       And 0 on the list puts the wall back
 
-    Scenario: Anki is not running, or has no such deck
+    Scenario: Anki is started when it is not running
+      Given Anki is not running
+      When I press that offer's key
+      Then that screen says that Anki is starting, and the deck opens once Anki answers
+
+    Scenario: Anki does not start, or has no such deck
       When I press that offer's key
       Then that screen says why it cannot review
       And the break goes on, and the other screens are unchanged
