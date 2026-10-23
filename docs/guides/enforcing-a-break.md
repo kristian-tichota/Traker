@@ -42,8 +42,8 @@ Offers come in key order: the queue, the `[[strict_break.activities]]` entries, 
 subfolder of the media folder, `Media/` in the checkout unless `[strict_break.library]` names another.
 A shelf lists its folder, the file opened last marked or, once that one ended, the next by name; the
 list climbs to the media folder, and 0 returns from a file to it. `Ctrl+Home` returns from any depth,
-a page and a session included, to the wall's readouts. The pointer is hidden on the walls except
-over a web page. Each row of a list of decks or of a
+a page and a session included, to the wall's readouts. The pointer is hidden on the walls while it
+rests, except over a web page. Each row of a list of decks or of a
 folder carries a hint made from `hint_keys` less the chores' letters; typing it opens the row. The
 queue is `rest-queue.m3u`, one path per line, so any process can append to it; `:rest` reads, extends
 and prunes it. Positions are kept in `rest-positions.json`, so a film or a book spans several breaks.

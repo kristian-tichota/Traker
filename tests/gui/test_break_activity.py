@@ -5,8 +5,8 @@ import threading
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtCore import QAbstractAnimation, QEvent, QThread, Qt, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QGuiApplication, QImage, QKeyEvent
+from PyQt6.QtCore import QAbstractAnimation, QEvent, QPointF, QThread, Qt, QThreadPool, pyqtSignal
+from PyQt6.QtGui import QGuiApplication, QImage, QKeyEvent, QMouseEvent
 from PyQt6.QtNetwork import QLocalServer
 from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
@@ -904,6 +904,26 @@ class TestThePointer:
         timer._release_strict_break()
 
         assert QApplication.overrideCursor() is None
+
+    def test_it_shows_while_it_moves_and_hides_once_it_rests(self, timer):
+        enter_strict_break(timer)
+        timer._pointer_moving.setInterval(10)
+        wall = timer.overlays[0]
+
+        def move_to(x):
+            timer.eventFilter(wall, QMouseEvent(
+                QEvent.Type.MouseMove, QPointF(x, 10), QPointF(x, 10), Qt.MouseButton.NoButton,
+                Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier))
+
+        move_to(10)
+        assert QApplication.overrideCursor().shape() == Qt.CursorShape.BlankCursor
+        move_to(10)
+        assert QApplication.overrideCursor().shape() == Qt.CursorShape.BlankCursor
+        move_to(40)
+        assert QApplication.overrideCursor() is None
+
+        assert until(lambda: QApplication.overrideCursor() is not None)
+        assert QApplication.overrideCursor().shape() == Qt.CursorShape.BlankCursor
 
 
 class TestARestart:

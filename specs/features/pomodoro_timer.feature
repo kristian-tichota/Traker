@@ -767,9 +767,13 @@ Feature: Focus timer
       When I press CTRL+HOME
       Then the wall shows its readouts and offers again, every position kept
 
-    Scenario: The pointer stays out of sight
+    Scenario: The pointer stays out of sight while it rests
       When the walls stand
       Then the pointer is hidden, except over a web page
+
+    Scenario: A moving pointer shows
+      When the pointer moves over the walls
+      Then it shows until it rests for two seconds
 
   Rule: What to open on a break is queued, not configured
 

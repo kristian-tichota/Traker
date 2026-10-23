@@ -86,6 +86,8 @@ SCREEN_TICK_CAP_MS = 5 * IDLE_POLL_MS
 
 SCREENS_SETTLE_MS = 400
 
+POINTER_REST_MS = 2000
+
 PROMPT_BORDER_PX = 6
 
 OVER_FADE_MS = 3000
@@ -884,6 +886,11 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.last_logged_minute = -1
         self.overlays = []
         self._pointer_hidden = False
+        self._pointer_at = None
+        self._pointer_moving = QTimer(self)
+        self._pointer_moving.setSingleShot(True)
+        self._pointer_moving.setInterval(POINTER_REST_MS)
+        self._pointer_moving.timeout.connect(self._place_the_pointer)
 
         self._strict_engaged = False
         self._media_host = None
@@ -2105,6 +2112,8 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def eventFilter(self, watched, event):
         """Handle every key a break answers, wherever the focus is."""
+        if event.type() == QEvent.Type.MouseMove and self.overlays:
+            self._follow_the_pointer(event.globalPosition())
         if (event.type() not in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease)
                 or event.isAutoRepeat() or not self._strict_engaged):
             return super().eventFilter(watched, event)
@@ -2384,10 +2393,18 @@ class PomodoroView(ShutdownMixin, QWidget):
             self._media_host.hide_media()
         self._redraw_break_surfaces()
 
+    def _follow_the_pointer(self, position):
+        """Show the pointer once it moves over the walls, until it rests."""
+        moved = self._pointer_at is not None and position != self._pointer_at
+        self._pointer_at = position
+        if moved:
+            self._pointer_moving.start()
+            self._place_the_pointer()
+
     def _place_the_pointer(self):
-        """Hide the pointer while walls stand, unless a web page on them takes it."""
-        hidden = bool(self.overlays) and (self._showing is None
-                                          or self._showing.kind != break_activities.PAGE)
+        """Hide the pointer while walls stand and it rests, unless a web page takes it."""
+        hidden = (bool(self.overlays) and not self._pointer_moving.isActive()
+                  and (self._showing is None or self._showing.kind != break_activities.PAGE))
         if hidden == self._pointer_hidden:
             return
         self._pointer_hidden = hidden
@@ -2699,6 +2716,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             o.dismiss()
             o.deleteLater()
         self.overlays.clear()
+        self._pointer_at = None
+        self._pointer_moving.stop()
         self._place_the_pointer()
         self.media_surface = None
         self._media_host = None
