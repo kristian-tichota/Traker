@@ -755,6 +755,12 @@ class TestTheWindowsOwnScreen:
         assert session("sent") == ["Traker -> DP-1"]
         assert landed(session) == "DP-1"
 
+    def test_a_monitor_named_by_its_model_is_found_on_any_connector(self, qapp):
+        session = at_home('outputs[0].model = "24M2N3200";'
+                          'outputs[1].model = "VG248";', output="24M2N3200")
+
+        assert session("sent") == ["Traker -> DP-1"]
+
     def test_it_says_where_the_window_went(self, qapp):
         said = "\n".join(at_home()("printed"))
 

@@ -189,7 +189,8 @@ Feature: Personal profile
       Given a [window] section
       Then a desktop may be named as it appears on the pager, or as its position
       And an activity may be named as it appears in the switcher
-      And a screen is named as its connector, never as "primary"
+      And a screen is named by its model, serial number or connector, never as "primary"
+      And a monitor named by its model is found whatever connector this boot gave it
       And all of them are resolved afresh on every launch
 
     Scenario: A name this session does not have

@@ -180,6 +180,8 @@ PROBE = """
         say("outputs: " + all.length);
         for (var i = 0; i < all.length; i++) {
             say("  output " + i + " name=" + value(all[i], "name")
+                + " model=" + value(all[i], "model")
+                + " serial=" + value(all[i], "serialNumber")
                 + " geometry=" + box(all[i].geometry));
         }
         try {

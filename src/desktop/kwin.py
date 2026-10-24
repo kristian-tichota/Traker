@@ -71,11 +71,25 @@ _SHARED = """
         return [];
     }
 
+    function answersTo(output, wanted) {
+        var folded = String(wanted).toLowerCase();
+        var model = String(output.model || "");
+        var names = [output.name, model, output.serialNumber].concat(model.split(/\\s+/));
+        for (var i = 0; i < names.length; i++) {
+            if (String(names[i] || "").toLowerCase() === folded) return true;
+        }
+        return false;
+    }
+
     function outputNamed(name) {
         if (!name) return null;
         var all = outputs();
-        for (var i = 0; i < all.length; i++) {
+        var i;
+        for (i = 0; i < all.length; i++) {
             try { if (String(all[i].name || "") === name) return all[i]; } catch (e) {}
+        }
+        for (i = 0; i < all.length; i++) {
+            try { if (answersTo(all[i], name)) return all[i]; } catch (e) {}
         }
         return null;
     }
@@ -396,6 +410,16 @@ _HOME_SCRIPT = """// Traker: keep the application's own window on one output.
     print("traker: window home is watching for '" + caption + "' on " + wanted);
 })();
 """
+
+
+def answers_to(screen, wanted) -> bool:
+    """Report whether a screen is the one named by connector, model or serial number."""
+    folded = str(wanted or "").strip().casefold()
+    if not folded or screen is None:
+        return False
+    model = str(screen.model() or "")
+    names = [screen.name(), model, screen.serialNumber(), *model.split()]
+    return any(str(name or "").casefold() == folded for name in names)
 
 
 def default_app_id():

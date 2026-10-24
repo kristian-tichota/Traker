@@ -29,7 +29,9 @@ script stops trying and reports this.
 ## Naming
 
 A desktop is named as the pager names it or by its position, an activity as the switcher names it, and
-a screen by its connector name. The word `primary` MUST NOT be used, because on this session it
+a screen by its model, its serial number or its connector name. The kernel numbers connectors across
+all GPUs in probe order, so on a machine with two GPUs `HDMI-A-3` can be `HDMI-A-1` after the next
+boot; a model does not change. The word `primary` MUST NOT be used, because on this session it
 denotes three different monitors depending on which subsystem answers. Case is not significant, and
 both names are resolved again on every launch, which is why names rather than the UUID the settings
 page stores are written. A name nothing answers to costs that dimension and a line in the log, and it

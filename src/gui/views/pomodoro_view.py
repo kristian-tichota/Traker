@@ -21,7 +21,7 @@ from src.desktop import rest_queue
 from src.desktop import standing_break
 from src.desktop.hooks import StateHook
 from src.desktop.idle import idle_ms as session_idle_ms
-from src.desktop.kwin import KWinPin, default_app_id
+from src.desktop.kwin import KWinPin, answers_to, default_app_id
 from src.desktop.kwin_rules import EYE_GROUP, REST_GROUP, RestRule, prune
 from src.desktop.screen_power import ScreenPower
 from src.desktop.switch_guard import SwitchGuard
@@ -2529,7 +2529,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             if not wanted:
                 continue
             for screen in self.screens_to_cover():
-                if screen is not None and screen.name() == wanted:
+                if answers_to(screen, wanted):
                     return screen
             log.warning("No output is called %r: showing what a break plays "
                         "elsewhere.", wanted)

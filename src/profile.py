@@ -211,9 +211,9 @@ on_break = false
 [window]
 desktop = ""
 activity = ""
-# Which monitor, by the name kscreen-doctor -o gives -- e.g. "DP-1". The
-# output is asked for by name rather than by index, because KDE's own "Screen"
-# window rule indexes a list the compositor rebuilds every boot.
+# Which monitor: its model, e.g. "24M2N3200", its serial number, or its
+# connector name from kscreen-doctor -o, e.g. "DP-1". A connector name can
+# change between boots on a machine with two GPUs; a model does not.
 screen = ""
 
 # Take the colour out of every screen between these hours. KWin's own filter
@@ -258,10 +258,9 @@ sound_name = "dialog-warning"
 sound_file = ""
 # What KWin calls Traker's windows. Empty means ask Qt.
 app_id = ""
-# Which output shows what a break plays or reads -- the name kscreen-doctor -o
-# gives, e.g. "DP-1". Empty follows [window] screen; with neither set it is the
-# primary screen as Qt reports it, which on Wayland is the first output the
-# compositor announced and not KDE's own primary.
+# Which output shows what a break plays or reads, named as [window] screen is.
+# Empty follows [window] screen; with neither set it is the primary screen as Qt
+# reports it, which can change when a monitor is switched off and on.
 media_screen = ""
 # Put the virtual desktop or activity back if it changes while a break holds.
 # Off, the break only follows the member.

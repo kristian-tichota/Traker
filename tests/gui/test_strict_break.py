@@ -350,11 +350,19 @@ class TestTheApplicationWindowIsLeftAlone:
 
 
 class FakeScreen:
-    def __init__(self, name):
+    def __init__(self, name, model="", serial=""):
         self._name = name
+        self._model = model
+        self._serial = serial
 
     def name(self):
         return self._name
+
+    def model(self):
+        return self._model
+
+    def serialNumber(self):
+        return self._serial
 
     def geometry(self):
         return QRect(0, 0, 800, 800)
@@ -381,6 +389,14 @@ class TestWhichOutputShowsTheFile:
 
         with caplog.at_level("WARNING"):
             assert timer._media_screen() == QApplication.primaryScreen()
+
+    def test_a_monitor_named_by_its_model_is_found_on_any_connector(self, timer):
+        hdmi = FakeScreen("HDMI-A-1", "PHL 24M2N3200", "UK02436017174")
+        timer.screens_to_cover = lambda: [FakeScreen("DP-3", "VG248"), hdmi]
+
+        for named in ("24m2n3200", "PHL 24M2N3200", "UK02436017174", "HDMI-A-1"):
+            timer._media_screen_name = named
+            assert timer._media_screen() is hdmi
 
     def test_unset_it_follows_the_window(self, timer):
         left, right = FakeScreen("DP-2"), FakeScreen("DP-1")
