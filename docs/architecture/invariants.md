@@ -25,7 +25,8 @@ A violation of the constraints below fails silently, fatally, or both.
 
 ## Compositor integration
 - `w.output` is stale after a drag. `Window::setOutput` is the only emitter of `outputChanged`, and an interactive move ends in `sendToOutput(moveResizeOutput())`. Decide by frame geometry and watch `interactiveMoveResizeFinished`.
-- No script-written desktop or activity property is applied on this Plasma, and a refused property write raises nothing, so every write MUST be read back. The pin is therefore a window rule; the output is a script, because KWin's rule for it is an index into a list rebuilt each boot.
+- A refused property write raises nothing, so every write MUST be read back. The pin is therefore a window rule; the output is a script, because KWin's rule for it is an index into a list rebuilt each boot. A break's scripts MUST write only to walls, because a desktop or activity write to the application's own window lands wherever no rule forces it.
+- The application window's rule MUST be `Force`, never `ForceTemporarily`, because KWin discards a temporary rule with any window it matched, and Qt withdraws windows when monitors go dark.
 - The application's rules MUST be first in `[General] rules=`, because `Rules::checkSetStop` means the first rule to set a value decides it. A rule matches on the window title, never the application, because every window of this application carries one class and a class-matched rule would reach a break's walls. `Workspace::reconfigure` debounces by 200 ms.
 - A monitor switched off is a withdrawn output, and the returning monitor is a new `QScreen`. Anything holding the old one raises `RuntimeError` from a Qt slot. Release inside the signal, rebuild once the burst settles, and key a wall to the output name.
 

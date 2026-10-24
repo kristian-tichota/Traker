@@ -303,6 +303,7 @@ Feature: Focus timer
       Then the monitor that came back is covered by a wall of its own
       And the wall on the monitor I did not touch is the one that was there
       And what was showing on the one that went dark comes back where it stopped
+      And it returns to the output my profile names once that monitor is back, whichever came first
       And every screen dark at once is still a break, and still costs the hold
 
     Scenario: Somewhere else to be is not a way out

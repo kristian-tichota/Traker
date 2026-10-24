@@ -417,8 +417,8 @@ class TestTheWindowsOwnRule:
         assert rule["titlematch"] == EXACT_MATCH
         assert rule["desktops"] == "d-five"
         assert rule["activity"] == "a-one"
-        assert rule["desktopsrule"] == FORCE_TEMPORARILY
-        assert rule["activityrule"] == FORCE_TEMPORARILY
+        assert rule["desktopsrule"] == FORCE
+        assert rule["activityrule"] == FORCE
 
     def test_it_writes_both_dimensions(self, rules_file, kwinrc):
         kwin = Compositor()
@@ -460,6 +460,17 @@ class TestTheWindowsOwnRule:
 
         assert home.hold() is False
         assert not rules_file.exists()
+
+    def test_a_rule_a_crashed_run_left_is_removed_once_nothing_is_named(
+            self, rules_file, kwinrc):
+        WindowHome("Traker", desktop=5, path=str(rules_file), reconfigure=Compositor(),
+                   kwinrc=kwinrc, caller=Activities()).hold()
+
+        home = WindowHome("Traker", path=str(rules_file), reconfigure=Compositor(),
+                          kwinrc=kwinrc, caller=Activities())
+
+        assert home.hold() is False
+        assert WINDOW_GROUP not in rules_file.read_text()
 
     def test_closing_the_window_gives_the_rule_back(self, rules_file, kwinrc):
         home = WindowHome("Traker", desktop=5, activity="Personal",

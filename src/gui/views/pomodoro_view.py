@@ -422,6 +422,14 @@ class StrictOverlay(QWidget):
         self.media = surface
         self.stack.addWidget(surface)
 
+    def drop_media(self):
+        """Give the surface up and show the readouts again."""
+        if self.media is not None:
+            self.stack.removeWidget(self.media)
+            self.media.deleteLater()
+        self.media = None
+        self.hide_media()
+
     def show_media(self) -> bool:
         """Show the file instead of the readouts."""
         if self.media is None:
@@ -2567,6 +2575,18 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._hand_out_hint_letters()
         self._media_host.host_media(self.media_surface)
 
+    def _take_the_media_down(self):
+        """Free the media surface, returning what it showed and the list behind it."""
+        showing, behind = self._showing, self._list_behind
+        self._remember_where_it_stopped()
+        if self.media_surface is not None:
+            self.media_surface.shutdown()
+        if self._media_host is not None:
+            self._media_host.drop_media()
+        self.media_surface = None
+        self._media_host = None
+        return showing, behind
+
     def _watch_the_outputs(self):
         """Watch for a monitor going away and coming back, for the break's length."""
         app = QApplication.instance()
@@ -2626,15 +2646,9 @@ class PomodoroView(ShutdownMixin, QWidget):
                  "%d dropped.", len(wanted),
                  sum(wall is not None for wall in kept), len(spare))
 
-        losing_media = any(wall is self._media_host for wall in spare)
-        showing = self._showing if losing_media else None
-        behind = self._list_behind if losing_media else None
-        if losing_media:
-            self._remember_where_it_stopped()
-            if self.media_surface is not None:
-                self.media_surface.shutdown()
-            self.media_surface = None
-            self._media_host = None
+        showing = behind = None
+        if any(wall is self._media_host for wall in spare):
+            showing, behind = self._take_the_media_down()
 
         for wall in spare:
             wall.dismiss()
@@ -2643,6 +2657,10 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.overlays = [wall if wall is not None else self._build_wall(screen)
                          for screen, wall in zip(wanted, kept)]
 
+        if self.media_surface is not None and (
+                self._media_host is not self._wall_for(self._media_screen())
+                or self.media_surface.only_screen != (len(self.overlays) == 1)):
+            showing, behind = self._take_the_media_down()
         if self.media_surface is None:
             self._host_the_media()
         if showing is not None:

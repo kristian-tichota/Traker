@@ -303,13 +303,21 @@ class TestAWallAndTheWindowBehindIt:
 
         assert session("browser.keepAbove") is False
 
-    def test_the_journal_says_which_of_ours_are_walls(self, session):
+    def test_the_journal_names_only_the_walls(self, session):
         said = [line for line in session("printed") if "everyDesktop=" in line]
 
-        assert len(said) == 3
-        assert [line for line in said if "holding 'Traker'" in line
-                and "wall=false" in line]
-        assert len([line for line in said if "wall=true" in line]) == 2
+        assert len(said) == 2
+        assert all("wall=true" in line for line in said)
+
+    def test_the_application_window_stays_on_its_own_desktop_and_activity(self, session):
+        session('workspace.currentDesktop = {name: "Desktop 4"};'
+                'workspace.currentActivity = "uuid-two";'
+                "workspace.currentDesktopChanged.emit();"
+                "workspace.currentActivityChanged.emit();"
+                "workspace.windowActivated.emit(app);")
+
+        assert session("app.desktops[0].name") == "Desktop 1"
+        assert session("app.activities") == ["uuid-one"]
 
 
 class TestACompositorThatAnswersDifferently:
@@ -437,7 +445,7 @@ class TestPlacingEachWallOnItsOutput:
         said = [line for line in session("printed") if "everyDesktop=" in line]
 
         assert any("wanted=DP-1 on=DP-1" in line for line in said)
-        assert any("wanted=(any)" in line for line in said)
+        assert any("wanted=DP-2 on=DP-2" in line for line in said)
 
     def test_a_break_that_named_no_outputs_places_nothing(self, qapp):
         session = placed(walls={})
@@ -692,11 +700,16 @@ class TestTheUndo:
 
         assert ended("wall.desktop") == 3
 
+    def test_the_application_window_is_left_where_it_belongs(self, qapp):
+        ended = Session(RELEASED, source=release_source("traker", "Traker rest"))
+
+        assert ended("wall.desktops") == [] and ended("wall.activities") == []
+        assert ended("covered.activities") == ["uuid-two"]
+
     def test_a_wall_still_standing_keeps_the_front_it_was_given(self, qapp):
         ended = Session(RELEASED, source=release_source("traker", "Traker rest", standing=True))
 
         assert ended("covered.keepAbove") is True
-        assert ended("wall.keepAbove") is False
 
 AT_HOME = TWO_OUTPUTS + """
 all = [app];

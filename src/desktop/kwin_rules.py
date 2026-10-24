@@ -105,9 +105,9 @@ def window_keys(caption, desktop_id=None, activity_id=None):
         ("titlematch", EXACT_MATCH),
     ]
     if desktop_id:
-        keys += [("desktops", desktop_id), ("desktopsrule", FORCE_TEMPORARILY)]
+        keys += [("desktops", desktop_id), ("desktopsrule", FORCE)]
     if activity_id:
-        keys += [("activity", activity_id), ("activityrule", FORCE_TEMPORARILY)]
+        keys += [("activity", activity_id), ("activityrule", FORCE)]
     return keys
 
 
@@ -321,6 +321,13 @@ class WindowHome(TemporaryRule):
         if not (desktop or activity):
             return ()
         return window_keys(self._caption, desktop, activity)
+
+    def hold(self) -> bool:
+        """Write the rule, or remove a stale one when nothing resolves."""
+        if super().hold():
+            return True
+        prune((self.group,), self._path, self._reconfigure)
+        return False
 
     def say(self):
         log.info("Traker's window is forced onto %s by a window rule in %s.",

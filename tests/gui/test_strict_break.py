@@ -604,6 +604,26 @@ class TestAMonitorSwitchedOffAndBackOn:
         assert timer._media_host is timer.overlays[0]
         assert timer.overlays[0].isVisible() is True
 
+    def test_the_file_goes_back_to_its_output_when_that_returns_last(self, timer,
+                                                                     monkeypatch):
+        left, right = named_outputs(timer, monkeypatch, "DP-2", "DP-1")
+        timer._media_screen_name = "DP-1"
+        enter_strict_break(timer)
+        assert timer._media_host is timer._wall_for(right)
+        timer._an_output_went(left)
+        timer._an_output_went(right)
+
+        first = FakeScreen("DP-2")
+        timer.screens_to_cover = lambda: [first]
+        timer._rewall_for_the_outputs()
+        back = FakeScreen("DP-1")
+        timer.screens_to_cover = lambda: [first, back]
+        timer._rewall_for_the_outputs()
+
+        assert timer._media_host is timer._wall_for(back)
+        assert timer.media_surface.only_screen is False
+        assert timer._wall_for(first).media is None
+
     def test_a_monitor_back_after_the_break_ran_out_takes_no_desktop_back(
             self, timer, monkeypatch):
         left, right = named_outputs(timer, monkeypatch, "DP-2", "DP-1")

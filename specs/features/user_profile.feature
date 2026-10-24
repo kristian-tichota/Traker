@@ -170,6 +170,7 @@ Feature: Personal profile
       When I start Traker
       Then its window is put on that desktop and that activity
       And it cannot be dragged off either of them
+      And it stays there through every break and every monitor switched off and on
       And my screen does not move, and the log says where the window went
 
     Scenario: Forcing nothing is the default

@@ -132,7 +132,7 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     var holding = false;
     var adjusting = false;
 
-    function ours() { return windows().filter(isBreak); }
+    function ours() { return windows().filter(isWall); }
 
     function onEveryDesktop(w) {
         try { return w.onAllDesktops === true; } catch (e) {}
@@ -160,17 +160,8 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     }
 
     function frontWindow(mine) {
-        var i;
-        if (wanted !== "") {
-            for (i = 0; i < mine.length; i++) {
-                if (String(mine[i].caption || "") === wanted) return mine[i];
-            }
-        }
-        for (i = 0; i < mine.length; i++) {
-            if (isWall(mine[i])) return mine[i];
-        }
-        for (i = 0; i < mine.length; i++) {
-            if (mine[i].wantsInput !== false) return mine[i];
+        for (var i = 0; i < mine.length; i++) {
+            if (String(mine[i].caption || "") === wanted) return mine[i];
         }
         return mine[0];
     }
@@ -192,7 +183,6 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
 
     function take(w) {
         follow(w);
-        if (!isWall(w)) return;
         try { w.keepAbove = true; } catch (e) {}
         try { if (w.minimized) w.minimized = false; } catch (e) {}
         placeOnItsOutput(w);
@@ -216,7 +206,7 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     }
 
     function apply(w) {
-        if (adjusting || !isBreak(w)) return;
+        if (adjusting || !isWall(w)) return;
         adjusting = true;
         try { take(w); } finally { adjusting = false; }
         reportOnce(w);
@@ -246,7 +236,7 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
 
             var front = frontWindow(mine);
             for (var n = 0; n < mine.length; n++) {
-                if (isWall(mine[n]) && mine[n] !== front) raise(mine[n]);
+                if (mine[n] !== front) raise(mine[n]);
             }
             raise(front);
 
@@ -290,7 +280,7 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
     }
 
     function onAdded(w) {
-        if (!isBreak(w)) return;
+        if (!isWall(w)) return;
         apply(w);
         watch(w);
     }
@@ -304,7 +294,7 @@ _SCRIPT = """// Traker: keep a strict break where the member is.
 
     var present = windows();
     for (var n = 0; n < present.length; n++) {
-        if (isBreak(present[n])) watch(present[n]);
+        if (isWall(present[n])) watch(present[n]);
     }
     try { held.currentDesktop = workspace.currentDesktop; } catch (e) {}
     try { held.currentActivity = workspace.currentActivity; } catch (e) {}
@@ -318,7 +308,7 @@ _RELEASE_SCRIPT = """// Traker: give back what a strict break held.
     var wallsStillStand = __STANDING__;
 
     function giveBack(w) {
-        if (!(wallsStillStand && isWall(w))) { try { w.keepAbove = false; } catch (e) {} }
+        if (!wallsStillStand) { try { w.keepAbove = false; } catch (e) {} }
         call(w, "setOnAllDesktops", false);
         try { w.onAllDesktops = false; } catch (e) {}
         try {
@@ -334,7 +324,7 @@ _RELEASE_SCRIPT = """// Traker: give back what a strict break held.
     var all = windows();
     var given = 0;
     for (var i = 0; i < all.length; i++) {
-        if (isBreak(all[i])) { giveBack(all[i]); given += 1; }
+        if (isWall(all[i])) { giveBack(all[i]); given += 1; }
     }
     print("traker: strict break gave back " + given + " window(s)");
 })();

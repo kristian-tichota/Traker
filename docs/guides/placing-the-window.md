@@ -6,8 +6,10 @@ written to the compositor configuration and no script is loaded. `[window] deskt
 
 The window opens there, cannot be dragged off the desktop or activity, and the current screen does not
 change when the application starts, because a launch that appears to do nothing is a window on another
-desktop, and the log records this. When the application closes the rule is gone: KWin drops it when
-the window is withdrawn, and the application removes it itself after a compositor restart.
+desktop, and the log records this. The rule is forced rather than temporary, because KWin discards a
+temporary rule with any window it matched, and Qt withdraws and recreates windows when monitors are
+switched off and on. The application removes the rule when it closes, and the next launch replaces or
+removes a rule that a crash left behind.
 
 ## Output selection
 

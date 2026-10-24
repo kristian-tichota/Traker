@@ -886,7 +886,7 @@ class MediaSurface(QWidget):
                  parent=None):
         super().__init__(parent)
         self.timer_ref = timer_ref
-        self._only_screen = only_screen
+        self.only_screen = only_screen
         self.activity = None
         self.letters = LETTERS
         self._hold = (0.0, False)
@@ -971,7 +971,7 @@ class MediaSurface(QWidget):
     def set_keys(self, hints):
         """Name the keys that drive what is showing, under a page and over anything else."""
         self.keys.set_hints(hints)
-        self.keys.setVisible(bool(hints) and self._only_screen and not self._under_a_page())
+        self.keys.setVisible(bool(hints) and self.only_screen and not self._under_a_page())
         self._place_the_overlays()
         self.update_display()
 
