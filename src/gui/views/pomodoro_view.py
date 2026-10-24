@@ -947,6 +947,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.dictum = dictum.DictumListener(parent=self)
         self.dictum.changed.connect(self._say_which_keys_drive_it)
         self.dictum.returned.connect(lambda: self.hook.tell_again())
+        self.dictum.told.connect(self._hear_told)
         self.restarting = False
         self._standing_path = standing_break.beside(self._queue_path)
 
@@ -2381,6 +2382,11 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._showing = None
         self._list_behind = None
         self._show_upcoming()
+
+    def _hear_told(self, name):
+        """Put the wall back when libre-dictum tells home, as CTRL+HOME does."""
+        if name == dictum.HOME and self._strict_engaged and self._showing is not None:
+            self._stop_showing()
 
     def _stop_showing(self):
         """Take what is showing away, remembering where it reached."""

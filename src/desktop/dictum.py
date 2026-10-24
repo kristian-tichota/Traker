@@ -9,13 +9,17 @@ from PyQt6.QtNetwork import QLocalSocket
 
 log = logging.getLogger(__name__)
 
-PROTOCOL = 13
+PROTOCOL = 14
 
 SOCKET_ENV = "LIBRE_DICTUM_HUD_SOCKET"
 
 RETRY_MS = 5000
 
 VOICE_PHRASES = 2
+
+HOME = "home"
+
+TOLD_KEYS = {HOME: "ctrl+home"}
 
 TOKENS = {
     "SPACE": "space", "ENTER": "enter", "ESC": "esc", "TAB": "tab", "BACKSPACE": "backspace",
@@ -31,6 +35,7 @@ SPELLINGS = {"escape": "esc", "return": "enter", "pgup": "pageup", "page_up": "p
 HELD = re.compile(r"\d+(\.\d+)?s")
 REPEATED = re.compile(r"(?:\{\d+=\d+\}|\d+)\((.+)\)")
 HOLDING = re.compile(r"hold\((.+)\)")
+TELLING = re.compile(r"tell\((.+)\)")
 STANDING_IN = re.compile(r"(\w+) pedal")
 
 
@@ -53,6 +58,9 @@ def key_sent(response) -> tuple:
     holding = HOLDING.fullmatch(said)
     if holding:
         return SPELLINGS.get(holding[1], holding[1]), True
+    telling = TELLING.fullmatch(said)
+    if telling:
+        return TOLD_KEYS.get(telling[1], ""), False
     return SPELLINGS.get(said, said), False
 
 
@@ -85,7 +93,8 @@ def bindings(catalogue, state) -> dict:
             if not pedal:
                 add(press, name.replace("_", " "))
     if "voice" not in asleep:
-        for group in modes.get(state.get("mode"), {}).get("groups", ()):
+        voiced = [*(state.get("lock_commands") or ()), state.get("mode")]
+        for group in (group for name in voiced for group in modes.get(name, {}).get("groups", ())):
             for phrase, response, *_ in group.get("entries", ()):
                 if "{" not in phrase:
                     add(response, f"“{phrase}”", spoken_name=True)
@@ -139,6 +148,7 @@ class DictumListener(QObject):
 
     changed = pyqtSignal()
     returned = pyqtSignal()
+    told = pyqtSignal(str)
 
     def __init__(self, path=None, parent=None):
         super().__init__(parent)
@@ -198,7 +208,7 @@ class DictumListener(QObject):
         self._settle()
 
     def _take(self, line):
-        """Keep the newest catalogue and the newest layer state a frame carries."""
+        """Keep the newest catalogue and layer state, and pass on a name it is told."""
         try:
             frame = json.loads(line)
         except ValueError:
@@ -216,6 +226,8 @@ class DictumListener(QObject):
             self._catalogue = frame
         elif frame.get("kind") == "state":
             self._state = frame
+        elif frame.get("kind") == "tell" and isinstance(frame.get("name"), str):
+            self.told.emit(frame["name"])
 
     def _settle(self):
         """Work out the bindings again, and say so where they changed."""

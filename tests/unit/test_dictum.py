@@ -15,6 +15,9 @@ CATALOGUE = {
             ["brow_raise", "space", ""], ["pucker_frown", "esc", ""],
             ["left_open", "left pedal", "left pedal"], ["right_open", "right pedal", "right pedal"],
             ["left_fist", "hold(esc)", "release(esc)"]]},
+        {"name": "::traker", "pedals": [], "gestures": [], "groups": [
+            {"name": "wall", "entries": [["wall home", "tell(home)", ""],
+                                         ["end session", "delete", ""]]}]},
     ],
 }
 
@@ -40,6 +43,12 @@ class TestWhatAResponseSends:
     def test_a_chord_keeps_its_parts(self):
         assert key_sent("ctrl + 0") == ("ctrl+0", False)
 
+    def test_a_told_home_stands_for_its_key(self):
+        assert key_sent("tell(home)") == ("ctrl+home", False)
+
+    def test_a_told_name_without_a_key_sends_none(self):
+        assert key_sent("tell(dance)") == ("", False)
+
 
 class TestWhoSendsWhat:
     def test_pedals_then_their_stand_ins_then_gestures_then_phrases(self, inputs):
@@ -51,6 +60,12 @@ class TestWhoSendsWhat:
 
     def test_a_phrase_that_takes_a_number_is_left_out(self, inputs):
         assert not any("numeric" in name for names in inputs.values() for name in names)
+
+    def test_the_lock_s_commands_count_while_it_holds(self):
+        locked = bindings(CATALOGUE, {**STATE, "lock_commands": ["::traker"]})
+
+        assert locked[("ctrl+home", False)] == ("“wall home”",)
+        assert ("ctrl+home", False) not in bindings(CATALOGUE, STATE)
 
     def test_a_sleeping_layer_sends_nothing(self):
         asleep = bindings(CATALOGUE, {**STATE, "asleep": ["gesture", "voice"]})

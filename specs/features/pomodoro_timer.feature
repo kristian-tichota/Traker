@@ -767,6 +767,11 @@ Feature: Focus timer
       When I press CTRL+HOME
       Then the wall shows its readouts and offers again, every position kept
 
+    Scenario: A spoken home returns to the wall wherever the keyboard is
+      Given any activity shows
+      When libre-dictum tells "home"
+      Then the wall shows its readouts and offers again, as after CTRL+HOME
+
     Scenario: The pointer stays out of sight while it rests
       When the walls stand
       Then the pointer is hidden, except over a web page

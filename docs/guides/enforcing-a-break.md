@@ -83,6 +83,8 @@ by `focus`, `break`, `list`, `video`, `document`, `book`, `deck`, `page` or `ter
 every other wall fades to a grey face with the time left by the minute, what is showing and its keys.
 Each key names the libre-dictum inputs that send it, read from that program's display socket at
 `LIBRE_DICTUM_HUD_SOCKET` or `$XDG_RUNTIME_DIR/libre-dictum/hud.sock`; another protocol names none.
+A `home` told on that socket, by libre-dictum's `tell(home)`, puts the wall back as CTRL+HOME does,
+whichever window holds the keyboard.
 When that socket returns after a loss, the hook hears the current state again, and a failing run is
 retried for about a minute while its state is still the latest.
 

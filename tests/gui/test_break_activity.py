@@ -2587,6 +2587,14 @@ class TestTheInputsThatSendEachKey:
 
         assert not any(deck_timer.media_surface.keys.inputs)
 
+    def test_a_told_home_puts_the_wall_back(self, reviewing, hud):
+        assert until(lambda: hud.held) and reviewing._showing is not None
+
+        told = {"protocol": dictum.PROTOCOL, "kind": "tell", "name": "home"}
+        hud.held[0].write((json.dumps(told) + "\n").encode())
+
+        assert until(lambda: reviewing._showing is None)
+
     def test_the_break_ending_lets_go_of_the_socket(self, reviewing, hud):
         assert until(lambda: hud.held)
 
