@@ -995,6 +995,11 @@ Feature: Focus timer
       And it paces one blink cycle: close gently, open, close gently, squeeze, open
       And it counts down a 20-second gaze at something 6 m away, then chimes and lifts
 
+    Scenario: A rest during focus is rest
+      Given a focus interval is running
+      When a rest or its countdown is on the veil
+      Then the focus clock holds, and the time counts as rest
+
     Scenario: Every routine opens with a countdown
       Then a rest or a blink set counts down 3 seconds before its first step
 

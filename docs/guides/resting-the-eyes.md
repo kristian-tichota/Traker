@@ -13,6 +13,9 @@ drawn on. Contract: `specs/features/pomodoro_timer.feature`.
 
 A silent 3-second countdown precedes each routine.
 
+While a focus interval runs, a routine and its countdown hold the focus clock, and that time is
+counted as rest.
+
 Each step sounds the cue of its motion, so that the routine can be followed with the eyes closed.
 
 | Motion | Cue |

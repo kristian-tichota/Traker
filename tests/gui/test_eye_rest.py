@@ -166,6 +166,19 @@ class TestALookAway:
 
         assert timer.eye_rest.running is True
 
+    def test_a_rest_during_focus_holds_the_clock_and_counts_as_rest(self, timer):
+        timer._toggle_timer()
+        left = timer.time_left_ms
+        gather_screen_time(timer)
+
+        timer.last_frame_timestamp = QDateTime.currentMSecsSinceEpoch() - 1000
+        timer._engine_loop()
+
+        assert timer.time_left_ms == left
+        assert timer.intra_ms["focus"] == 0
+        assert timer.intra_ms["rest"] >= 1000
+        assert timer.lbl_phase.text() == "EYE REST · FOCUS HELD"
+
     def test_the_veils_rule_is_held_until_the_timer_shuts_down(self, timer, desktop_session):
         with open(desktop_session.rules_path, encoding="utf-8") as rules:
             assert f"[{EYE_GROUP}]" in rules.read()

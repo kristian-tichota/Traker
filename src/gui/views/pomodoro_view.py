@@ -991,7 +991,7 @@ class PomodoroView(ShutdownMixin, QWidget):
                                     low=1.0) * MS_PER_MINUTE,
                 self.profile.number("eye_rest", "gaze_secs", DEFAULT_GAZE_SECS,
                                     low=1.0, high=600.0) * 1000,
-                walls=lambda: self.overlays, still=self._still_the_media,
+                walls=lambda: self.overlays, still=self._hold_still,
                 sound=self.profile.get_metric("eye_rest", "sound", True) is not False,
                 parent=self)
             self.eye_rest.set_done.connect(self._blink_set_done)
@@ -1211,7 +1211,7 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _get_current_state(self):
         """Return which of the four states this second accrues to."""
         if self.is_running:
-            if self.current_phase != 'work':
+            if self.current_phase != 'work' or self._eyes_hold_focus():
                 return 'rest'
             return 'focus_overtime' if self.rest_owed_ms() else 'focus'
         if self._idled or self.is_absent() or self.waiting_for_work_start:
@@ -1321,10 +1321,12 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._blink_sets_done += 1
         self._record(BLINK_SET_EVENT)
 
-    def _still_the_media(self, held):
-        """Hold what the break shows still while the eyes rest."""
+    def _hold_still(self, held):
+        """Hold what the break shows, and a running focus clock, still while the eyes rest."""
         if self.media_surface is not None:
             self.media_surface.still(held)
+        if self._focus_is_running():
+            self._say_running_phase()
 
     def refresh(self):
         """Read the day's telemetry and, during a break, what is still due."""
@@ -1383,7 +1385,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self.last_logged_minute = current_minute
 
-        if self.is_running:
+        if self.is_running and not self._eyes_hold_focus():
             self.time_left_ms -= delta_ms
             if (self.strict_mode and self.warn_secs and not self._warned_of_break
                     and self.current_phase == "work"
@@ -1480,6 +1482,10 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Report whether a focus interval is on the clock now."""
         return self.is_running and self.current_phase == "work"
 
+    def _eyes_hold_focus(self) -> bool:
+        """Report whether an eye routine holds the running focus clock."""
+        return self._focus_is_running() and self.eye_rest is not None and self.eye_rest.running
+
     def _say_phase(self, text, colour="blue"):
         """Set the phase line, in the palette colour of the state it names."""
         if (text, colour) == self._phase_said:
@@ -1492,6 +1498,9 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def _say_running_phase(self):
         """Name the interval now on the clock in its colour, and any rest still owed."""
+        if self._eyes_hold_focus():
+            self._say_phase("EYE REST · FOCUS HELD", PHASE_COLOURS["break"])
+            return
         phase = self.current_phase
         owed = self.rest_owed_ms() if phase == "work" else 0
         if owed:
