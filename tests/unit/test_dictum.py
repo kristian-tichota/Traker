@@ -1,6 +1,6 @@
 import pytest
 
-from src.desktop.dictum import bindings, key_sent, keys_of, legend
+from src.desktop.dictum import Gate, bindings, gate_of, key_sent, keys_of, legend
 
 CATALOGUE = {
     "kind": "catalogue",
@@ -15,6 +15,9 @@ CATALOGUE = {
             ["brow_raise", "space", ""], ["pucker_frown", "esc", ""],
             ["left_open", "left pedal", "left pedal"], ["right_open", "right pedal", "right pedal"],
             ["left_fist", "hold(esc)", "release(esc)"]]},
+        {"name": "wall mode", "pedals": [["left", "3", ""], ["middle", "2", ""],
+                                         ["right", "enter", ""]],
+         "gestures": [["left_fist", "1", ""], ["brow_raise", "esc", ""]], "groups": []},
         {"name": "::traker", "pedals": [], "gestures": [], "groups": [
             {"name": "wall", "entries": [["wall home", "tell(home)", ""],
                                          ["end session", "delete", ""]]}]},
@@ -52,11 +55,11 @@ class TestWhatAResponseSends:
 
 class TestWhoSendsWhat:
     def test_pedals_then_their_stand_ins_then_gestures_then_phrases(self, inputs):
-        assert inputs[("space", False)] == ("right pedal", "right open", "brow raise",
+        assert inputs[("space", False)] == ("right pedal", "right_open", "brow_raise",
                                             "“send space”")
 
     def test_a_stand_in_sends_what_its_pedal_sends(self, inputs):
-        assert inputs[("left", False)] == ("left pedal", "left open", "“step left”")
+        assert inputs[("left", False)] == ("left pedal", "left_open", "“step left”")
 
     def test_a_phrase_that_takes_a_number_is_left_out(self, inputs):
         assert not any("numeric" in name for names in inputs.values() for name in names)
@@ -96,15 +99,31 @@ class TestTheLegend:
     def test_a_pair_splits_into_one_row_per_key_and_effect(self, inputs):
         rows = legend(DECK, inputs)
 
-        assert ("←", "again", ("left pedal", "left open", "“step left”")) in rows
+        assert ("←", "again", ("left pedal", "left_open", "“step left”")) in rows
         assert ("→", "good", ()) in rows
 
     def test_a_held_key_names_only_what_holds_it(self, inputs):
         held, = [row for row in legend(DECK, inputs) if row[0] == "ESC 10s"]
 
-        assert held[2] == ("left fist",)
+        assert held[2] == ("left_fist",)
 
     def test_a_pressed_key_names_taps_and_holds(self, inputs):
         rows = legend([("ESC", "start focus")], inputs)
 
-        assert rows == [("ESC", "start focus", ("pucker frown", "left fist"))]
+        assert rows == [("ESC", "start focus", ("pucker_frown", "left_fist"))]
+
+
+class TestTheGestureServingItsHold:
+    def test_a_state_frame_names_it_and_how_far_it_is(self):
+        frame = {**STATE, "gate": {"name": "left_fist", "elapsed": 0.4, "hold": 1.0,
+                                   "readings": []}}
+
+        assert gate_of(frame) == ("left_fist", 0.4, 1.0)
+
+    def test_a_state_frame_without_one_has_none(self):
+        assert gate_of({**STATE, "gate": None}) is None and gate_of(STATE) is None
+
+    def test_what_it_has_served_runs_from_nothing_to_all(self):
+        gate = Gate("left_fist", since=10.0, hold=2.0)
+
+        assert [gate.fraction(now) for now in (9.0, 11.0, 13.0)] == [0.0, 0.5, 1.0]

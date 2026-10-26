@@ -2,7 +2,9 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
+from typing import NamedTuple
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from PyQt6.QtNetwork import QLocalSocket
@@ -14,6 +16,8 @@ PROTOCOL = 14
 SOCKET_ENV = "LIBRE_DICTUM_HUD_SOCKET"
 
 RETRY_MS = 5000
+
+STALE_MS = 500
 
 VOICE_PHRASES = 2
 
@@ -37,6 +41,28 @@ REPEATED = re.compile(r"(?:\{\d+=\d+\}|\d+)\((.+)\)")
 HOLDING = re.compile(r"hold\((.+)\)")
 TELLING = re.compile(r"tell\((.+)\)")
 STANDING_IN = re.compile(r"(\w+) pedal")
+
+
+class Gate(NamedTuple):
+    """A gesture serving its hold: its name, when the hold began and how long it lasts."""
+
+    name: str
+    since: float
+    hold: float
+
+    def fraction(self, now=None) -> float:
+        """Return how much of the hold has been served, from 0 to 1."""
+        served = (time.monotonic() if now is None else now) - self.since
+        return min(1.0, max(0.0, served / self.hold)) if self.hold > 0 else 1.0
+
+
+def gate_of(frame) -> tuple:
+    """Return the name, seconds held and seconds needed of a state frame's gate, or None."""
+    gate = frame.get("gate")
+    try:
+        return str(gate["name"]), float(gate["elapsed"]), float(gate["hold"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def socket_path() -> str:
@@ -88,10 +114,10 @@ def bindings(catalogue, state) -> dict:
         standing_in = [(name, STANDING_IN.fullmatch(press)) for name, press, _ in gestures]
         for name, pedal in standing_in:
             if pedal:
-                add(pedals.get(pedal[1], ""), name.replace("_", " "))
+                add(pedals.get(pedal[1], ""), name)
         for (name, press, _release), (_, pedal) in zip(gestures, standing_in):
             if not pedal:
-                add(press, name.replace("_", " "))
+                add(press, name)
     if "voice" not in asleep:
         voiced = [*(state.get("lock_commands") or ()), state.get("mode")]
         for group in (group for name in voiced for group in modes.get(name, {}).get("groups", ())):
@@ -149,11 +175,14 @@ class DictumListener(QObject):
     changed = pyqtSignal()
     returned = pyqtSignal()
     told = pyqtSignal(str)
+    gated = pyqtSignal(object)
 
     def __init__(self, path=None, parent=None):
         super().__init__(parent)
         self.path = path or socket_path()
         self.inputs = {}
+        self.gate = None
+        self._heard = None
         self._catalogue = None
         self._state = None
         self._listening = False
@@ -168,6 +197,10 @@ class DictumListener(QObject):
         self._retry.setSingleShot(True)
         self._retry.setInterval(RETRY_MS)
         self._retry.timeout.connect(self._connect)
+        self._stale = QTimer(self)
+        self._stale.setSingleShot(True)
+        self._stale.setInterval(STALE_MS)
+        self._stale.timeout.connect(lambda: self._hold_on(None))
 
     def start(self):
         """Read the bindings until stopped, connecting again whenever the socket goes."""
@@ -182,6 +215,7 @@ class DictumListener(QObject):
         self._socket.abort()
         self._catalogue = self._state = None
         self.inputs = {}
+        self._hold_on(None)
 
     def _connect(self):
         idle = self._socket.state() == QLocalSocket.LocalSocketState.UnconnectedState
@@ -200,6 +234,7 @@ class DictumListener(QObject):
         self._returning = True
         self._catalogue = self._state = None
         self._settle()
+        self._hold_on(None)
         self._retry.start()
 
     def _read(self):
@@ -226,8 +261,28 @@ class DictumListener(QObject):
             self._catalogue = frame
         elif frame.get("kind") == "state":
             self._state = frame
+            self._hold_on(gate_of(frame))
         elif frame.get("kind") == "tell" and isinstance(frame.get("name"), str):
             self.told.emit(frame["name"])
+
+    def _hold_on(self, heard):
+        """Keep the gesture serving its hold, and say so where it began, changed or ended."""
+        if heard is None:
+            self._stale.stop()
+        else:
+            self._stale.start()
+        if heard == self._heard:
+            return
+        self._heard = heard
+        gate = None
+        if heard is not None:
+            name, elapsed, hold = heard
+            gate = Gate(name, time.monotonic() - elapsed, hold)
+        if gate is not None and self.gate is not None and gate[::2] == self.gate[::2] \
+                and abs(gate.since - self.gate.since) < STALE_MS / 1000:
+            return
+        self.gate = gate
+        self.gated.emit(gate)
 
     def _settle(self):
         """Work out the bindings again, and say so where they changed."""

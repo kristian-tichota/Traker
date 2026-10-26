@@ -33,6 +33,8 @@ SEEK_MS = 30_000
 VOLUME_STEP = 0.1
 SCROLL_STEP_PX = 160
 
+HELD_SCALE = 2.4
+
 QUESTION, ANSWER = "question", "answer"
 
 CARD_MARKERS = re.compile(r"\[anki:play:[qa]:\d+\]|\[\[type:[^\]]*\]\]")
@@ -509,6 +511,7 @@ class DeckPane(WebPane, MarkedList):
         if self.view is None:
             return
         self.chooser = _deck_list(self)
+        self.chooser.itemClicked.connect(self.pick)
         self.chooser.hide()
         self.layout().addWidget(self.chooser)
         if deck:
@@ -787,6 +790,7 @@ class LibraryPane(BreakPane, MarkedList):
         self.folder = self.root
         self.entries = []
         self.chooser = named_list(self)
+        self.chooser.itemClicked.connect(self.pick)
         self.layout().addWidget(self.chooser)
         if path:
             self.open(path, start_at)
@@ -905,7 +909,8 @@ class MediaSurface(QWidget):
         self.stack.addWidget(QWidget(self.stack))
         layout.addWidget(self.stack)
 
-        self.keys = KeyCard(parent=self)
+        self.keys = KeyCard(parent=self, scale=1.0 if only_screen else HELD_SCALE,
+                            held_only=not only_screen)
         self.keys.setVisible(False)
         self.progress = None
         self.strip = None
@@ -971,9 +976,22 @@ class MediaSurface(QWidget):
     def set_keys(self, hints):
         """Name the keys that drive what is showing, under a page and over anything else."""
         self.keys.set_hints(hints)
-        self.keys.setVisible(bool(hints) and self.only_screen and not self._under_a_page())
-        self._place_the_overlays()
+        self._show_the_keys()
         self.update_display()
+
+    def set_gate(self, gate):
+        """Show the keys a gesture serving its hold drives, its sign filling as it is held."""
+        self.keys.set_gate(gate)
+        self._show_the_keys()
+
+    def _show_the_keys(self):
+        """Show every key on a lone screen, and elsewhere only those a held gesture drives."""
+        if self.only_screen:
+            shown = bool(self.keys.hints) and not self._under_a_page()
+        else:
+            shown = bool(self.keys.held_rows) and self.activity is not None
+        self.keys.setVisible(shown)
+        self._place_the_overlays()
 
     def _under_a_page(self) -> bool:
         """Report whether a page or a terminal fills the surface, keys left to the strip."""

@@ -84,7 +84,9 @@ every other wall fades to a grey face with the time left by the minute, what is 
 Each key names the libre-dictum inputs that send it, read from that program's display socket at
 `LIBRE_DICTUM_HUD_SOCKET` or `$XDG_RUNTIME_DIR/libre-dictum/hud.sock`; another protocol names none.
 A `home` told on that socket, by libre-dictum's `tell(home)`, puts the wall back as CTRL+HOME does,
-whichever window holds the keyboard.
+whichever window holds the keyboard. The offers and the way on carry the same inputs. The `gate` of
+a state frame, sent only in a mode with `ht_gesture_hold_seconds`, outlines what the held gesture
+drives and fills a ring around its sign, on the activity's screen too while the hold lasts.
 When that socket returns after a loss, the hook hears the current state again, and a failing run is
 retried for about a minute while its state is still the latest.
 

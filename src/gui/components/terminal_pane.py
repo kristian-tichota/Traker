@@ -202,6 +202,7 @@ class TerminalPane(WebPane, MarkedList):
         self.channel.registerObject("bridge", self.bridge)
         self.view.page().setWebChannel(self.channel)
         self.chooser = named_list(self)
+        self.chooser.itemClicked.connect(self.pick)
         self.chooser.hide()
         self.layout().addWidget(self.chooser)
         if command:

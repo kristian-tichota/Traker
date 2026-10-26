@@ -923,6 +923,20 @@ Feature: Focus timer
       And a key that must be held names only the inputs that hold it
       And a sleeping layer names nothing, and a libre-dictum that stops or speaks another protocol names nothing at all
       And the screens-off key is named where it works
+      And a gesture is its sign, a pedal its glyph, and a phrase its words
+      And each offer, and the way on, leads with the inputs that send its key
+
+    @accessibility
+    Scenario: A gesture fills in while it is held
+      Given libre-dictum reports a gesture serving its hold
+      Then every row and offer that gesture drives is outlined and a ring around its sign fills over the hold
+      And the screen showing an activity shows those rows alone, only while the gesture is held
+      And letting go, or libre-dictum falling silent for half a second, takes them away
+
+    @accessibility
+    Scenario: A pointer reaches what a key reaches
+      When a pointer presses an offer, a row of a list or a way on that asks for a press
+      Then it acts as that key does
 
   Rule: A held break sounds an ambient scene under its walls
 

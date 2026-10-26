@@ -8,6 +8,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import QAbstractAnimation, QEvent, QPointF, QThread, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QImage, QKeyEvent, QMouseEvent
 from PyQt6.QtNetwork import QLocalServer
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 import src.profile as profile_module
@@ -2556,7 +2557,7 @@ class TestTheInputsThatSendEachKey:
 
         assert until(lambda: named().get(("SPACE", "show, then good")))
         assert named()[("SPACE", "show, then good")] == (
-            "right pedal", "right open", "brow raise", "“send space”")
+            "right pedal", "right_open", "brow_raise", "“send space”")
         assert reviewing.media_surface.keys.inputs == beside_it(reviewing).keys.inputs
 
     def test_a_libre_dictum_that_goes_names_nobody(self, reviewing, hud):
@@ -2595,12 +2596,110 @@ class TestTheInputsThatSendEachKey:
 
         assert until(lambda: reviewing._showing is None)
 
+    def test_a_held_gesture_fills_in_on_the_screen_showing_it(self, reviewing, hud):
+        surface = reviewing.media_surface
+        assert until(lambda: any(beside_it(reviewing).keys.inputs))
+        assert not surface.keys.isVisibleTo(surface)
+
+        hold(hud, "brow_raise")
+
+        assert until(lambda: surface.keys.isVisibleTo(surface))
+        assert surface.keys.held_rows == (("SPACE", "show, then good"),)
+        assert beside_it(reviewing).keys.held_rows == (("SPACE", "show, then good"),)
+
+    def test_letting_the_gesture_go_takes_it_away(self, reviewing, hud):
+        surface = reviewing.media_surface
+        assert until(lambda: hud.held)
+        hold(hud, "brow_raise")
+        assert until(lambda: surface.keys.isVisibleTo(surface))
+
+        hold(hud, None)
+
+        assert until(lambda: not surface.keys.isVisibleTo(surface))
+        assert beside_it(reviewing).keys.held_rows == ()
+
+    def test_a_gesture_that_libre_dictum_stops_reporting_lapses(self, reviewing, hud):
+        surface = reviewing.media_surface
+        assert until(lambda: hud.held)
+        hold(hud, "brow_raise")
+        assert until(lambda: surface.keys.isVisibleTo(surface))
+
+        assert until(lambda: not surface.keys.isVisibleTo(surface), ms=dictum.STALE_MS * 3)
+
+    @pytest.fixture
+    def walled(self, timer, hud):
+        hud.frames[1] = {**STATE, "pedal_mode": "wall mode", "gesture_mode": "wall mode"}
+        timer.dictum.path = hud.fullServerName()
+        enter_strict_break(timer)
+        return timer
+
+    def test_each_offer_names_the_inputs_that_open_it(self, walled):
+        offers = walled.overlays[0].upcoming
+
+        assert until(lambda: any(line.marks.names for line in offers._marked))
+        assert [line.marks.names for line in offers._marked] == [
+            ("right pedal", "left_fist"), ("middle pedal",)]
+
+    def test_a_held_gesture_outlines_the_offer_it_opens(self, walled, hud):
+        offers = walled.overlays[0].upcoming
+        assert until(lambda: any(line.marks.names for line in offers._marked))
+
+        hold(hud, "left_fist")
+
+        assert until(lambda: offers.held_lines())
+        assert offers.held_lines() == [offers._marked[0].label.text()]
+
+    def test_the_way_on_names_what_starts_focus_once_the_break_is_over(self, walled):
+        wall = walled.overlays[0]
+        assert until(lambda: walled.dictum.inputs)
+        assert wall.way_on.marks.names == ()
+
+        advance(walled, walled.break_ms + 1000)
+        walled._redraw_break_surfaces()
+
+        assert wall.way_on.marks.names == ("brow_raise",)
+
     def test_the_break_ending_lets_go_of_the_socket(self, reviewing, hud):
         assert until(lambda: hud.held)
 
         reviewing._clear_overlays()
 
         assert reviewing.dictum.inputs == {}
+
+
+class TestAPointerOnTheWalls:
+    def test_pressing_an_offer_opens_it(self, timer):
+        enter_strict_break(timer)
+
+        QTest.mouseClick(timer.overlays[0].upcoming._marked[1], Qt.MouseButton.LeftButton)
+
+        assert timer._showing == timer._offers[1]
+
+    def test_pressing_a_row_of_a_list_opens_it(self, library_timer, media):
+        enter_with_the_shelves(library_timer)
+        send_key(library_timer, Qt.Key.Key_3)
+        pane = showing_pane(library_timer)
+
+        pane.chooser.itemClicked.emit(pane._rows[1], 0)
+
+        assert library_timer.media_pane_factory.last.activity == BreakActivity(
+            "b.epub", str(media / "Books" / "b.epub"), BOOK)
+
+    def test_pressing_the_way_on_starts_focus_once_the_break_is_over(self, timer):
+        enter_strict_break(timer)
+        QTest.mouseClick(timer.overlays[0].way_on, Qt.MouseButton.LeftButton)
+        assert timer.holds_the_screens()
+
+        advance(timer, timer.break_ms + 1000)
+        QTest.mouseClick(timer.overlays[0].way_on, Qt.MouseButton.LeftButton)
+
+        assert timer._focus_is_running()
+
+
+def hold(hud, name, elapsed=0.2, hold_secs=1.0):
+    gate = {"name": name, "elapsed": elapsed, "hold": hold_secs, "readings": []} if name else None
+    frame = {"protocol": dictum.PROTOCOL, **hud.frames[1], "gate": gate}
+    hud.held[0].write((json.dumps(frame) + "\n").encode())
 
 
 class Heard(AmbiencePlayer):

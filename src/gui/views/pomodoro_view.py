@@ -35,11 +35,12 @@ from src.gui.components.ambience_player import AmbiencePlayer
 from src.gui.components.calm_face import CalmFace
 from src.gui.components.chore_panel import KEYS as CHORE_KEYS, ChorePanel
 from src.gui.components.eye_veil import EyeRest, EyeVeil
+from src.gui.components.key_card import MarkedLine
 from src.gui.components.media_progress import MediaProgress
 from src.gui.components.media_surface import MediaSurface
 from src.gui.components.sound_panel import SoundPanel
 from src.gui.components.timeline_popup import TimelinePopupWidget
-from src.gui.components.upcoming_panel import UpcomingPanel
+from src.gui.components.upcoming_panel import MARK_SCALE, UpcomingPanel
 from src.gui.lifecycle import PausesWhenHidden, ShutdownMixin, request_restart
 from src.domain.tables import CHORE
 from src.gui.animations import blend, grey_of, retarget
@@ -337,6 +338,13 @@ class HoldRing(QWidget):
 WALL_CAPTION = "Traker rest"
 
 
+def offer_keys(index) -> tuple:
+    """Return the keys that open the offer at index, as libre-dictum names them."""
+    if index == 0:
+        return "enter", "1"
+    return (str(index + 1),) if index < 9 else ()
+
+
 def wall_caption(screen) -> str:
     """Return what to call the wall on screen."""
     name = screen.name() if screen is not None else ""
@@ -451,6 +459,12 @@ class StrictOverlay(QWidget):
         self.keys.set_hints(hints)
         self.keys.setVisible(bool(hints))
 
+    def set_gate(self, gate):
+        """Mark what a gesture serving its hold acts on, wherever this wall names it."""
+        self.keys.set_gate(gate)
+        self.upcoming.set_gate(gate)
+        self.way_on.set_gate(gate)
+
     def set_calm(self, calm, at_once=False):
         """Fade the readouts into the time left, what is showing and its keys, or back."""
         target = 1.0 if calm else 0.0
@@ -518,9 +532,12 @@ class StrictOverlay(QWidget):
 
         self.lbl_hint = QLabel(self.timer_ref.wall_hint())
         self.lbl_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.lbl_hint)
+        self.way_on = MarkedLine(self.lbl_hint, MARK_SCALE)
+        self.way_on.pressed.connect(self.timer_ref.take_the_way_on)
+        layout.addWidget(self.way_on)
 
         self.upcoming = UpcomingPanel()
+        self.upcoming.line_pressed.connect(self.timer_ref.press_line)
         layout.addWidget(self.upcoming)
 
         self.playing = UpcomingPanel()
@@ -567,6 +584,7 @@ class StrictOverlay(QWidget):
         if self.calm_face.label.text() != said:
             self.calm_face.label.setText(said)
         self.lbl_hint.setText(timer.wall_hint())
+        self.way_on.set_names(timer.wall_hint_inputs())
         self._dress_for_the_state()
 
     def _dress_for_the_state(self):
@@ -953,7 +971,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.hook = StateHook(self.profile.get_metric("hooks", "state", ""))
         self._hook_pending = False
         self.dictum = dictum.DictumListener(parent=self)
-        self.dictum.changed.connect(self._say_which_keys_drive_it)
+        self.dictum.changed.connect(self._say_which_inputs_act)
+        self.dictum.gated.connect(self._show_the_gate)
         self.dictum.returned.connect(lambda: self.hook.tell_again())
         self.dictum.told.connect(self._hear_told)
         self.restarting = False
@@ -1783,6 +1802,11 @@ class PomodoroView(ShutdownMixin, QWidget):
             return f"{said} · {self._screens_off_name} SCREENS OFF"
         return said
 
+    def wall_hint_inputs(self) -> tuple:
+        """Return the inputs that send the key the way on names."""
+        held = not (self.is_absent() or self.prompts_for_focus())
+        return dictum.names_for(self.dictum.inputs, "esc", held)
+
     def media_key_hints(self, kind) -> list:
         """Return every key that drives what is showing, in reading order."""
         pane = self.media_surface.pane if self.media_surface is not None else None
@@ -2211,6 +2235,17 @@ class PomodoroView(ShutdownMixin, QWidget):
             return key - Qt.Key.Key_1
         return None
 
+    def press_line(self, title, index):
+        """Open the offer a pointer pressed on a wall, as its key would."""
+        if title == self.OFFERS_TITLE and self._strict_engaged and 0 <= index < len(self._offers):
+            self._show_activity(self._offers[index])
+            self._acknowledge_offer(index)
+
+    def take_the_way_on(self):
+        """Start focus from a press on the way on, where it asks for a press."""
+        if self.prompts_for_focus():
+            self._toggle_timer()
+
     def _acknowledge_offer(self, index):
         """Glow the pressed offer on every panel listing it, yellow while offers wait."""
         held = self.opens_in_ms() > 0
@@ -2386,6 +2421,20 @@ class PomodoroView(ShutdownMixin, QWidget):
             if wall is not self._media_host:
                 wall.set_keys(hints)
 
+    def _say_which_inputs_act(self):
+        """Name the inputs on the offers, the way on and what is showing, once they change."""
+        self._show_upcoming()
+        for wall in self.overlays:
+            wall.update_display()
+        self._say_which_keys_drive_it()
+
+    def _show_the_gate(self, gate):
+        """Mark what a gesture serving its hold acts on, on every wall and what is showing."""
+        for wall in self.overlays:
+            wall.set_gate(gate)
+        if self.media_surface is not None:
+            self.media_surface.set_gate(gate)
+
     def _remember_where_it_stopped(self):
         """Stop what is showing, keeping its position and the last length known."""
         if self._showing is None or self.media_surface is None:
@@ -2524,9 +2573,17 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Hand what is coming to every surface with room for it."""
         sections = (self._upcoming + self.offer_section() + self.sound_section()
                     if self._strict_engaged else [])
+        inputs = {self.OFFERS_TITLE: self._offer_inputs()}
         for panel in self._offer_panels():
-            panel.set_sections(sections)
+            panel.set_sections(sections, inputs)
         self._say_when_the_offers_open()
+
+    def _offer_inputs(self) -> list:
+        """Return the inputs that open each offer, in key order."""
+        inputs = self.dictum.inputs
+        return [tuple(dict.fromkeys(name for key in offer_keys(index)
+                                    for name in dictum.names_for(inputs, key, False)))
+                for index in range(len(self._offers))]
 
     def _offer_panels(self) -> list:
         """Return every panel listing what is coming, the timer view's included."""

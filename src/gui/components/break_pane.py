@@ -95,7 +95,7 @@ class WebPane(BreakPane):
 
 
 def key_list(parent, columns) -> QTreeWidget:
-    """Build a list driven by keys alone, in Solarized light, each row's hint in front."""
+    """Build a list driven by keys or a pointer, in Solarized light, each row's hint in front."""
     tree = QTreeWidget(parent)
     tree.setColumnCount(len(columns) + 1)
     tree.setHeaderLabels((*columns, ""))
@@ -166,6 +166,12 @@ class MarkedList:
         self._mark(self._labels.index(typed))
         self.toggle()
         return True
+
+    def pick(self, row):
+        """Open the row a pointer pressed, as its hint would."""
+        if row in self._rows:
+            self._mark(self._rows.index(row))
+            self.toggle()
 
     def forget_hint(self) -> bool:
         """Drop the letters typed towards a hint, reporting whether there were any."""
