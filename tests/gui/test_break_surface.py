@@ -3,6 +3,7 @@ from PyQt6.QtCore import QThreadPool
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import QApplication
 
+import src.profile
 from src.desktop.activities import VIDEO, BreakActivity
 from src.database import rows
 from src.domain import plans
@@ -69,6 +70,15 @@ def with_a_session_today(recording_db):
         movement("2000-01-01", "Row", 0, ident=3),
     ]
     return count_plan_reads(recording_db)
+
+
+@pytest.fixture
+def plan_off_break(strict_timer):
+    written = strict_timer.read_text(encoding="utf-8")
+    assert "[plans]\non_break = true" in written
+    strict_timer.write_text(written.replace("[plans]\non_break = true",
+                                            "[plans]\non_break = false"), encoding="utf-8")
+    src.profile.reload_profile()
 
 
 @pytest.fixture
@@ -218,6 +228,14 @@ class TestReadOnceAndNotOncePerFrame:
 
         assert "get_training_plans" in with_a_session_today.plan_reads
         assert "Upper A" in timer.upcoming.lines()[0]
+
+    def test_a_profile_may_leave_the_session_off(self, plan_off_break, timer, settled,
+                                                 with_a_session_today):
+        enter_strict_break(timer)
+        settled()
+
+        assert not any("Upper A" in line for line in timer.upcoming.lines())
+        assert "get_training_plans" not in with_a_session_today.plan_reads
 
 
 class TestAReadThatDidNotArrive:

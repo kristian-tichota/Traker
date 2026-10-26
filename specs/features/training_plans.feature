@@ -209,6 +209,11 @@ Feature: Training plans
       Given my profile disables the Plans window
       Then the tab is not built and nothing else changes
 
+    Scenario: The planned session on a break is optional
+      Given the profile sets "[plans] on_break = false"
+      When a strict break begins
+      Then the break surface names no planned session
+
     Scenario: A household with no plan says so
       When I open the Plans tab with no cycle defined
       Then it says how to import one rather than drawing an empty calendar

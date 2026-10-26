@@ -936,6 +936,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             "strict_break", "refuse_switch", True) is not False
         self._chores_on_break = self.profile.get_metric(
             "chores", "on_break", True) is not False
+        self._plan_on_break = self.profile.get_metric(
+            "plans", "on_break", True) is not False
         self.media_surface = None
         self._showing = None
         self._list_behind = None
@@ -2499,6 +2501,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         """Read what is coming, once, as the break begins."""
         self._upcoming = []
         self._show_upcoming()
+        if not self._plan_on_break:
+            return
         run_in_background(self.threadpool, read_upcoming, self._apply_upcoming,
                           None, self.db)
 

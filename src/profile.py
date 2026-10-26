@@ -196,6 +196,11 @@ sound = true
 [chores]
 on_break = false
 
+# The training plan, kept on the Plans tab. This says whether a break names
+# today's planned session. Off, the break surface does not mention it.
+[plans]
+on_break = true
+
 # Which virtual desktop and activity Traker's own window opens on. Empty, the
 # default, writes nothing to the compositor's configuration.
 #

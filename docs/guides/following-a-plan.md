@@ -45,7 +45,7 @@ session holding a movement whose catalog item was deleted, which refuses as a wh
 
 ## Shared readers
 
-The current session is named on every screen a strict break covers, read once when the break begins.
-Both readers go through `plans.py:prescribed_day`, so the tab and the wall cannot name different
+The current session is named on every screen a strict break covers, read once when the break begins,
+unless `[plans] on_break = false`. Both readers go through `plans.py:prescribed_day`, so the tab and the wall cannot name different
 targets for one day. The current plan is the cycle today falls inside, otherwise the newest, through
 `plans.py:current_plan` for both the tab and the command line. There is no plan switcher.
