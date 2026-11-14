@@ -155,3 +155,74 @@ def test_loud_peaks_round_off_below_full_scale(tmp_path):
 
     assert np.abs(out).max() <= 1.0 and len(np.unique(out)) > 0.9 * out.size
 
+
+
+class TestThePlayer:
+    @pytest.fixture
+    def engine(self, qapp):
+        from src.gui.components import ambience_player
+
+        built = []
+
+        def build(command):
+            built.append(ambience_player._Engine(command))
+            return built[-1]
+
+        yield build
+        for engine in built:
+            engine.halt()
+
+    @staticmethod
+    def spin(qapp, ms):
+        import time
+
+        until = time.monotonic() + ms / 1000
+        while time.monotonic() < until:
+            qapp.processEvents()
+            time.sleep(0.005)
+
+    @staticmethod
+    def noise(audible=True):
+        from src.gui.components.ambience_player import Wish
+
+        return Wish(ambience.Scene(ambience.NOISE), 0.5, audible)
+
+    def test_the_mix_reaches_the_player_as_interleaved_stereo_floats(self, qapp, engine,
+                                                                      tmp_path):
+        out = tmp_path / "played.f32"
+        playing = engine(["sh", "-c", f"cat > '{out}'"])
+
+        playing.steer(self.noise())
+        self.spin(qapp, 300)
+        playing.halt()
+
+        played = np.fromfile(out, dtype=np.float32)
+        assert played.size > 0 and played.size % 2 == 0
+        assert np.isfinite(played).all()
+
+    def test_a_player_that_ends_is_started_again(self, qapp, engine, tmp_path, monkeypatch):
+        from src.gui.components import ambience_player
+
+        monkeypatch.setattr(ambience_player, "RETRY_MS", 0)
+        starts = tmp_path / "starts"
+        playing = engine(["sh", "-c", f"echo >> '{starts}'"])
+
+        playing.steer(self.noise())
+        self.spin(qapp, 1000)
+
+        assert len(starts.read_text().splitlines()) >= 2
+
+    def test_a_hushed_mix_lets_the_player_play_out_and_end(self, qapp, engine, tmp_path,
+                                                           monkeypatch):
+        from src.gui.components import ambience_player
+
+        monkeypatch.setattr(ambience_player, "FADE_OUT_SECS", 0.05)
+        playing = engine(["sh", "-c", f"cat > '{tmp_path / 'played.f32'}'"])
+        playing.steer(self.noise())
+        self.spin(qapp, 200)
+
+        playing.steer(self.noise(audible=False))
+        self.spin(qapp, 1500)
+
+        assert playing._player is None
+        assert playing._ending == [], "the player read to the end and was reaped"

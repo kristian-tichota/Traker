@@ -75,9 +75,10 @@ their credits, and playback reads only these files. Each recording plays from pl
 random with 6 s crossfades, each new place the closest in level of six candidates, its level
 drifting between 79 % and 112 %, and `noise` is generated. The
 Focus Timer tab's SOUND panel and `:sound` play a scene at any time, on through breaks and absences
-until stopped. The mix renders at 48 kHz on its own thread through Qt Multimedia, soxr resampling any
-recording at another rate, and needs the `ambience` extra. An output that stops or stops being the
-default is reopened on the default output, retried every 5 s while none exists.
+until stopped. The mix renders at 48 kHz on its own thread, soxr resampling any recording at another
+rate, and needs the `ambience` extra. It plays through PipeWire's `pw-cat` in a process of its own,
+which PipeWire moves to the default output when that output changes or goes. A player that ends is
+started again after 5 s.
 
 ## Assistive Input Integration
 

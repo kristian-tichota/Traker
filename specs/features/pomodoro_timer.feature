@@ -978,9 +978,9 @@ Feature: Focus timer
       And walls raised for an absence sound it as a break's walls do
 
     Scenario: An output that drops
-      When the audio output stops or the default output changes while the scene should sound
-      Then the scene fades in again on the default output as soon as one exists
-      And the client keeps running
+      When the default output changes or goes while the scene should sound
+      Then the scene carries on from the default output without starting again
+      And the client keeps running, because the sound plays in a process of its own
 
   Rule: The ambient sound plays from the Focus Timer tab at any time
 

@@ -1,9 +1,13 @@
+import fcntl
 import logging
+import os
+import shutil
+import subprocess
 from typing import NamedTuple
 
-from PyQt6.QtCore import (QElapsedTimer, QIODevice, QMetaObject, QObject, Qt, QThread, QTimer,
-                          pyqtSignal, pyqtSlot)
-from PyQt6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices, QtAudio
+from PyQt6.QtCore import (QElapsedTimer, QMetaObject, QObject, QSocketNotifier, Qt, QThread,
+                          QTimer, pyqtSignal, pyqtSlot)
+from PyQt6.QtMultimedia import QMediaDevices
 
 from src.desktop import ambience
 
@@ -14,11 +18,16 @@ FADE_OUT_SECS = 4.0
 SCENE_SECS = 5.0
 VOLUME_SECS = 0.4
 VOLUME_STEP = 0.1
-BUFFER_SECS = 0.5
 TEND_MS = 250
 RETRY_MS = 5000
 RATE = 48_000
-FRAME_BYTES = 8
+BLOCK_FRAMES = 2400
+PIPE_BYTES = 1 << 18
+
+PLAYER = ("pw-cat", "--playback", "--raw", "--format", "f32", "--rate", str(RATE),
+          "--channels", "2", "--properties",
+          '{ node.name = "traker-ambience" media.name = "Ambience" application.name = "Traker" }',
+          "-")
 
 
 class Wish(NamedTuple):
@@ -29,46 +38,18 @@ class Wish(NamedTuple):
     audible: bool
 
 
-class _Stream(QIODevice):
-    """Hands the sink whatever the mix renders next, as interleaved 32-bit floats."""
-
-    def __init__(self, render, parent=None):
-        super().__init__(parent)
-        self._render = render
-        self.failed = False
-
-    def readData(self, maxlen):
-        frames = maxlen // FRAME_BYTES
-        if frames <= 0:
-            return b""
-        if not self.failed:
-            try:
-                return self._render(frames).tobytes()
-            # Workaround: an exception escaping a Qt virtual aborts the interpreter.
-            except Exception:
-                self.failed = True
-                log.exception("The ambience stopped rendering.")
-        return bytes(frames * FRAME_BYTES)
-
-    def writeData(self, data):
-        return -1
-
-    def bytesAvailable(self):
-        return (1 << 16) + super().bytesAvailable()
-
-    def isSequential(self):
-        return True
-
-
 class _Engine(QObject):
-    """The sink and the mix, on a thread of their own, reopened on the default output."""
+    """The mix on its own thread, written into a PipeWire player following the default output."""
 
-    def __init__(self):
+    def __init__(self, command=PLAYER):
         super().__init__()
+        self._command = list(command)
         self._mix = None
-        self._sink = None
-        self._stream = None
-        self._device = None
+        self._player = None
+        self._writable = None
+        self._pending = b""
+        self._failed = False
+        self._ending = []
         self._wish = None
         self._tending = None
         self._tried = QElapsedTimer()
@@ -97,35 +78,55 @@ class _Engine(QObject):
 
     @pyqtSlot()
     def halt(self):
-        """Stop the sink at once."""
+        """Stop the player at once."""
         if self._tending is not None:
             self._tending.stop()
         self._stop()
+        for player in self._ending:
+            player.kill()
+            player.wait()
+        self._ending = []
 
     def _start(self, wish):
-        """Open the sink on the default output and fade the scene in."""
+        """Start the player and fade the scene in."""
         self._tried.start()
-        device = QMediaDevices.defaultAudioOutput()
-        if device.isNull():
-            self._warn("No audio output: the ambience waits for one.")
-            return
-        shape = QAudioFormat()
-        shape.setSampleRate(RATE)
-        shape.setChannelCount(2)
-        shape.setSampleFormat(QAudioFormat.SampleFormat.Float)
-        if not device.isFormatSupported(shape):
-            self._warn(f"{device.description()} cannot play {RATE} Hz stereo floats: "
-                       "the ambience waits for another output.")
+        try:
+            player = subprocess.Popen(self._command, stdin=subprocess.PIPE,
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError as error:
+            self._warn(f"The ambience player would not start: {error}")
             return
         self._warned = False
-        self._device = device
+        self._failed = False
+        self._pending = b""
+        pipe = player.stdin.fileno()
+        os.set_blocking(pipe, False)
+        try:
+            fcntl.fcntl(pipe, fcntl.F_SETPIPE_SZ, PIPE_BYTES)
+        except OSError as error:
+            log.debug("The ambience pipe keeps its own size: %s", error)
+        self._player = player
         self._mix = ambience.Ambience(RATE, wish.volume)
         self._mix.play(wish.scene, FADE_IN_SECS)
-        self._stream = _Stream(self._mix.render, self)
-        self._stream.open(QIODevice.OpenModeFlag.ReadOnly)
-        self._sink = QAudioSink(device, shape, self)
-        self._sink.setBufferSize(int(RATE * BUFFER_SECS) * FRAME_BYTES)
-        self._sink.start(self._stream)
+        self._writable = QSocketNotifier(pipe, QSocketNotifier.Type.Write, self)
+        self._writable.activated.connect(self._feed)
+
+    def _feed(self):
+        """Write as much of the mix as the pipe takes now."""
+        pipe = self._player.stdin.fileno()
+        try:
+            while True:
+                if not self._pending:
+                    self._pending = self._mix.render(BLOCK_FRAMES).tobytes()
+                self._pending = self._pending[os.write(pipe, self._pending):]
+        except BlockingIOError:
+            return
+        except OSError as error:
+            log.info("The ambience player stopped taking sound: %s", error)
+        except Exception:
+            log.exception("The ambience stopped rendering.")
+        self._failed = True
+        self._writable.setEnabled(False)
 
     def _warn(self, said):
         if not self._warned:
@@ -133,36 +134,39 @@ class _Engine(QObject):
             self._warned = True
 
     def _tend(self):
-        """Close the sink once the mix fell silent, and reopen it wherever it broke."""
+        """Let the player drain once the mix fell silent, and start it again if it ended."""
+        self._ending = [player for player in self._ending if player.poll() is None]
         if self._mix is not None and self._mix.silent:
-            self._stop()
+            self._stop(drain=True)
         if not self._wish.audible:
-            if self._mix is None:
+            if self._mix is None and not self._ending:
                 self._tending.stop()
             return
-        if self._sounds() or self._tried.elapsed() < RETRY_MS:
+        if self._plays() or self._tried.elapsed() < RETRY_MS:
             return
         if self._mix is not None:
-            log.info("The ambience output stopped or changed: reopening it.")
+            log.info("The ambience player ended: starting it again.")
         self._stop()
         self._start(self._wish)
 
-    def _sounds(self) -> bool:
-        """Report whether the sink plays the mix on the default output."""
-        return (self._sink is not None and not self._stream.failed
-                and self._sink.state() != QtAudio.State.StoppedState
-                and self._device == QMediaDevices.defaultAudioOutput())
+    def _plays(self) -> bool:
+        """Report whether the player runs and takes the mix."""
+        return self._player is not None and not self._failed and self._player.poll() is None
 
-    def _stop(self):
-        if self._sink is not None:
-            self._sink.stop()
-            self._sink.deleteLater()
-        if self._stream is not None:
-            self._stream.close()
-            self._stream.deleteLater()
+    def _stop(self, drain=False):
+        """Close the player's input, letting it play out what it holds when drain is set."""
+        if self._writable is not None:
+            self._writable.setEnabled(False)
+            self._writable.deleteLater()
+        if self._player is not None:
+            self._player.stdin.close()
+            if not drain:
+                self._player.kill()
+            self._ending.append(self._player)
         if self._mix is not None:
             self._mix.close()
-        self._sink = self._stream = self._mix = self._device = None
+        self._player = self._writable = self._mix = None
+        self._pending = b""
 
 
 class AmbiencePlayer(QObject):
@@ -260,12 +264,17 @@ class AmbiencePlayer(QObject):
         self._thread = self._engine = None
 
     def has_output(self) -> bool:
-        """Report whether an audio output exists to play on."""
-        return not QMediaDevices.defaultAudioOutput().isNull()
+        """Report whether the player is installed and an audio output exists to play on."""
+        return (shutil.which(PLAYER[0]) is not None
+                and not QMediaDevices.defaultAudioOutput().isNull())
 
     def _renders(self) -> bool:
-        """Report whether numpy, soundfile and soxr load, warning once."""
+        """Report whether numpy, soundfile, soxr and the player are there, warning once."""
         if self._can_render is None:
+            if shutil.which(PLAYER[0]) is None:
+                log.warning("No ambience: %s is not installed.", PLAYER[0])
+                self._can_render = False
+                return False
             try:
                 import numpy  # noqa: F401
                 import soundfile  # noqa: F401

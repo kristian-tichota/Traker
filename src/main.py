@@ -4,8 +4,6 @@ import sys
 
 os.environ["QT_LOGGING_RULES"] = "qt.qpa.services=false;qt.qpa.services.warning=false"
 os.environ["QT_QPA_PLATFORM"] = "wayland;xcb"
-# Workaround: Qt's PipeWire audio backend segfaults when a removed output takes a failed stream.
-os.environ.setdefault("QT_AUDIO_BACKEND", "pulseaudio")
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
