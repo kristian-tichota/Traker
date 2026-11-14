@@ -960,6 +960,7 @@ Feature: Focus timer
     Scenario: An output that drops
       When the audio output stops or the default output changes while the scene should sound
       Then the scene fades in again on the default output as soon as one exists
+      And the client keeps running
 
   Rule: The ambient sound plays from the Focus Timer tab at any time
 
