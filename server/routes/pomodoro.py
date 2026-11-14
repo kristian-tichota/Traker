@@ -15,7 +15,9 @@ def get_pomodoro_daily_summary():
                           SUM(CASE WHEN state = 'focus' THEN 1 ELSE 0 END) as focus_mins,
                           SUM(CASE WHEN state = 'rest' THEN 1 ELSE 0 END) as rest_mins,
                           SUM(CASE WHEN state = 'focus_overtime' THEN 1 ELSE 0 END) as focus_ot,
-                          SUM(CASE WHEN state = 'rest_overtime' THEN 1 ELSE 0 END) as rest_ot
+                          SUM(CASE WHEN state = 'rest_overtime' THEN 1 ELSE 0 END) as rest_ot,
+                          SUM(CASE WHEN state = 'focus' THEN focus_weight ELSE 0 END)
+                              as focus_cost
                    FROM pomodoro_heartbeats
                    WHERE user_id = ? AND date >= date('now', 'localtime', '-30 days')
                    GROUP BY date ORDER BY date ASC""", (g.user_id,))
@@ -34,13 +36,15 @@ def log_pomodoro_heartbeat():
     d = read_payload("date", "minute_of_day", "state")
     conn = get_db()
     v = checked_payload(conn, "pomodoro_heartbeats", d,
-                        ("date", "minute_of_day", "second", "state", "mode"),
-                        defaults={"second": 0, "mode": "Default"})
+                        ("date", "minute_of_day", "second", "state", "mode", "focus_weight"),
+                        defaults={"second": 0, "mode": "Default", "focus_weight": 1.0})
     with conn:
         conn.execute("""
-            INSERT OR REPLACE INTO pomodoro_heartbeats (user_id, date, minute_of_day, second, state, mode)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (g.user_id, v["date"], v["minute_of_day"], v["second"], v["state"], v["mode"]))
+            INSERT OR REPLACE INTO pomodoro_heartbeats
+                (user_id, date, minute_of_day, second, state, mode, focus_weight)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (g.user_id, v["date"], v["minute_of_day"], v["second"], v["state"], v["mode"],
+              v["focus_weight"]))
     return {"status": "success"}
 
 

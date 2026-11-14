@@ -1,6 +1,9 @@
 import logging
 
-from src.desktop.session import session_call, session_send
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtDBus import QDBusError, QDBusMessage
+
+from src.desktop.session import session_call, session_send, session_subscribe
 
 log = logging.getLogger(__name__)
 
@@ -25,10 +28,70 @@ def notify(summary, body, *, timeout_ms=15000,
         hints["sound-file"] = sound_file
 
     sent = session_send(SERVICE, OBJECT, INTERFACE, "Notify", APP_NAME, _unsigned(0), icon,
-                        summary, body, _no_actions(), hints, int(timeout_ms))
+                        summary, body, _actions([]), hints, int(timeout_ms))
     if not sent:
         log.debug("The notification could not be put on the bus.")
     return sent
+
+
+class Prompt(QObject):
+    """One notification at a time with one button, reporting a press of that button."""
+
+    pressed = pyqtSignal()
+
+    ACTION = "take"
+
+    def __init__(self, label, parent=None):
+        super().__init__(parent)
+        self.label = label
+        self.shown = None
+        self._listening = False
+
+    def show(self, summary, body, *, sound_name="", sound_file="", timeout_ms=15000) -> bool:
+        """Put the notification up in place of any this prompt shows."""
+        from PyQt6.QtDBus import QDBusConnection
+
+        self.withdraw()
+        if not self._listening:
+            self._listening = session_subscribe(SERVICE, OBJECT, INTERFACE, "ActionInvoked",
+                                                self._invoked)
+        hints = {"desktop-entry": DESKTOP_ENTRY, "resident": True}
+        if sound_name:
+            hints["sound-name"] = sound_name
+        if sound_file:
+            hints["sound-file"] = sound_file
+        bus = QDBusConnection.sessionBus()
+        message = QDBusMessage.createMethodCall(SERVICE, OBJECT, INTERFACE, "Notify")
+        message.setArguments([APP_NAME, _unsigned(0), "clock", summary, body,
+                              _actions([self.ACTION, self.label]), hints, int(timeout_ms)])
+        sent = bus.isConnected() and bus.callWithCallback(message, self._answered,
+                                                           self._refused)
+        if not sent:
+            log.debug("The notification could not be put on the bus.")
+        return bool(sent)
+
+    def withdraw(self):
+        """Take the notification down, if one is up."""
+        if self.shown is not None:
+            session_send(SERVICE, OBJECT, INTERFACE, "CloseNotification", _unsigned(self.shown))
+        self.shown = None
+
+    @pyqtSlot(QDBusMessage)
+    def _answered(self, reply):
+        arguments = reply.arguments()
+        self.shown = int(arguments[0]) if arguments else None
+
+    @pyqtSlot(QDBusError)
+    def _refused(self, error):
+        log.warning("%s refused a notification: %s", SERVICE, error.message())
+
+    @pyqtSlot(QDBusMessage)
+    def _invoked(self, signal):
+        arguments = signal.arguments()
+        if (self.shown is not None and len(arguments) == 2
+                and int(arguments[0]) == self.shown and arguments[1] == self.ACTION):
+            self.withdraw()
+            self.pressed.emit()
 
 
 def _watch_the_server(slot):
@@ -103,9 +166,9 @@ def _unsigned(value):
     return QDBusArgument(int(value), QMetaType.Type.UInt.value)
 
 
-def _no_actions():
-    """Return Notify's actions, an as."""
+def _actions(pairs):
+    """Return Notify's actions, an as of key and label pairs."""
     from PyQt6.QtCore import QMetaType
     from PyQt6.QtDBus import QDBusArgument
 
-    return QDBusArgument([], QMetaType.Type.QStringList.value)
+    return QDBusArgument(list(pairs), QMetaType.Type.QStringList.value)

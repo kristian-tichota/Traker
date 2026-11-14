@@ -3,6 +3,7 @@ import math
 import os
 import datetime
 import tomllib
+from typing import NamedTuple
 
 from PyQt6.QtCore import Qt
 
@@ -31,6 +32,8 @@ DEFAULT_STOP_HOLD_SECS = 10
 DEFAULT_EYE_REST_MINS = 20
 DEFAULT_GAZE_SECS = 20
 DEFAULT_BLINK_SETS_PER_DAY = 3
+
+REGULAR_MODE = "Regular"
 
 DEFAULT_SUPPLEMENT_TARGETS = [
     {"key": "b12", "name": "B12 (mcg)", "target": 0.0},
@@ -154,7 +157,7 @@ sleep_time = "23:00"
 caffeine_half_life = {CAFFEINE_HALF_LIFE}
 max_sleep_caffeine = {SLEEP_CAFFEINE_THRESHOLD}
 
-# The one focus/break split, used all day. There are no timer modes.
+# The regular split, used unless a mode below is chosen.
 [timer]
 focus_mins = {DEFAULT_FOCUS_MINS}
 break_mins = {DEFAULT_BREAK_MINS}
@@ -172,6 +175,23 @@ idle_pause_secs = {DEFAULT_IDLE_PAUSE_SECS}
 # Seconds the play button or ESC MUST be held to stop a running interval. The
 # time it buys is focus overtime, the same as any other pause.
 stop_hold_secs = {DEFAULT_STOP_HOLD_SECS}
+
+# Another way the timer runs, chosen with :timer or the mode button on the Focus
+# Timer tab. The choice holds from the next focus interval on, and Traker starts
+# in the regular one. A key left out is the regular one; the long break and
+# strict are shared. Three keys exist only here:
+#   focus_cost_mins  the minutes of regular focus that one interval counts as
+#                    in the stress index; focus_mins by default.
+#   eye_rest         false keeps the eye-rest veil away from this focus.
+#   confirm_break    true lets focus run on past zero as focus overtime, with
+#                    one notification whose button starts the break.
+# [timer.modes.Gaming]
+# focus_mins = 45
+# focus_cost_mins = 30
+# break_mins = 30
+# idle_pause_secs = 0
+# eye_rest = false
+# confirm_break = true
 
 # A veil over every screen once enough screen time has gathered: one guided
 # blink cycle, then a gaze at something at least 6 m away. The veil takes
@@ -493,9 +513,9 @@ class UserProfile:
     def timer_split(self) -> dict:
         """Return the split, and the long break that may be queued in its place."""
         if "pomodoro_modes" in self.data and "timer" not in self.data:
-            log.info("[pomodoro_modes] is no longer read: the timer is one "
-                     "split now. Write a [timer] section to change it, and "
-                     "[timer] strict = true for the enforced break.")
+            log.info("[pomodoro_modes] is no longer read: write a [timer] section, "
+                     "[timer] strict = true for the enforced break, and "
+                     "[timer.modes.<name>] for another way the timer runs.")
 
         split = {key: int(self.number("timer", key, default, low=low))
                  for key, default, low in (
@@ -505,6 +525,28 @@ class UserProfile:
                      ("long_breaks_per_day", DEFAULT_LONG_BREAKS_PER_DAY, 0))}
         split["strict"] = bool(self.get_metric("timer", "strict", False))
         return split
+
+    def timer_modes(self) -> list:
+        """Return the regular mode, then each [timer.modes] table in the order written."""
+        regular = self._timer_mode("timer", REGULAR_MODE, SHIPPED_MODE)
+        modes = [regular]
+        for name, table in (self.get_metric("timer", "modes", {}) or {}).items():
+            if not isinstance(table, dict) or "." in name:
+                log.warning("[timer.modes] %r is not a table of timer keys; ignoring it.", name)
+            elif name.casefold() != REGULAR_MODE.casefold():
+                modes.append(self._timer_mode(f"timer.modes.{name}", name, regular))
+        return modes
+
+    def _timer_mode(self, section, name, base) -> "TimerMode":
+        """Return the mode a section declares, base supplying every key it leaves out."""
+        focus = int(self.number(section, "focus_mins", base.focus_mins, low=1))
+        return TimerMode(
+            name, focus,
+            int(self.number(section, "break_mins", base.break_mins, low=1)),
+            self.number(section, "focus_cost_mins", focus, low=0.0),
+            self.number(section, "idle_pause_secs", base.idle_pause_secs, low=0.0),
+            self.get_metric(section, "eye_rest", base.eye_rest) is not False,
+            self.get_metric(section, "confirm_break", base.confirm_break) is True)
 
     def get_current_regime(self) -> str:
         """Return the regime the schedule says is running now, or "Unscheduled"."""
@@ -585,6 +627,26 @@ class UserProfile:
             for key, conf in targets.items()
         ]
 
+
+class TimerMode(NamedTuple):
+    """One way the timer runs: its split, what its focus costs, and how its focus ends."""
+
+    name: str
+    focus_mins: int
+    break_mins: int
+    focus_cost_mins: float
+    idle_pause_secs: float
+    eye_rest: bool
+    confirm_break: bool
+
+    @property
+    def focus_weight(self) -> float:
+        """Return what one second of this focus counts as in the stress index."""
+        return self.focus_cost_mins / self.focus_mins
+
+
+SHIPPED_MODE = TimerMode(REGULAR_MODE, DEFAULT_FOCUS_MINS, DEFAULT_BREAK_MINS,
+                         DEFAULT_FOCUS_MINS, DEFAULT_IDLE_PAUSE_SECS, True, False)
 
 _KEY_NAMES = {"ESC": "Escape", "ESCAPE": "Escape", "ENTER": "Return",
               "RETURN": "Return", "TAB": "Tab"}

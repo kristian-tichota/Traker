@@ -220,6 +220,7 @@ class ServerDatabase:
                     second INTEGER NOT NULL DEFAULT 0 CHECK(second BETWEEN 0 AND 59),
                     state TEXT NOT NULL CHECK(state IN ('focus', 'rest', 'focus_overtime', 'rest_overtime')),
                     mode TEXT NOT NULL DEFAULT 'Default',
+                    focus_weight REAL NOT NULL DEFAULT 1 CHECK(focus_weight >= 0),
                     PRIMARY KEY (user_id, date, minute_of_day, second),
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 );
@@ -340,6 +341,8 @@ class ServerDatabase:
                     "INTEGER REFERENCES item_sets(id) ON DELETE SET NULL")
                 conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{spec.log_table}_user_date "
                              f"ON {spec.log_table}(user_id, date)")
+            self._ensure_column(conn, "pomodoro_heartbeats", "focus_weight",
+                                "REAL NOT NULL DEFAULT 1 CHECK(focus_weight >= 0)")
 
             self._pad_clock_times(conn)
             self._seed_users(conn)

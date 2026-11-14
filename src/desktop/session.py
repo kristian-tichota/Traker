@@ -48,3 +48,11 @@ def session_send(service, path, interface, method, *args) -> bool:
     """Hand one method to the bus and forget it."""
     bus, message = _method(service, path, interface, method, args)
     return bus is not None and bool(bus.send(message))
+
+
+def session_subscribe(service, path, interface, signal, slot) -> bool:
+    """Call slot with each signal the bus delivers from service."""
+    from PyQt6.QtDBus import QDBusConnection
+
+    bus = QDBusConnection.sessionBus()
+    return bus.isConnected() and bool(bus.connect(service, path, interface, signal, slot))

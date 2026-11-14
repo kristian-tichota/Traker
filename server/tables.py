@@ -71,8 +71,8 @@ _REGISTRY = {
         _spec("mobility_logs", False, {"date", "mobility_item_id", "duration_mins"}),
 
         _spec("pomodoro_heartbeats", False,
-              {"date", "minute_of_day", "second", "state", "mode"},
-              row_editable=False, non_negative={"minute_of_day", "second"}),
+              {"date", "minute_of_day", "second", "state", "mode", "focus_weight"},
+              row_editable=False, non_negative={"minute_of_day", "second", "focus_weight"}),
         _spec("pomodoro_events", False, {"timestamp", "event_type", "amount_ms"},
               row_editable=False, non_negative={"amount_ms"}),
         _spec("pomodoro_dsi_overrides", False, {"date", "override_dsi"},

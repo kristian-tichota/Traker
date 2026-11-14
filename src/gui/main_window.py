@@ -32,7 +32,7 @@ from src.gui.domains import domains_for_tab, tabs_reading
 from src.gui.sync_listener import SyncListener
 from src.gui.columns import ColumnError, describe, rearranged
 from src.desktop import rest_queue
-from src.gui.commands import (BREAK_LONG, COMMANDS, QUEUE_ADD, QUEUE_CLEAR,
+from src.gui.commands import (BREAK_LONG, BREAK_NOW, COMMANDS, QUEUE_ADD, QUEUE_CLEAR,
                               QUEUE_REMOVE, RESET, SOUND_OFF, SOUND_ON, CommandError,
                               resolve)
 from src.gui.filtering import FilterError
@@ -579,7 +579,23 @@ class MainWindow(QMainWindow):
             raise CommandError("The Focus Timer is switched off in the profile.")
         if not payload["action"]:
             return view.long_break_state()
+        if payload["action"] == BREAK_NOW:
+            return view.start_the_break()
         return view.set_long_break_queued(payload["action"] == BREAK_LONG)
+
+    def choose_timer_mode(self, payload):
+        """Carry out :timer, choosing the mode the next focus interval runs in."""
+        view = self.views.get("pomodoro")
+        if view is None:
+            raise CommandError("The Focus Timer is switched off in the profile.")
+        word = payload["mode"].strip()
+        if not word:
+            return view.mode_report()
+        said = view.choose_mode(word)
+        if not said:
+            raise CommandError(f"No timer mode '{word}'; say "
+                               f"{', '.join(mode.name for mode in view.modes)}.")
+        return said
 
     def steer_sound(self, payload):
         """Carry out :sound, switching the ambience, choosing its scene or setting its volume."""

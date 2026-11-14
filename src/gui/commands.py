@@ -21,7 +21,7 @@ MEALS = tuple(MEAL_SHORTCUTS.values())
 
 HIDE, SHOW, MOVE, RESET, TOGGLE = "hide", "show", "move", "reset", "toggle"
 QUEUE_ADD, QUEUE_REMOVE, QUEUE_CLEAR = "add", "rm", "clear"
-BREAK_LONG, BREAK_CANCEL = "long", "cancel"
+BREAK_LONG, BREAK_CANCEL, BREAK_NOW = "long", "cancel", "now"
 SOUND_ON, SOUND_OFF = "on", "off"
 
 MEAL_SET = "meal_set"
@@ -720,12 +720,22 @@ _COMMAND_LIST = [
     Command(
         name="break",
         params=(
-            one_of("action", "[long/cancel]", (BREAK_LONG, BREAK_CANCEL),
-                   "Say long to make the next break the long one, or "
-                   "cancel to take that back.", lambda: ""),
+            one_of("action", "[long/cancel/now]", (BREAK_LONG, BREAK_CANCEL, BREAK_NOW),
+                   "Say long to make the next break the long one, cancel to "
+                   "take that back, or now to start the break ended focus waits for.",
+                   lambda: ""),
         ),
         confirm=lambda payload: " Next break changed.",
         window_effect="queue_long_break",
+    ),
+    Command(
+        name="timer",
+        params=(
+            Param("mode", "[mode]", _as_written, "a timer mode from the profile",
+                  default=lambda: ""),
+        ),
+        confirm=lambda payload: " Timer mode changed.",
+        window_effect="choose_timer_mode",
     ),
     Command(
         name="sound",

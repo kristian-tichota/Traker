@@ -3,7 +3,7 @@ import logging
 from PyQt6.QtCore import QObject, pyqtSlot
 
 from src.desktop.session import (ACTIVITIES, ACTIVITIES_PATH, ACTIVITIES_SERVICE, KWIN,
-                                 KWIN_PATH, session_call)
+                                 KWIN_PATH, session_call, session_subscribe)
 
 log = logging.getLogger(__name__)
 
@@ -16,13 +16,7 @@ DESKTOP_CHANGED = (KWIN, DESKTOPS_PATH, DESKTOPS, "currentChanged")
 ACTIVITY_CHANGED = (ACTIVITIES_SERVICE, ACTIVITIES_PATH, ACTIVITIES, "CurrentActivityChanged")
 
 _session_call = session_call
-
-
-def _subscribe(service, path, interface, signal, slot) -> bool:
-    from PyQt6.QtDBus import QDBusConnection
-
-    bus = QDBusConnection.sessionBus()
-    return bus.isConnected() and bool(bus.connect(service, path, interface, signal, slot))
+_subscribe = session_subscribe
 
 
 def _unsubscribe(service, path, interface, signal, slot) -> bool:

@@ -72,7 +72,21 @@ class TestDailySummary:
                 minute_of_day += 1
 
         (row,) = member_a.get("/api/pomodoro/daily-summary").get_json()
-        assert row == [today, 3, 2, 4, 1]
+        assert row == [today, 3, 2, 4, 1, 3]
+
+    @pytest.mark.exact
+    def test_focus_is_also_summed_at_the_weight_each_minute_was_stored_with(
+        self, member_a, today
+    ):
+        member_a.post("/api/pomodoro/heartbeat", json=heartbeat(0, date=today))
+        for minute in (1, 2, 3):
+            member_a.post("/api/pomodoro/heartbeat", json={
+                **heartbeat(minute, date=today, mode="Gaming"), "focus_weight": 0.5})
+        member_a.post("/api/pomodoro/heartbeat", json={
+            **heartbeat(4, "focus_overtime", date=today), "focus_weight": 0.5})
+
+        (row,) = member_a.get("/api/pomodoro/daily-summary").get_json()
+        assert row[1:] == [4, 0, 1, 0, 2.5], "overtime is never weighted down"
 
     def test_days_are_returned_oldest_first(self, member_a):
         today = datetime.date.today()
@@ -192,7 +206,7 @@ class TestStressOverrides:
 
         member_a.post("/api/pomodoro/dsi-override", json={"date": today, "override_dsi": 0.1})
 
-        assert member_a.get("/api/pomodoro/daily-summary").get_json() == [[today, 1, 0, 0, 0]]
+        assert member_a.get("/api/pomodoro/daily-summary").get_json() == [[today, 1, 0, 0, 0, 1]]
 
 
 class TestTheTelemetryWritePathIsGuardedToo:

@@ -58,6 +58,20 @@ class TestFormula:
         assert calendar.data_map["2026-09-06"]["dsi"] == pytest.approx(8.0)
 
     @pytest.mark.exact
+    def test_focus_counts_at_the_cost_its_mode_stored(self, calendar_factory):
+        calendar = calendar_factory()
+
+        calendar.apply_summary_data((
+            [PomodoroDailyRow.from_server(["2026-09-05", 45, 30, 0, 0, 30.0]),
+             PomodoroDailyRow.from_server(["2026-09-06", 45, 30, 0, 0])],
+            {},
+        ))
+
+        assert calendar.data_map["2026-09-05"]["dsi"] == pytest.approx(1.0)
+        assert calendar.data_map["2026-09-06"]["dsi"] == pytest.approx(1.5), (
+            "a service that sums no cost is read as every minute costing one")
+
+    @pytest.mark.exact
     def test_the_prescribed_split_lands_on_the_sustainable_boundary(self, calendar_factory):
         calendar = calendar_factory()
 

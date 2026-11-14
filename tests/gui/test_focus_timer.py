@@ -1,7 +1,9 @@
 import pytest
 from PyQt6.QtCore import QDateTime, QThreadPool
 
-from src.gui.views.pomodoro_view import HOLD_STOP, PomodoroView
+import src.profile as profile_module
+from src.desktop import notify
+from src.gui.views.pomodoro_view import FOCUS_COST, HOLD_STOP, PomodoroView
 from tests.gui.conftest import advance
 
 pytestmark = [pytest.mark.gui, pytest.mark.exact]
@@ -27,6 +29,30 @@ def timer(qapp, profile_path, recording_db):
 def strict(qapp, strict_timer, recording_db):
     view = built(recording_db)
     assert view.strict_mode is True
+    yield view
+    view.shutdown()
+    QThreadPool.globalInstance().waitForDone(2000)
+    view.deleteLater()
+
+
+GAMING = ("\n[timer.modes.Gaming]\nfocus_mins = 45\nfocus_cost_mins = 30\nbreak_mins = 30\n"
+          "idle_pause_secs = 0\neye_rest = false\nconfirm_break = true\n")
+
+
+@pytest.fixture
+def prompts(monkeypatch):
+    shown = []
+    monkeypatch.setattr(notify.Prompt, "show",
+                        lambda prompt, summary, body, **hints: shown.append(summary) or True)
+    return shown
+
+
+@pytest.fixture
+def gaming(qapp, strict_timer, recording_db, prompts):
+    strict_timer.write_text(strict_timer.read_text(encoding="utf-8") + GAMING, encoding="utf-8")
+    profile_module.reload_profile()
+    view = built(recording_db)
+    view.choose_mode("gaming")
     yield view
     view.shutdown()
     QThreadPool.globalInstance().waitForDone(2000)
@@ -684,6 +710,132 @@ class TestTheSplitIsTheSchedule:
 
         QThreadPool.globalInstance().waitForDone(2000)
         view.deleteLater()
+
+
+class TestTimerModes:
+    def test_a_profile_without_modes_offers_no_switch(self, timer):
+        assert timer.mode.name == "Regular"
+        assert timer.btn_mode.isHidden() is True
+        assert "REGULAR" not in timer.lbl_split.text()
+
+    def test_one_chosen_before_focus_puts_its_length_on_the_clock(self, gaming):
+        assert (gaming.work_ms, gaming.break_ms) == (45 * 60000, 30 * 60000)
+        assert gaming.time_left_ms == 45 * 60000
+        assert "45 / 30" in gaming.lbl_split.text()
+        assert "GAMING" in gaming.lbl_split.text()
+        assert gaming.btn_mode.text() == "Gaming Timer"
+
+    def test_one_chosen_during_focus_waits_for_the_next_interval(self, gaming):
+        gaming._toggle_timer()
+
+        said = gaming.choose_mode("regular")
+
+        assert gaming.mode.name == "Gaming"
+        assert "Regular from the next focus interval" in said
+        assert gaming.btn_mode.text() == "Regular Next"
+        gaming.time_left_ms = 5
+        advance(gaming, 50)
+        gaming.start_the_break()
+        gaming.time_left_ms = 5
+        advance(gaming, 50)
+        assert (gaming.mode.name, gaming.time_left_ms) == ("Regular", 30 * 60000)
+
+    def test_the_button_steps_to_the_next_mode(self, gaming):
+        gaming.btn_mode.click()
+
+        assert gaming.mode.name == "Regular"
+        assert gaming.btn_mode.text() == "Regular Timer"
+
+    @pytest.mark.exact
+    def test_its_focus_costs_its_share_of_the_stress_index(self, gaming):
+        gaming._toggle_timer()
+
+        advance(gaming, 300)
+
+        assert gaming.intra_ms[FOCUS_COST] == pytest.approx(
+            gaming.intra_ms["focus"] * 30 / 45)
+
+    def test_its_minutes_are_stored_with_its_name_and_weight(self, gaming, recording_db,
+                                                             settled):
+        gaming._toggle_timer()
+        gaming.last_logged_minute = (QDateTime.currentDateTime().time().hour() * 60
+                                     + QDateTime.currentDateTime().time().minute() + 1) % 1440
+        start_recording(recording_db)
+
+        advance(gaming, 50)
+
+        settled()
+        heartbeat = recording_db.last("log_pomodoro_heartbeat")
+        assert heartbeat["mode"] == "Gaming"
+        assert heartbeat["focus_weight"] == pytest.approx(30 / 45)
+
+    def test_inactivity_does_not_pause_its_focus(self, gaming):
+        gaming._toggle_timer()
+        gaming.idle_source = Away(10 ** 9)
+
+        gaming._watch_for_the_member()
+
+        assert gaming.is_running is True
+
+    @pytest.mark.exact
+    def test_at_zero_it_runs_on_as_focus_overtime_and_says_so_once(self, gaming, prompts):
+        gaming._toggle_timer()
+        gaming.time_left_ms = gaming.warn_secs * 1000 - 1
+        advance(gaming, 1)
+        assert gaming._warned_of_break is False, "no wall is coming, so none is announced"
+        gaming.time_left_ms = 5
+
+        advance(gaming, 50)
+        advance(gaming, 50)
+
+        assert gaming.waiting_for_break_start is True
+        assert gaming._get_current_state() == "focus_overtime"
+        assert gaming.holds_the_screens() is False
+        assert "FOCUS OVERTIME" in gaming.lbl_phase.text()
+        assert len(prompts) == 1
+
+    def test_its_button_starts_the_strict_break(self, gaming):
+        gaming._toggle_timer()
+        gaming.time_left_ms = 5
+        advance(gaming, 50)
+
+        gaming.break_prompt.pressed.emit()
+
+        assert gaming.current_phase == "break"
+        assert gaming.holds_the_screens() is True
+        assert gaming.time_left_ms == 30 * 60000
+
+    def test_without_an_ended_focus_there_is_no_break_to_start(self, gaming):
+        gaming._toggle_timer()
+
+        said = gaming.start_the_break()
+
+        assert "No ended focus interval" in said
+        assert gaming.current_phase == "work"
+
+
+class TestTheTimerCommand:
+    def submit(self, window, text, settled):
+        window.command_line.setText(text)
+        window.execute_command()
+        settled()
+        return window.status_bar.text()
+
+    def test_alone_it_names_the_mode_and_the_others(self, window, settled):
+        assert "Regular timer: 30 / 30" in self.submit(window, "timer", settled)
+
+    def test_a_mode_the_profile_does_not_declare_is_refused(self, window, settled):
+        assert "No timer mode 'gaming'" in self.submit(window, "timer gaming", settled)
+
+    def test_break_now_starts_the_break_ended_focus_waits_for(self, window, settled):
+        view = window.views["pomodoro"]
+        view._toggle_timer()
+        view.time_left_ms = 5
+        advance(view, 50)
+
+        self.submit(window, "break now", settled)
+
+        assert view.current_phase == "break"
 
 
 class TestTheCommandThatQueuesALongBreak:

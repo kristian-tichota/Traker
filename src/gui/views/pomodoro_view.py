@@ -29,8 +29,8 @@ from src.domain import chores, formulas, media, plans
 from src.domain.clock import as_displayed_date, minutes_covered
 from src.domain.hints import LETTERS, letters_of
 from src.profile import (DEFAULT_BLINK_SETS_PER_DAY, DEFAULT_EYE_REST_MINS,
-                         DEFAULT_GAZE_SECS, DEFAULT_IDLE_PAUSE_SECS,
-                         DEFAULT_STOP_HOLD_SECS, UserProfile, get_qt_key)
+                         DEFAULT_GAZE_SECS, DEFAULT_STOP_HOLD_SECS, REGULAR_MODE,
+                         UserProfile, get_qt_key)
 from src.gui.components.ambience_player import AmbiencePlayer
 from src.gui.components.calm_face import CalmFace
 from src.gui.components.chore_panel import KEYS as CHORE_KEYS, ChorePanel
@@ -110,17 +110,24 @@ WALL_NAME = "strictWall"
 
 STATES = ("focus", "rest", "focus_overtime", "rest_overtime")
 
+FOCUS_COST = "focus_cost"
+MEASURES = STATES + (FOCUS_COST,)
+
 PHASE_COLOURS = {"work": "blue", "break": "green", "long_break": "violet"}
 
 
 def minutes_of(row) -> dict:
-    """Return a day summary row's minutes, keyed by state."""
-    return {state: getattr(row, f"{state}_mins") for state in STATES}
+    """Return a day summary row's minutes keyed by state, and what its focus cost."""
+    minutes = {state: getattr(row, f"{state}_mins") for state in STATES}
+    minutes[FOCUS_COST] = (minutes["focus"] if row.focus_cost_mins is None
+                           else row.focus_cost_mins)
+    return minutes
 
 
 def stress_index(seconds) -> float:
     """Return the Daily Stress Index of the seconds spent in each state."""
-    return formulas.daily_stress_index(seconds["focus"], seconds["focus_overtime"],
+    return formulas.daily_stress_index(seconds.get(FOCUS_COST, seconds["focus"]),
+                                       seconds["focus_overtime"],
                                        seconds["rest"], seconds["rest_overtime"])
 
 
@@ -877,15 +884,14 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.profile = UserProfile()
 
         split = self.profile.timer_split()
-        self.work_ms = split["focus_mins"] * MS_PER_MINUTE
-        self.break_ms = split["break_mins"] * MS_PER_MINUTE
+        self.modes = self.profile.timer_modes()
+        self._take_up(self.modes[0])
+        self._next_mode = self.mode
         self.long_break_ms = split["long_break_mins"] * MS_PER_MINUTE
         self.long_breaks_per_day = split["long_breaks_per_day"]
         self.strict_mode = split["strict"]
         self.stop_hold_secs = self.profile.number(
             "timer", "stop_hold_secs", DEFAULT_STOP_HOLD_SECS, low=1.0, high=60.0)
-        self.idle_pause_ms = int(self.profile.number(
-            "timer", "idle_pause_secs", DEFAULT_IDLE_PAUSE_SECS, low=0.0) * 1000)
 
         self.current_phase = "work"
         self.current_regime_str = ""
@@ -897,8 +903,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         self._long_breaks_used = 0
         self._long_break_day = datetime.date.today().isoformat()
 
-        self.live_ms = dict.fromkeys(STATES, 0)
-        self.intra_ms = dict.fromkeys(STATES, 0)
+        self.live_ms = dict.fromkeys(MEASURES, 0)
+        self.intra_ms = dict.fromkeys(MEASURES, 0)
 
         self.waiting_for_work_start = True
         self.waiting_for_break_start = False
@@ -970,6 +976,8 @@ class PomodoroView(ShutdownMixin, QWidget):
             self.profile.get_metric("strict_break.ambience", "scene", "rain"),
             self.profile.number("strict_break.ambience", "volume", 0.6, low=0.0, high=1.0),
             parent=self)
+        self.break_prompt = notify_service.Prompt("Start break", parent=self)
+        self.break_prompt.pressed.connect(self.start_the_break)
         self.hook = StateHook(self.profile.get_metric("hooks", "state", ""))
         self._hook_pending = False
         self.dictum = dictum.DictumListener(parent=self)
@@ -1146,10 +1154,16 @@ class PomodoroView(ShutdownMixin, QWidget):
         self.btn_away.setStyleSheet(self.btn_skip.styleSheet())
         self.btn_away.clicked.connect(self.step_away)
 
+        self.btn_mode = QPushButton()
+        self.btn_mode.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_mode.setStyleSheet(self.btn_skip.styleSheet())
+        self.btn_mode.clicked.connect(self.toggle_mode)
+
         btn_layout.addWidget(self.btn_play)
         btn_layout.addWidget(self.btn_skip)
         btn_layout.addWidget(self.btn_long)
         btn_layout.addWidget(self.btn_away)
+        btn_layout.addWidget(self.btn_mode)
         layout.addLayout(btn_layout)
 
         self.hold_ring = HoldRing(self.release_hold_secs)
@@ -1216,6 +1230,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         layout.addStretch()
 
         self._apply_long_break_controls()
+        self._apply_mode_controls()
         self._show_the_sound()
 
     def _record(self, event_type: str, amount_ms: int = 0):
@@ -1241,10 +1256,74 @@ class PomodoroView(ShutdownMixin, QWidget):
 
     def split_text(self) -> str:
         """Return the schedule, stated once on the view."""
+        mode = "" if self.mode.name == REGULAR_MODE else f"   ·   {self.mode.name.upper()}"
         return (f"{self.work_ms // MS_PER_MINUTE} / "
                 f"{self.break_ms // MS_PER_MINUTE}"
                 f"   ·   {self.long_break_ms // MS_PER_MINUTE} LONG "
-                f"x{self.long_breaks_per_day}")
+                f"x{self.long_breaks_per_day}{mode}")
+
+    def _take_up(self, mode):
+        """Run the timer the way mode says, from the interval about to begin."""
+        self.mode = mode
+        self.work_ms = mode.focus_mins * MS_PER_MINUTE
+        self.break_ms = mode.break_mins * MS_PER_MINUTE
+        self.idle_pause_ms = int(mode.idle_pause_secs * 1000)
+
+    def _interval_under_way(self) -> bool:
+        """Report whether a focus interval or its break has begun and not yet ended."""
+        return not (self.current_phase == "work" and self.waiting_for_work_start)
+
+    def choose_mode(self, name) -> str:
+        """Choose the mode the next focus interval runs in, saying when it applies."""
+        mode = next((mode for mode in self.modes
+                     if mode.name.casefold() == str(name).strip().casefold()), None)
+        if mode is None:
+            return ""
+        self._next_mode = mode
+        if not self._interval_under_way():
+            self._take_up(mode)
+            self.time_left_ms = self.work_ms
+            self.lbl_timer.setText(self._format_high_precision(self.time_left_ms))
+            self._update_tray()
+        self._apply_mode_controls()
+        return self.mode_report()
+
+    def toggle_mode(self) -> str:
+        """Choose the mode after the one chosen, in the order the profile declares them."""
+        at = self.modes.index(self._next_mode)
+        return self.choose_mode(self.modes[(at + 1) % len(self.modes)].name)
+
+    def mode_report(self) -> str:
+        """Return the line naming the mode running, any chosen to follow, and the others."""
+        said = f" {self.mode.name} timer: {self.mode.focus_mins} / {self.mode.break_mins}."
+        if self._next_mode != self.mode:
+            said += f" {self._next_mode.name} from the next focus interval."
+        names = ", ".join(mode.name for mode in self.modes)
+        return f"{said} Modes: {names}."
+
+    def _apply_mode_controls(self):
+        """Name the mode on the split and on its button."""
+        self.lbl_split.setText(self.split_text())
+        self.btn_mode.setVisible(len(self.modes) > 1)
+        chosen = self._next_mode.name
+        self.btn_mode.setText(f"{chosen} Timer" if self._next_mode == self.mode
+                              else f"{chosen} Next")
+
+    def start_the_break(self) -> str:
+        """Start the break that ended focus waits for, saying whether there was one."""
+        if not self.waiting_for_break_start:
+            return " No ended focus interval is waiting for its break."
+        self._record("resumed_break")
+        self._next_phase()
+        return " Break started."
+
+    def _ask_for_the_break(self):
+        """Say once that focus is over, with a button that starts the break."""
+        self.break_prompt.show(
+            "Focus over: overtime is running",
+            f"Each minute now counts double until the {self.break_ms // MS_PER_MINUTE}"
+            f"-minute break starts.",
+            sound_name=self._warn_sound, sound_file=self._warn_sound_file)
 
     def long_breaks_left(self) -> int:
         """Return how many long breaks today still holds."""
@@ -1376,10 +1455,10 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         today = datetime.date.today().isoformat()
         row = next((row for row in payload[0] if row.date == today), None)
-        minutes = minutes_of(row) if row is not None else dict.fromkeys(STATES, 0)
+        minutes = minutes_of(row) if row is not None else dict.fromkeys(MEASURES, 0)
         self.live_ms = {state: spent * MS_PER_MINUTE for state, spent in minutes.items()}
         if handing_over:
-            self.intra_ms = dict.fromkeys(STATES, 0)
+            self.intra_ms = dict.fromkeys(MEASURES, 0)
 
         self.stress_calendar.apply_summary_data(payload)
 
@@ -1394,22 +1473,28 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         current_state = self._get_current_state()
         self.intra_ms[current_state] += delta_ms
+        if current_state == "focus":
+            self.intra_ms[FOCUS_COST] += delta_ms * self.mode.focus_weight
 
         dt_now = datetime.datetime.now()
         current_minute = dt_now.hour * 60 + dt_now.minute
 
         if current_minute != self.last_logged_minute and self.last_logged_minute != -1:
+            heartbeat = {"date": dt_now.date().isoformat(), "minute_of_day": current_minute,
+                         "second": 0, "state": current_state}
+            if self.mode.name != REGULAR_MODE:
+                heartbeat["mode"] = self.mode.name
+            if self.mode.focus_weight != 1:
+                heartbeat["focus_weight"] = self.mode.focus_weight
             run_in_background(self.threadpool, log_minute, self._minute_stored, None,
-                              self.db, {"date": dt_now.date().isoformat(),
-                                        "minute_of_day": current_minute,
-                                        "second": 0, "state": current_state})
+                              self.db, heartbeat)
 
         self.last_logged_minute = current_minute
 
         if self.is_running and not self._eyes_hold_focus():
             self.time_left_ms -= delta_ms
             if (self.strict_mode and self.warn_secs and not self._warned_of_break
-                    and self.current_phase == "work"
+                    and self.current_phase == "work" and not self.mode.confirm_break
                     and self.time_left_ms <= self.warn_secs * 1000):
                 self._warn_of_coming_break()
             if (not self._said_the_offers_are_open and self._offers
@@ -1418,10 +1503,15 @@ class PomodoroView(ShutdownMixin, QWidget):
                 self._say_the_offers_are_open()
             if self.time_left_ms <= 0:
                 self.time_left_ms = 0
-                if self.current_phase == "work" and not self.strict_mode:
+                if self.current_phase == "work" and (
+                        not self.strict_mode or self.mode.confirm_break):
                     self._set_running(False)
                     self.waiting_for_break_start = True
-                    self._say_phase("FOCUS OVER - PRESS PLAY")
+                    if self.mode.confirm_break:
+                        self._say_phase("FOCUS OVERTIME - START THE BREAK", "red")
+                        self._ask_for_the_break()
+                    else:
+                        self._say_phase("FOCUS OVER - PRESS PLAY")
                     self._apply_exit_controls()
                     self._update_tray()
                     return
@@ -1430,7 +1520,7 @@ class PomodoroView(ShutdownMixin, QWidget):
 
         self.lbl_timer.setText(self._format_high_precision(self.time_left_ms))
 
-        totals = {state: self.live_ms[state] + self.intra_ms[state] for state in STATES}
+        totals = {state: self.live_ms[state] + self.intra_ms[state] for state in MEASURES}
         for label, state in zip(self.rows_val_labels, STATES):
             label.setText(self._format_high_precision(totals[state]))
         self.rows_val_labels[len(STATES)].setText(
@@ -1467,8 +1557,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             return
 
         if self.waiting_for_break_start:
-            self._record("resumed_break")
-            self._next_phase()
+            self.start_the_break()
             return
 
         if self.waiting_for_work_start:
@@ -1582,9 +1671,10 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _watch_for_the_member(self):
         """Pause focus for an absence, resume it on input, and count screen time."""
         watching = bool(self.idle_pause_ms) and (self._idled or self._focus_is_running())
-        counting = self.eye_rest is not None and not self.overlays
+        eyes = self.eye_rest is not None and (bool(self.overlays) or self.mode.eye_rest)
+        counting = eyes and not self.overlays
         away = self.idle_source() if watching or counting else None
-        if self.eye_rest is not None:
+        if eyes:
             self._count_screen_time(away)
         if not watching or away is None:
             return
@@ -1629,6 +1719,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         moved = min(self.intra_ms[running], self.idle_pause_ms)
         self.intra_ms[running] -= moved
         self.intra_ms["rest_overtime"] += moved
+        weight = self.mode.focus_weight if running == "focus" else 0
+        self.intra_ms[FOCUS_COST] = max(0, self.intra_ms[FOCUS_COST] - moved * weight)
 
         ended = datetime.datetime.now()
         minutes = minutes_covered(
@@ -1639,6 +1731,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         stored = len(minutes) * MS_PER_MINUTE
         self.live_ms[running] = max(0, self.live_ms[running] - stored)
         self.live_ms["rest_overtime"] += stored
+        self.live_ms[FOCUS_COST] = max(0, self.live_ms[FOCUS_COST] - stored * weight)
         run_in_background(self.threadpool, rewrite_as_rest,
                           self._absence_rewritten, None, self.db, minutes)
 
@@ -1662,6 +1755,7 @@ class PomodoroView(ShutdownMixin, QWidget):
     def _next_phase(self):
         if self.is_absent():
             self._clear_overlays()
+        self.break_prompt.withdraw()
         self.last_tray_second = -1
         self.cancel_hold()
         self._idled = False
@@ -1679,6 +1773,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             self._lead_with_a_blink_set()
         else:
             self.current_phase = "work"
+            self._take_up(self._next_mode)
             self.time_left_ms = self.work_ms
             self._say_phase("REST OVER - PRESS PLAY")
             self.waiting_for_work_start = True
@@ -1711,6 +1806,7 @@ class PomodoroView(ShutdownMixin, QWidget):
         if not self._strict_engaged:
             return None
         state = {"phase": self.current_phase, "left_ms": int(max(0, self.time_left_ms)),
+                 "mode": self.mode.name, "next_mode": self._next_mode.name,
                  "over_since_ms": self._over_since_ms if self.waiting_for_work_start else 0,
                  "absent_since_ms": self._absent_since_ms,
                  "owed_until_ms": self._owed_until_ms,
@@ -1747,6 +1843,9 @@ class PomodoroView(ShutdownMixin, QWidget):
         except (TypeError, ValueError) as e:
             log.warning("Not raising the standing walls again: %s", e)
             return
+        named = {mode.name: mode for mode in self.modes}
+        self._take_up(named.get(state.get("mode"), self.mode))
+        self._next_mode = named.get(state.get("next_mode"), self.mode)
         if absent_since_ms:
             self.time_left_ms = left_ms
             self.waiting_for_work_start = False
@@ -1756,6 +1855,8 @@ class PomodoroView(ShutdownMixin, QWidget):
         elif phase in ("break", "long_break"):
             self._hold_a_break(phase, max(0, left_ms - state["gone_ms"]))
         else:
+            self._take_up(self._next_mode)
+            self.time_left_ms = self.work_ms
             self._over_since_ms = over_since_ms or QDateTime.currentMSecsSinceEpoch()
             self._say_phase("REST OVER - PRESS PLAY")
             self._enforce_strict_mode()
@@ -2846,6 +2947,7 @@ class PomodoroView(ShutdownMixin, QWidget):
             self.eye_rest.shutdown()
         super().shutdown()
         self._clear_overlays()
+        self.break_prompt.withdraw()
         self.ambience.shutdown()
         self.hook.tell(FOCUS_STATE)
         self.hook.close()

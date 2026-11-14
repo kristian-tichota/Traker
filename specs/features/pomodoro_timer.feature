@@ -10,18 +10,19 @@ Feature: Focus timer
   timing below MUST NOT be collapsed.
 
   Background:
-    Given one split declared in my profile: a focus length and a break length
+    Given a regular split declared in my profile: a focus length and a break length
+    And any further timer modes my profile declares
     And a longer break I may queue in place of one, and how many of those a day holds
     And whether a break takes every screen, which is my profile's to say
     And a strict break declares how long its release key must be held, and how long before it lands I am warned
     And how long stopping a running focus interval must be held for, and how long away from my desk stops it for me
 
-  Rule: There is one split, not a menu of them
+  Rule: The regular split runs unless I choose a mode I declared
 
     Scenario: The shipped split
       Then focus is 30 minutes and a break is 30
       And the queued break is 60, twice a day
-      And the view says what the split is rather than offering me others
+      And the view says what the split is, and offers no mode a profile does not declare
 
     Scenario: My own split
       Given I wrote different durations in my profile
@@ -33,6 +34,25 @@ Feature: Focus timer
       Then none of it is read
       And the app says so once, rather than ignoring it silently
       And the wall stays off until I ask for it, because a mode I had to select was never one
+
+  Rule: A timer mode replaces the regular split from the next focus interval
+
+    Scenario: Choosing one
+      When I choose a mode from the command bar or the button
+      Then a focus interval not yet begun takes it at once, and one under way keeps its own
+      And the view names the mode running and any chosen to follow
+      And Traker starts in the regular one
+
+    Scenario: What a mode may change
+      Then a mode MAY set its focus and break lengths, what its focus costs, the inactivity pause and the eye rest
+      And the long break and whether a break takes the screens stay shared
+
+    Scenario: A mode that waits for me to start its break
+      Given the mode confirms its break
+      When its focus reaches zero
+      Then it runs on as focus overtime, announced once with a sound and a notification
+      And the notification's button, play or the break command starts the mode's break
+      And no warning precedes the zero, since nothing takes the screens there
 
   Rule: The break after focus is the ordinary one unless I queued the long one
 
@@ -133,7 +153,7 @@ Feature: Focus timer
   Rule: Focus ends differently depending on whether breaks are enforced
 
     Scenario: Strict mode starts the break for me
-      Given my profile says breaks take the screens
+      Given my profile says breaks take the screens, and the mode does not confirm its break
       When the focus interval reaches zero
       Then the break begins immediately and runs
       And it is the long break if I queued one, otherwise the ordinary one

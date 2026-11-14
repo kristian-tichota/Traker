@@ -1,8 +1,11 @@
 # Focus timer and enforced breaks
 
-There is one split for the whole day, with a long break that may be queued a set number of times a
-day. `:break long` makes the next break the long one, `:break cancel` withdraws it, and `:break`
-reports how many the day has left. Contract: `specs/features/pomodoro_timer.feature`. The generated
+The regular split runs unless `:timer` or the mode button chooses a `[timer.modes]` table, from the
+next focus interval on. A mode with `confirm_break` runs on past zero as focus overtime, announced by
+one notification whose button, like play and `:break now`, starts the break. Its `focus_cost_mins`
+is stored with each minute as the weight of its focus in the stress index. A long break may be
+queued a set number of times a day. `:break long` makes the next break the long one, `:break cancel`
+withdraws it, and `:break` reports how many the day has left. Contract: `specs/features/pomodoro_timer.feature`. The generated
 profile documents every key.
 
 After `idle_pause_secs` without input, a focus interval stops itself and that window is stored again

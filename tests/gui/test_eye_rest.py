@@ -166,6 +166,25 @@ class TestALookAway:
 
         assert timer.eye_rest.running is True
 
+    def test_a_timer_mode_without_eye_rest_brings_no_veil(self, qapp, eyes_rested,
+                                                          recording_db):
+        eyes_rested.write_text(eyes_rested.read_text(encoding="utf-8")
+                               + "\n[timer.modes.Gaming]\neye_rest = false\n",
+                               encoding="utf-8")
+        profile_module.reload_profile()
+        view = PomodoroView(recording_db, tray_icon=None)
+        view.refresh_timer.stop()
+        view._idle_watch.stop()
+        view.choose_mode("Gaming")
+        view.eye_rest.screen_time.screen_ms = view.eye_rest.screen_time.every_ms - 1
+
+        look_now(view, 0)
+
+        assert view.eye_rest.running is False
+        view.shutdown()
+        QThreadPool.globalInstance().waitForDone(2000)
+        view.deleteLater()
+
     def test_a_rest_during_focus_holds_the_clock_and_counts_as_rest(self, timer):
         timer._toggle_timer()
         left = timer.time_left_ms

@@ -16,7 +16,7 @@ Feature: Daily Stress Index
 
     @exact
     Scenario: The formula
-      Then penalty is focus seconds plus twice the focus overtime seconds
+      Then penalty is focus seconds, each at its timer mode's cost, plus twice the focus overtime seconds
       And recovery is rest seconds plus half the rest overtime seconds
       And the index is penalty divided by recovery
 
@@ -24,6 +24,12 @@ Feature: Daily Stress Index
     Scenario: Overtime is not worth the seconds it holds
       Then a second of focus overtime costs twice a second of focus
       And a second of rest overtime gives back half a second of rest
+
+    @exact
+    Scenario: A mode's focus costs what the mode declares
+      Given a mode whose 45-minute focus is declared to cost 30
+      Then each of its focus seconds counts as two thirds of one
+      And its overtime still costs twice a regular second
 
     @exact
     Scenario: A day of the prescribed split
@@ -39,7 +45,7 @@ Feature: Daily Stress Index
       And the day is not drawn as an active day
 
     Scenario: Nothing about the app changes the arithmetic
-      Then two days holding the same seconds score the same
+      Then two days holding the same seconds at the same costs score the same
       And history already recorded keeps its stored seconds, which are recomputed on display
 
     Scenario: The live index includes time not yet stored

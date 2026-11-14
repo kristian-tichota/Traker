@@ -447,6 +447,7 @@ class PomodoroDailyRow(NamedTuple):
     rest_mins: int
     focus_overtime_mins: int
     rest_overtime_mins: int
+    focus_cost_mins: Optional[float] = None
 
     from_server = classmethod(_in_order)
 

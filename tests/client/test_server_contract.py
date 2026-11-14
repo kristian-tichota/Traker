@@ -203,7 +203,7 @@ class TestTelemetryRoundTrip:
             "state": "focus", "mode": "Default",
         })
 
-        assert db_client.get_pomodoro_daily_summary() == [(today, 1, 0, 0, 0)]
+        assert db_client.get_pomodoro_daily_summary() == [(today, 1, 0, 0, 0, 1)]
 
     def test_timeline_events_come_back_as_tuples(self, db_client):
         db_client.log_pomodoro_event({

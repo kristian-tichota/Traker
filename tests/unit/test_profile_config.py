@@ -156,6 +156,44 @@ class TestTheOneSplit:
         assert profile.timer_split()["long_breaks_per_day"] == 2
 
 
+class TestTimerModes:
+    GAMING = ("[timer]\nfocus_mins = 25\nidle_pause_secs = 120\n"
+              "[timer.modes.Gaming]\nfocus_mins = 45\nfocus_cost_mins = 30\n"
+              "eye_rest = false\nconfirm_break = true\n")
+
+    def test_the_regular_mode_is_the_timer_section_and_comes_first(self, user_profile):
+        (regular,) = user_profile.timer_modes()
+
+        assert (regular.name, regular.focus_mins, regular.break_mins) == ("Regular", 30, 30)
+        assert regular.focus_weight == 1
+        assert (regular.eye_rest, regular.confirm_break) == (True, False)
+
+    def test_a_mode_takes_what_it_leaves_out_from_the_timer_section(self, write_profile):
+        regular, gaming = write_profile(self.GAMING).timer_modes()
+
+        assert (gaming.name, gaming.focus_mins, gaming.break_mins) == ("Gaming", 45, 30)
+        assert gaming.idle_pause_secs == regular.idle_pause_secs == 120
+        assert (gaming.eye_rest, gaming.confirm_break) == (False, True)
+
+    @pytest.mark.exact
+    def test_its_focus_weighs_what_it_costs_over_how_long_it_runs(self, write_profile):
+        _, gaming = write_profile(self.GAMING).timer_modes()
+
+        assert gaming.focus_weight == pytest.approx(30 / 45)
+
+    def test_a_mode_that_states_no_cost_costs_what_it_runs(self, write_profile):
+        _, long = write_profile("[timer.modes.Long]\nfocus_mins = 90\n").timer_modes()
+
+        assert long.focus_weight == 1
+
+    def test_a_mode_that_is_not_a_table_is_left_out(self, write_profile, caplog):
+        with caplog.at_level("WARNING"):
+            modes = write_profile("[timer.modes]\nGaming = 45\n").timer_modes()
+
+        assert [mode.name for mode in modes] == ["Regular"]
+        assert "Gaming" in caplog.text
+
+
 class TestAHandEditedNumber:
     @pytest.mark.parametrize("written", ['"ten"', "true", '"1e400"'])
     def test_a_value_that_is_not_a_number_falls_back_and_says_so(
