@@ -57,6 +57,30 @@ class TestHeartbeats:
         assert member_a.get("/api/pomodoro/heartbeats/2026-09-01").get_json() == []
 
 
+def test_an_app_created_over_a_store_without_focus_weights_adds_them(tmp_path, monkeypatch):
+    import sqlite3
+
+    from server.app import create_app
+    from server.database import db_service
+
+    path = tmp_path / "older.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE pomodoro_heartbeats (user_id INTEGER NOT NULL, "
+                     "date TEXT NOT NULL, minute_of_day INTEGER NOT NULL, "
+                     "second INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL, "
+                     "mode TEXT NOT NULL DEFAULT 'Default', "
+                     "PRIMARY KEY (user_id, date, minute_of_day, second))")
+    conn.close()
+    monkeypatch.setattr(db_service, "db_path", str(path))
+
+    create_app()
+
+    conn = sqlite3.connect(path)
+    held = {row[1] for row in conn.execute("PRAGMA table_info(pomodoro_heartbeats)")}
+    conn.close()
+    assert "focus_weight" in held
+
+
 class TestDailySummary:
     @pytest.fixture
     def today(self):

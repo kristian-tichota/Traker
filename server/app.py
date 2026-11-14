@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 
 
 def create_app():
+    db_service.init_db()
     app = Flask(__name__)
     app.teardown_appcontext(db_session.release_db)
 
@@ -59,7 +60,6 @@ if __name__ == "__main__":
                   "start again; a member left without a token is given one.", CONFIG_PATH)
         sys.exit(1)
 
-    db_service.init_db()
     app = create_app()
     log.info("Starting the Traker API server on http://%s:%s for %s", HOST, PORT,
              ", ".join(sorted(USER_TOKENS.values())))
