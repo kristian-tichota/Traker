@@ -757,6 +757,10 @@ Feature: Focus timer
       When I press that offer's key and the page does not load
       Then that screen says it cannot open the url, and the break goes on
 
+    Scenario: The page plays a video
+      When the page holds a video in a format the web engine decodes
+      Then the video plays, and Traker keeps running
+
   Rule: A held break runs a session of a program I named
 
     Scenario: One list holds every new chat and session
