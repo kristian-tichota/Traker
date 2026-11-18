@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import tomllib
 from typing import NamedTuple
 
 from src.desktop import rest_queue
@@ -15,6 +16,8 @@ DECK = "deck"
 PAGE = "page"
 TERMINAL = "terminal"
 SHELF = "shelf"
+GALLERY = "gallery"
+LISTS = (SHELF, GALLERY)
 ANY_DECK = "*"
 
 DEFAULT_LIBRARY = os.path.join(
@@ -26,7 +29,7 @@ SHELVED = (".epub", ".pdf", ".mkv", ".mp4", ".webm", ".avi", ".mov", ".m4v", ".w
 
 
 class BreakActivity(NamedTuple):
-    """One thing a break may show: a file, a deck, a page, sessions or a shelf."""
+    """One thing a break may show: a file, a deck, a page, sessions, a shelf or a gallery."""
 
     name: str
     path: str
@@ -40,6 +43,21 @@ class Entry(NamedTuple):
     name: str
     path: str
     folder: bool
+
+
+class Item(NamedTuple):
+    """One named file of a gallery shelf, opened at page where it names one."""
+
+    name: str
+    path: str
+    page: int = 0
+
+
+class Shelf(NamedTuple):
+    """One named row of a gallery, holding its items in written order."""
+
+    name: str
+    items: tuple
 
 
 def kind_of(path) -> str:
@@ -124,6 +142,45 @@ def resolve(offer, places) -> BreakActivity:
     return BreakActivity(rest_queue.label(chosen), chosen, kind_of(chosen))
 
 
+def gallery(path) -> list:
+    """Return the shelves a gallery file declares, each item's file present, in written order."""
+    try:
+        with open(path, "rb") as f:
+            written = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        log.warning("Could not read the gallery %s: %s", path, e)
+        return []
+    home = os.path.dirname(os.path.abspath(path))
+    found = []
+    for position, entry in enumerate(_tables(written.get("shelf")), start=1):
+        name = str(entry.get("name") or "").strip() or f"Shelf {position}"
+        base = os.path.join(home, os.path.expanduser(str(entry.get("folder") or "")))
+        items = tuple(item for item in (_item(base, raw) for raw in _tables(entry.get("items")))
+                      if item is not None)
+        if items:
+            found.append(Shelf(name, items))
+    return found
+
+
+def _tables(value) -> list:
+    return [entry for entry in value if isinstance(entry, dict)] if isinstance(value, list) else []
+
+
+def _item(base, entry):
+    """Return one gallery entry as an Item, or None where it names no file that is there."""
+    path = str(entry.get("path") or "").strip()
+    if not path:
+        return None
+    path = os.path.normpath(os.path.join(base, os.path.expanduser(path)))
+    if not os.path.isfile(path):
+        log.info("The gallery names %s, which is not there: skipped.", path)
+        return None
+    page = entry.get("page")
+    page = page if isinstance(page, int) and not isinstance(page, bool) and page > 0 else 0
+    name = str(entry.get("name") or "").strip() or rest_queue.label(path)
+    return Item(name, path, page)
+
+
 def _ended(path, places) -> bool:
     return media.finished(places.get(path, media.Place()), readout_of(kind_of(path)))
 
@@ -181,10 +238,13 @@ def _one(entry, position):
     deck = str(entry.get("deck") or "").strip()
     url = str(entry.get("url") or "").strip()
     program = str(entry.get("sessions") or "").strip()
-    if sum(map(bool, (path, deck, url, program))) > 1:
-        log.warning("Break activity %r names more than one of a path, a deck, a url and "
-                    "sessions: skipped.", name)
+    shelves = str(entry.get("gallery") or "").strip()
+    if sum(map(bool, (path, deck, url, program, shelves))) > 1:
+        log.warning("Break activity %r names more than one of a path, a deck, a url, "
+                    "sessions and a gallery: skipped.", name)
         return None
+    if shelves:
+        return BreakActivity(name, os.path.abspath(os.path.expanduser(shelves)), GALLERY)
     if deck:
         return BreakActivity(name, deck, DECK)
     if url:
@@ -197,7 +257,8 @@ def _one(entry, position):
                         "id; a break shows the file itself now. Replace both "
                         "with path = \"<the file>\": skipped.", name)
         else:
-            log.warning("Break activity %r has no path, deck, url or sessions: skipped.", name)
+            log.warning("Break activity %r has no path, deck, url, sessions or gallery: "
+                        "skipped.", name)
         return None
 
     return BreakActivity(name, os.path.expanduser(path), kind_of(path))

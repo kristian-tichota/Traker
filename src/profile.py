@@ -321,8 +321,8 @@ anki_command = "anki"
 
 # What a break may open on the screen it took: a PDF is read, an EPUB is read
 # as a book, anything else is played, a deck is reviewed in Anki, a url is
-# opened as a web page, and sessions names a session program whose sessions
-# open in a terminal. The queue
+# opened as a web page, sessions names a session program whose sessions
+# open in a terminal, and gallery names a gallery file. The queue
 # is offered first, then these entries, then the library below, each only on
 # its key: the first on Enter, the rest on 1-9 in that order.
 #
@@ -348,6 +348,22 @@ anki_command = "anki"
 # but ESC and CTRL+0, which goes back to the sessions; a tap of ESC reaches the
 # session, and leaving it detaches without ending it.
 #
+# A gallery file names files on shelves, such as one shelf per course and its
+# lectures by topic. Its list shows the shelves, the one read last marked;
+# SPACE, RIGHT or a shelf's hint lists that shelf's files by name, the one read
+# last marked, and a file's hint opens it where it was left, or at the page its
+# entry names. LEFT or BACKSPACE goes back to the shelves, and 0 in a file goes
+# back to its shelf.
+# Paths are relative to the gallery file's folder and the shelf's folder:
+#
+#   [[shelf]]
+#   name = "GM1  Geometric Modelling 1"
+#   folder = "GM1"
+#   items = [
+#     {{name = "4 · Bezier curves", path = "raw/lecture04.pdf"}},
+#     {{name = "NURBS", path = "raw/lecture05.pdf", page = 120}},
+#   ]
+#
 # [[strict_break.activities]]
 # name = "Reading"
 # path = "~/Documents/reading.pdf"
@@ -367,6 +383,10 @@ anki_command = "anki"
 # [[strict_break.activities]]
 # name = "Sessions"
 # sessions = "session-program"
+#
+# [[strict_break.activities]]
+# name = "Lectures"
+# gallery = "~/Study/gallery.toml"
 
 # Where the queue of paths added with ":rest <path>" is kept. It is a plain
 # file, one path per line, m3u-shaped, so anything else may append to it.

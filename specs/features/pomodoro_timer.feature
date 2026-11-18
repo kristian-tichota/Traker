@@ -888,6 +888,21 @@ Feature: Focus timer
       Then it is the Media folder in Traker's checkout, kept out of the repository, unless my profile names another
       And a folder that does not exist offers nothing
 
+  Rule: A gallery names files by shelf
+
+    Scenario: Two hints open a named file
+      Given my profile offers a gallery file with one shelf per course
+      When I press its key
+      Then the wall lists the shelves, the one I read last marked
+      And a shelf's hint lists its files by name, the one I read last marked, each with how far into it I am
+      And a file's hint opens it at the page its entry names, or where I left it
+
+    Scenario: Back through the gallery
+      Given a break is showing a file opened from the gallery
+      When I press 0
+      Then its shelf comes back with that file marked
+      And left or BACKSPACE goes back to the shelves
+
   Rule: A held break shows what is coming
 
     Scenario: Today's session on the break surface

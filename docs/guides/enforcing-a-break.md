@@ -51,6 +51,11 @@ folder carries a hint made from `hint_keys` less the chores' letters; typing it 
 queue is `rest-queue.m3u`, one path per line, so any process can append to it; `:rest` reads, extends
 and prunes it. Positions are kept in `rest-positions.json`, so a film or a book spans several breaks.
 
+An activity with `gallery` names a TOML file of `[[shelf]]` tables, each with a `name`, an optional
+`folder` and `items` of `name`, `path` and an optional 1-based `page`. Its list shows the shelves,
+the one read last marked; a shelf's hint lists its files by name, the one read last marked, and a
+file's hint opens it at its `page`, or where it was left. A file that is not there is left out.
+
 A film needs the `video` extra and the system `libmpv` (`media-video/mpv` with `USE="libmpv"`), which
 no lockfile carries; an EPUB, an Anki deck, a web page and a terminal need QtWebEngine, the `anki`
 extra. Without them the screen displays `COULD NOT PLAY`, `COULD NOT READ`, `COULD NOT REVIEW` or

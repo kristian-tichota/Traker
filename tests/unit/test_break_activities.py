@@ -3,8 +3,8 @@ import os
 import pytest
 
 from src.desktop import activities as break_activities
-from src.desktop.activities import (BOOK, DECK, DOCUMENT, PAGE, SHELF, TERMINAL, VIDEO,
-                                    BreakActivity)
+from src.desktop.activities import (BOOK, DECK, DOCUMENT, GALLERY, PAGE, SHELF, TERMINAL,
+                                    VIDEO, BreakActivity, Item, Shelf)
 from src.domain.media import Place
 
 pytestmark = pytest.mark.exact
@@ -48,11 +48,17 @@ class TestTheStandingEntries:
 
         assert read == [BreakActivity("Agents", "desk --x", TERMINAL)]
 
+    def test_a_gallery_is_read_from_its_file(self):
+        read = break_activities.read([{"name": "Lectures", "gallery": "~/g.toml"}])
+
+        assert read == [BreakActivity("Lectures", os.path.expanduser("~/g.toml"), GALLERY)]
+
     @pytest.mark.parametrize("entry", [
         {"name": "R", "path": "/x/a.pdf", "deck": "Japanese"},
         {"name": "R", "path": "/x/a.pdf", "url": "http://x/"},
         {"name": "R", "deck": "Japanese", "url": "http://x/"},
         {"name": "R", "url": "http://x/", "sessions": "desk"},
+        {"name": "R", "path": "/x/a.pdf", "gallery": "/x/g.toml"},
     ])
     def test_one_naming_more_than_one_thing_to_show_is_skipped(self, entry):
         assert break_activities.read([entry]) == []
@@ -224,3 +230,53 @@ class TestWhatAShelfOpens:
         entry = BreakActivity("Reading", "/x/reading.pdf", DOCUMENT)
 
         assert break_activities.resolve(entry, {}) is entry
+
+
+class TestTheGallery:
+    WRITTEN = """
+[[shelf]]
+name = "GM1"
+folder = "GM1"
+items = [
+  {name = "Bezier curves", path = "raw/l04.pdf"},
+  {name = "NURBS", path = "raw/l05.pdf", page = 12},
+  {name = "Not there", path = "raw/l99.pdf"},
+  {path = "raw/l06.pdf", page = 0},
+]
+
+[[shelf]]
+name = "Empty"
+items = [{name = "Gone", path = "gone.pdf"}]
+
+[[shelf]]
+name = "ODR"
+items = [{name = "Script", path = "ODR/script.pdf"}]
+"""
+
+    @pytest.fixture
+    def written(self, tmp_path):
+        for name in ("GM1/raw/l04.pdf", "GM1/raw/l05.pdf", "GM1/raw/l06.pdf", "ODR/script.pdf"):
+            (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / name).write_bytes(b"")
+        path = tmp_path / "gallery.toml"
+        path.write_text(self.WRITTEN, encoding="utf-8")
+        return path
+
+    def test_its_shelves_hold_the_files_that_are_there_in_written_order(self, written):
+        raw = str(written.parent / "GM1" / "raw")
+
+        assert break_activities.gallery(str(written)) == [
+            Shelf("GM1", (Item("Bezier curves", f"{raw}/l04.pdf"),
+                          Item("NURBS", f"{raw}/l05.pdf", 12),
+                          Item("l06.pdf", f"{raw}/l06.pdf"))),
+            Shelf("ODR", (Item("Script", str(written.parent / "ODR" / "script.pdf")),))]
+
+    @pytest.mark.parametrize("text", ["[[shelf]\n", "shelf = 3\n"])
+    def test_a_file_written_wrong_holds_nothing(self, tmp_path, text):
+        path = tmp_path / "gallery.toml"
+        path.write_text(text, encoding="utf-8")
+
+        assert break_activities.gallery(str(path)) == []
+
+    def test_a_file_that_is_not_there_holds_nothing(self, tmp_path):
+        assert break_activities.gallery(str(tmp_path / "absent.toml")) == []

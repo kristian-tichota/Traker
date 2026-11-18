@@ -11,8 +11,9 @@ from PyQt6.QtWidgets import (QFrame, QHeaderView, QLabel,
 
 from src.config import PALETTE
 from src.desktop import anki, rest_positions, rest_queue
-from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, TERMINAL,
-                                    contents, kind_of, library_for, readout_of)
+from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, GALLERY, LISTS, PAGE, SHELF,
+                                    TERMINAL, contents, gallery, kind_of, library_for,
+                                    readout_of)
 from src.domain.hints import LETTERS
 from src.domain.media import (UNKNOWN, Place, as_left, as_past, finished, how_far,
                               next_subtitle, subtitle_shown, subtitles)
@@ -737,7 +738,7 @@ def _entry_colour(entry, ended) -> QColor:
 
 def _how_far_into(entry, places) -> tuple:
     """Return how far into a file the member is, and whether that is its end."""
-    place = None if entry.folder else places.get(entry.path)
+    place = None if getattr(entry, "folder", False) else places.get(entry.path)
     if place is None:
         return "", False
     unit = readout_of(kind_of(entry.path))
@@ -871,8 +872,118 @@ class LibraryPane(BreakPane, MarkedList):
         return self.chooser
 
 
+class GalleryPane(BreakPane, MarkedList):
+    """A gallery's shelves as a list, then one shelf's named files, to open one from."""
+
+    picked = pyqtSignal(str, str, int)
+
+    def __init__(self, path=None, start_at=0, parent=None, positions=None):
+        super().__init__(parent)
+        self.positions = positions or rest_positions.beside(rest_queue.path_for(UserProfile()))
+        self.source = ""
+        self.shelves = []
+        self.shelf = None
+        self.chooser = named_list(self)
+        self.chooser.itemClicked.connect(self.pick)
+        self.layout().addWidget(self.chooser)
+        if path:
+            self.open(path, start_at)
+
+    def open(self, path, start_at=0):
+        """List the shelves of the gallery at path, the one read last marked."""
+        self.source = os.path.abspath(str(path))
+        self.shelves = gallery(self.source)
+        self._list(None, self._latest([[item.path for item in shelf.items]
+                                       for shelf in self.shelves]))
+
+    def reach(self, path):
+        """List the shelf holding path, path marked."""
+        for at, shelf in enumerate(self.shelves):
+            paths = [item.path for item in shelf.items]
+            if path in paths:
+                self._list(at, paths.index(path))
+                return
+
+    def toggle(self):
+        """List the marked shelf, the file read last marked, or hand over the marked file."""
+        if not self._rows:
+            return
+        if self.shelf is None:
+            items = self.shelves[self.marked].items
+            self._list(self.marked, self._latest([[item.path] for item in items]))
+            return
+        item = self.shelves[self.shelf].items[self.marked]
+        self.picked.emit(item.path, item.name, item.page)
+
+    def step(self, direction):
+        """Open the marked row going right, or go back to the shelves going left."""
+        if int(direction) > 0:
+            self.toggle()
+        else:
+            self.undo()
+
+    def undo(self):
+        """Drop a half-typed hint, or list the shelves, the one left marked."""
+        if not self.forget_hint() and self.shelf is not None:
+            self._list(None, self.shelf)
+
+    def nudge(self, direction):
+        """Mark the row above or below."""
+        self._mark(self.marked - int(direction))
+
+    def turn(self, direction):
+        """Mark the row a page further down or up."""
+        self._mark(self.marked + int(direction) * PAGE_ROWS)
+
+    def title(self) -> str:
+        """Return the shelf listed, or nothing at the shelves."""
+        return "" if self.shelf is None else self.shelves[self.shelf].name
+
+    def _latest(self, groups) -> int:
+        """Return the index of the group of paths holding the file read last, or 0."""
+        for path in reversed(list(rest_positions.read(self.positions))):
+            for at, paths in enumerate(groups):
+                if path in paths:
+                    return at
+        return 0
+
+    def _list(self, shelf, mark=0):
+        """List the shelf at index shelf, or the shelves where it is None, marking row mark."""
+        self.shelf = shelf
+        places = rest_positions.read(self.positions)
+        home = os.path.basename(os.path.dirname(self.source))
+        self.chooser.clear()
+        self.chooser.headerItem().setText(0, " / ".join(filter(None, (home, self.title()))))
+        self._rows = []
+        if shelf is None:
+            lines = [(each.name, str(len(each.items)), QColor(PALETTE['blue']))
+                     for each in self.shelves]
+        else:
+            lines = []
+            for item in self.shelves[shelf].items:
+                said, ended = _how_far_into(item, places)
+                lines.append((item.name, said, QColor(PALETTE['base1' if ended else 'base00'])))
+        for name, note, colour in lines:
+            row = QTreeWidgetItem([name, note])
+            ink(row, colour)
+            row.setForeground(1, QColor(PALETTE['base1']))
+            row.setTextAlignment(1, RIGHT)
+            self.chooser.addTopLevelItem(row)
+            self._rows.append(row)
+        self._label()
+        self.marked = 0
+        self._mark(mark)
+        if self._rows:
+            self._clear_message()
+        else:
+            self._show_message(f"NOTHING TO SHOW IN\n{self.source}", 'base01')
+
+    def _shown(self):
+        return self.chooser
+
+
 PANES = {DOCUMENT: DocumentPane, DECK: DeckPane, BOOK: BookPane, SHELF: LibraryPane,
-         PAGE: PagePane, TERMINAL: TerminalPane}
+         GALLERY: GalleryPane, PAGE: PagePane, TERMINAL: TerminalPane}
 
 
 def build_pane(activity, start_at=0, parent=None) -> QWidget:
@@ -885,6 +996,7 @@ class MediaSurface(QWidget):
 
     pane_changed = pyqtSignal()
     file_chosen = pyqtSignal(str)
+    item_chosen = pyqtSignal(str, str, int)
 
     def __init__(self, timer_ref, pane_factory=None, only_screen=False,
                  parent=None):
@@ -937,7 +1049,8 @@ class MediaSurface(QWidget):
         pane = self.panes.get(activity.kind)
         if pane is None:
             pane = self._build_pane(activity, start_at, parent=self.stack)
-            for name, relay in (("changed", self.pane_changed), ("chosen", self.file_chosen)):
+            for name, relay in (("changed", self.pane_changed), ("chosen", self.file_chosen),
+                                ("picked", self.item_chosen)):
                 signal = getattr(pane, name, None)
                 if signal is not None:
                     signal.connect(relay)
@@ -948,11 +1061,11 @@ class MediaSurface(QWidget):
             pane.open(activity.path, start_at)
 
         self.activity = activity
-        self._dress(light=activity.kind in (BOOK, DECK, SHELF, PAGE, TERMINAL))
+        self._dress(light=activity.kind in (BOOK, DECK, PAGE, TERMINAL, *LISTS))
         self.stack.setCurrentWidget(pane)
         self.set_keys(key_hints)
         if self.progress is not None:
-            self.progress.setVisible(activity.kind not in (SHELF, PAGE, TERMINAL))
+            self.progress.setVisible(activity.kind not in (PAGE, TERMINAL, *LISTS))
             self.show_progress()
         return pane
 

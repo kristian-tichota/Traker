@@ -13,15 +13,15 @@ from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 import src.profile as profile_module
 from src.desktop import dictum, rest_positions, rest_queue, standing_break
-from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, PAGE, SHELF, TERMINAL,
-                                    VIDEO, BreakActivity)
+from src.desktop.activities import (ANY_DECK, BOOK, DECK, DOCUMENT, GALLERY, PAGE, SHELF,
+                                    TERMINAL, VIDEO, BreakActivity)
 from src.domain.media import Place
 from src.gui.commands import COMMANDS
 from src.gui.views import pomodoro_view
 from src.config import PALETTE
 from src.gui.components.ambience_player import AmbiencePlayer
 from src.gui.components.book_pane import BookPane
-from src.gui.components.media_surface import DeckPane, LibraryPane
+from src.gui.components.media_surface import DeckPane, GalleryPane, LibraryPane
 from src.gui.components.upcoming_panel import UpcomingPanel
 from src.gui.views.pomodoro_view import RELEASE_KEY, PomodoroView, StrictOverlay
 from tests.anki_double import FakeAnki
@@ -185,6 +185,8 @@ class Panes:
     def __call__(self, activity, start_at=0, parent=None):
         if activity.kind == SHELF:
             pane = LibraryPane(activity.path, start_at, parent)
+        elif activity.kind == GALLERY:
+            pane = GalleryPane(activity.path, start_at, parent)
         else:
             kind = {DECK: FakeDeckPane, BOOK: FakeBookPane, VIDEO: FakeVideoPane,
                     TERMINAL: FakeTerminalPane}.get(activity.kind, FakePane)
@@ -283,6 +285,38 @@ def with_sessions(with_no_wait):
     return with_no_wait
 
 
+GALLERY_TOML = """
+[[shelf]]
+name = "GM1"
+folder = "GM1"
+items = [{name = "Bezier curves", path = "l04.pdf"}, {name = "NURBS", path = "l05.pdf", page = 12}]
+
+[[shelf]]
+name = "ODR"
+items = [{name = "Script", path = "ODR/script.pdf"}]
+"""
+
+
+@pytest.fixture
+def gallery_file(tmp_path):
+    for name in ("GM1/l04.pdf", "GM1/l05.pdf", "ODR/script.pdf"):
+        (tmp_path / "Study" / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "Study" / name).write_bytes(b"")
+    path = tmp_path / "Study" / "gallery.toml"
+    path.write_text(GALLERY_TOML, encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def with_a_gallery(with_no_wait, gallery_file):
+    with_no_wait.write_text(
+        with_no_wait.read_text(encoding="utf-8")
+        + f'\n[[strict_break.activities]]\nname = "Lectures"\ngallery = "{gallery_file}"\n',
+        encoding="utf-8")
+    profile_module.reload_profile()
+    return with_no_wait
+
+
 @pytest.fixture
 def media(tmp_path):
     folder = tmp_path / "Media"
@@ -317,6 +351,11 @@ def library_timer(qapp, app_id, with_library, recording_db):
 @pytest.fixture
 def chore_timer(qapp, app_id, with_library, chores_on_break, recording_db):
     recording_db.chores = [chore("Vacuum", -3, ident=1), chore("Bins", ident=2)]
+    yield from a_view(recording_db)
+
+
+@pytest.fixture
+def gallery_timer(qapp, app_id, with_a_gallery, recording_db):
     yield from a_view(recording_db)
 
 
@@ -2160,6 +2199,47 @@ class TestTheLibrary:
 
         assert len(library_timer.media_pane_factory.built) == built
         assert library_timer.media_surface.pane.marked == 1
+
+
+class TestTheGallery:
+    def test_its_key_lists_the_shelves_the_one_read_last_marked(self, gallery_timer,
+                                                                 gallery_file):
+        script = str(gallery_file.parent / "ODR" / "script.pdf")
+        rest_positions.remember(script, 3, gallery_timer._positions_path, 9)
+        enter_strict_break(gallery_timer)
+
+        send_key(gallery_timer, Qt.Key.Key_3)
+
+        pane = gallery_timer.media_surface.pane
+        assert [pane.chooser.topLevelItem(row).text(1) for row in range(2)] == ["2", "1"]
+        assert (pane.shelf, pane.marked, gallery_timer.hook_state()) == (None, 1, "list")
+
+    def test_two_hints_open_a_file_under_its_name_at_its_page(self, gallery_timer,
+                                                             gallery_file):
+        enter_strict_break(gallery_timer)
+        send_key(gallery_timer, Qt.Key.Key_3)
+
+        send_key(gallery_timer, Qt.Key.Key_A)
+        send_key(gallery_timer, Qt.Key.Key_B)
+
+        shown = gallery_timer.media_pane_factory.last
+        assert shown.activity == BreakActivity(
+            "NURBS", str(gallery_file.parent / "GM1" / "l05.pdf"), DOCUMENT)
+        assert shown.start_at == 11
+
+    def test_0_brings_its_shelf_back_with_it_marked_and_left_the_shelves(
+            self, gallery_timer):
+        enter_strict_break(gallery_timer)
+        send_key(gallery_timer, Qt.Key.Key_3)
+        send_key(gallery_timer, Qt.Key.Key_A)
+        send_key(gallery_timer, Qt.Key.Key_B)
+
+        send_key(gallery_timer, Qt.Key.Key_0)
+        pane = gallery_timer.media_surface.pane
+        assert (pane.title(), pane.marked) == ("GM1", 1)
+
+        send_key(gallery_timer, Qt.Key.Key_Left)
+        assert (pane.shelf, pane.marked) == (None, 0)
 
 
 def marked(view) -> str:
